@@ -1,0 +1,7 @@
+# MedTracker — Cursor / agent context
+
+## Symptom journal — indoor vs outdoor
+
+In the SymptomJournal, include a field for **Indoor vs Outdoor**. If she flares outside, track that specifically to see if Missouri's environment is the primary driver of her mast cell issues versus her food.
+
+**Implementation:** `JournalEntry.setting` on `/journal` (`indoor` | `outdoor` | `unspecified`). Surfaced on the Daily summary timeline and in PDF exports. Preserve backward compatibility: older persisted entries omit `setting` and display as not specified.

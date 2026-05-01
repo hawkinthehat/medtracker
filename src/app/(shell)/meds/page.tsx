@@ -1,0 +1,250 @@
+"use client";
+
+import { useMemo, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import type { SafetyGateBlockEvent } from "@/lib/types";
+import type { Medication } from "@/lib/metabolic";
+import {
+  PRIMARY_PATHWAYS,
+  checkMetabolicConflict,
+  checkOHCumulativeRisk,
+} from "@/lib/metabolic";
+import { qk } from "@/lib/query-keys";
+import {
+  SEED_SAVED_MEDICATIONS,
+  type SavedMedication,
+} from "@/lib/seed-medications";
+import MedicationsSafetyPanel from "@/components/meds/MedicationsSafetyPanel";
+import DailySchedule from "@/components/DailySchedule";
+
+export default function MedsPage() {
+  const qc = useQueryClient();
+  const { data: medications = [] } = useQuery({
+    queryKey: qk.medications,
+    queryFn: async (): Promise<SavedMedication[]> => SEED_SAVED_MEDICATIONS,
+    staleTime: Infinity,
+    gcTime: 1000 * 60 * 60 * 24 * 30,
+    refetchOnWindowFocus: false,
+  });
+
+  const [name, setName] = useState("");
+  const [pathway, setPathway] = useState<string>(PRIMARY_PATHWAYS[0]);
+  const [isInhibitor, setIsInhibitor] = useState(false);
+  const [isSubstrate, setIsSubstrate] = useState(false);
+  const [orthostaticSideEffect, setOrthostaticSideEffect] = useState(false);
+  const [dizzinessSideEffect, setDizzinessSideEffect] = useState(false);
+  const [alert, setAlert] = useState<ReturnType<
+    typeof checkMetabolicConflict
+  > | null>(null);
+
+  const draftMed = useMemo<Medication>(
+    () => ({
+      name: name.trim(),
+      pathway,
+      is_inhibitor: isInhibitor,
+      is_substrate: isSubstrate,
+      has_orthostatic_hypotension: orthostaticSideEffect || undefined,
+      has_dizziness_side_effect: dizzinessSideEffect || undefined,
+    }),
+    [name, pathway, isInhibitor, isSubstrate, orthostaticSideEffect, dizzinessSideEffect]
+  );
+
+  const medsForAdditive = useMemo(() => {
+    const trimmed = draftMed.name.trim();
+    if (!trimmed) return medications;
+    return [...medications, { ...draftMed, id: "__draft__" }];
+  }, [medications, draftMed]);
+
+  const cumulativePositionalWarning = useMemo(
+    () => checkOHCumulativeRisk(medsForAdditive),
+    [medsForAdditive]
+  );
+
+  const addMutation = useMutation({
+    mutationFn: async (med: SavedMedication) => med,
+    onSuccess: (med) => {
+      qc.setQueryData<SavedMedication[]>(qk.medications, (prev = []) => [
+        ...prev,
+        med,
+      ]);
+      setName("");
+      setIsInhibitor(false);
+      setIsSubstrate(false);
+      setOrthostaticSideEffect(false);
+      setDizzinessSideEffect(false);
+      setAlert(null);
+    },
+  });
+
+  function handleAdd(e: React.FormEvent) {
+    e.preventDefault();
+    if (!draftMed.name) return;
+    const check = checkMetabolicConflict(draftMed, medications);
+    setAlert(check);
+    if (!check.isSafe) {
+      const conflict = medications.find(
+        (med) =>
+          med.pathway === draftMed.pathway &&
+          draftMed.is_inhibitor &&
+          med.is_substrate
+      );
+      if (conflict) {
+        qc.setQueryData<SafetyGateBlockEvent[]>(
+          qk.safetyGateBlocks,
+          (prev = []) => [
+            {
+              id: crypto.randomUUID(),
+              recordedAt: new Date().toISOString(),
+              pathway: draftMed.pathway,
+              draftInhibitorName: draftMed.name.trim(),
+              blockedSubstrateName: conflict.name,
+            },
+            ...prev,
+          ]
+        );
+      }
+      return;
+    }
+    addMutation.mutate({
+      ...draftMed,
+      id: crypto.randomUUID(),
+    });
+  }
+
+  return (
+    <div className="space-y-8">
+      <header>
+        <h1 className="text-2xl font-semibold tracking-tight text-slate-50">
+          Medications
+        </h1>
+        <p className="mt-2 text-sm leading-relaxed text-slate-400">
+          Safety audit, scrollable journal list, and pathway screen when adding a
+          new drug.
+        </p>
+      </header>
+
+      <DailySchedule />
+
+      <MedicationsSafetyPanel medications={medications} />
+
+      <form
+        onSubmit={handleAdd}
+        className="space-y-4 rounded-2xl border border-slate-700 bg-slate-900/80 p-4 ring-1 ring-white/5"
+      >
+        <div>
+          <label
+            htmlFor="med-name"
+            className="text-sm font-medium text-slate-200"
+          >
+            Medication name
+          </label>
+          <input
+            id="med-name"
+            className="mt-1 w-full rounded-xl border border-slate-600 bg-slate-950 px-3 py-3 text-base text-slate-50 placeholder:text-slate-600 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
+            placeholder="e.g., medication name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            autoComplete="off"
+          />
+        </div>
+
+        <div>
+          <label
+            htmlFor="pathway"
+            className="text-sm font-medium text-slate-200"
+          >
+            Primary pathway
+          </label>
+          <select
+            id="pathway"
+            className="mt-1 w-full rounded-xl border border-slate-600 bg-slate-950 px-3 py-3 text-base text-slate-50 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
+            value={pathway}
+            onChange={(e) => setPathway(e.target.value)}
+          >
+            {PRIMARY_PATHWAYS.map((p) => (
+              <option key={p} value={p}>
+                {p}
+              </option>
+            ))}
+          </select>
+          <p className="mt-1 text-xs text-slate-500">
+            CYP3A4 is listed first — it metabolizes a large share of common
+            medications and is a frequent interaction hotspot.
+          </p>
+        </div>
+
+        <fieldset className="flex flex-col gap-3 rounded-xl border border-slate-700/80 bg-slate-950/50 p-3">
+          <legend className="px-1 text-sm font-medium text-slate-300">
+            Enzyme relationship
+          </legend>
+          <label className="flex cursor-pointer items-center gap-3 text-sm text-slate-200">
+            <input
+              type="checkbox"
+              className="h-5 w-5 rounded border-slate-600 bg-slate-900 text-sky-600 focus:ring-sky-500"
+              checked={isInhibitor}
+              onChange={(e) => setIsInhibitor(e.target.checked)}
+            />
+            This medication inhibits this pathway
+          </label>
+          <label className="flex cursor-pointer items-center gap-3 text-sm text-slate-200">
+            <input
+              type="checkbox"
+              className="h-5 w-5 rounded border-slate-600 bg-slate-900 text-sky-600 focus:ring-sky-500"
+              checked={isSubstrate}
+              onChange={(e) => setIsSubstrate(e.target.checked)}
+            />
+            This medication relies on this pathway (substrate)
+          </label>
+          <label className="flex cursor-pointer items-center gap-3 text-sm text-slate-200">
+            <input
+              type="checkbox"
+              className="h-5 w-5 rounded border-slate-600 bg-slate-900 text-sky-600 focus:ring-sky-500"
+              checked={orthostaticSideEffect}
+              onChange={(e) => setOrthostaticSideEffect(e.target.checked)}
+            />
+            Lists orthostatic hypotension as a side effect
+          </label>
+          <label className="flex cursor-pointer items-center gap-3 text-sm text-slate-200">
+            <input
+              type="checkbox"
+              className="h-5 w-5 rounded border-slate-600 bg-slate-900 text-sky-600 focus:ring-sky-500"
+              checked={dizzinessSideEffect}
+              onChange={(e) => setDizzinessSideEffect(e.target.checked)}
+            />
+            Lists dizziness as a side effect
+          </label>
+        </fieldset>
+
+        {cumulativePositionalWarning && (
+          <div
+            role="status"
+            className="rounded-xl border border-amber-500/50 bg-amber-950/35 px-3 py-3 text-sm font-medium leading-relaxed text-amber-50"
+          >
+            {cumulativePositionalWarning}
+          </div>
+        )}
+
+        {alert && (
+          <div
+            role="status"
+            className={`rounded-xl border px-3 py-3 text-sm leading-relaxed ${
+              alert.severity === "RED_ALERT"
+                ? "border-red-500/60 bg-red-950/50 text-red-200"
+                : "border-slate-600 bg-slate-950/80 text-slate-300"
+            }`}
+          >
+            {alert.message}
+          </div>
+        )}
+
+        <button
+          type="submit"
+          className="w-full rounded-xl bg-sky-600 py-3 text-sm font-semibold text-white hover:bg-sky-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-400 disabled:opacity-50"
+          disabled={!draftMed.name || addMutation.isPending}
+        >
+          Add medication
+        </button>
+      </form>
+    </div>
+  );
+}
