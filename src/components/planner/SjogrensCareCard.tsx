@@ -58,7 +58,7 @@ export default function SjogrensCareCard() {
       qc.setQueryData(qk.clinicalMarkers(dateKey), next);
       if (supabaseConfigured) persist.mutate(next);
     },
-    [dateKey, persist.mutate, qc, supabaseConfigured]
+    [dateKey, persist, qc, supabaseConfigured]
   );
 
   const eyeDrops = row?.eye_drop_uses ?? 0;
