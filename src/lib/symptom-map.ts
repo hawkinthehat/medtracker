@@ -8,7 +8,11 @@ export type PainMapSymptomCategory =
   | "itching"
   | "deep_ache"
   | "point_tenderness"
-  | "mcas_rash";
+  | "mcas_rash"
+  /** Journal pain tracker — composite sensation groups */
+  | "sfn_burning_tingling"
+  | "mcas_rash_itch"
+  | "fibro_deep_ache";
 
 /** Stored in `pain_map.body_part_id`. */
 export type SymptomBodyPartId =
@@ -81,6 +85,25 @@ export const SYMPTOM_TOGGLE_GROUPS: Record<
 export function bodyPartId(
   side: "front" | "back",
   region: SymptomRegionKey,
+): SymptomBodyPartId {
+  return `${side}_${region}` as SymptomBodyPartId;
+}
+
+/** Journal body chart: head, torso, hands, feet (front / back in `body_part_id`). */
+export type JournalBodyRegion = "head" | "torso" | "hands" | "feet";
+
+export const JOURNAL_PAIN_CATEGORIES: {
+  label: string;
+  category: PainMapSymptomCategory;
+}[] = [
+  { label: "SFN (Burning/Tingling)", category: "sfn_burning_tingling" },
+  { label: "MCAS (Rash/Itch)", category: "mcas_rash_itch" },
+  { label: "Fibro (Deep Ache)", category: "fibro_deep_ache" },
+];
+
+export function journalBodyPartId(
+  side: "front" | "back",
+  region: JournalBodyRegion,
 ): SymptomBodyPartId {
   return `${side}_${region}` as SymptomBodyPartId;
 }

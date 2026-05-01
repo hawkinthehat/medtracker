@@ -7,7 +7,7 @@ import type { JournalEntry, JournalSetting } from "@/lib/types";
 import { labelJournalSetting } from "@/lib/journal-setting";
 import { CalendarDays } from "lucide-react";
 import { useState } from "react";
-import SymptomMapper from "@/components/SymptomMapper";
+import JournalPainTracker from "@/components/journal/JournalPainTracker";
 
 const SETTING_OPTIONS: { value: JournalSetting; hint: string }[] = [
   { value: "unspecified", hint: "Skip if unclear" },
@@ -76,7 +76,7 @@ export default function JournalPage() {
         </div>
       </header>
 
-      <SymptomMapper />
+      <JournalPainTracker />
 
       <form
         onSubmit={submit}

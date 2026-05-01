@@ -17,8 +17,21 @@ import MoodVitalsTimeline from "./MoodVitalsTimeline";
 import MoodTracker from "./MoodTracker";
 import MedicationManager from "./MedicationManager";
 import TodayMedicationStrip from "./TodayMedicationStrip";
-import { Apple, ClipboardList, Dumbbell, HeartPulse, LayoutGrid } from "lucide-react";
+import SjogrensCareCard from "./SjogrensCareCard";
+import {
+  Apple,
+  ChevronDown,
+  ClipboardList,
+  Dumbbell,
+  HeartPulse,
+  LayoutGrid,
+  Pill,
+} from "lucide-react";
 import { useMemo, useState } from "react";
+import DoseAdjustmentModal, {
+  type DoseModalTab,
+} from "./DoseAdjustmentModal";
+import type { SavedMedication } from "@/lib/seed-medications";
 
 export default function MedicalPlannerDashboard() {
   const qc = useQueryClient();
@@ -26,6 +39,16 @@ export default function MedicalPlannerDashboard() {
     Partial<Record<PainRegionId, number>>
   >({});
   const [episodeOpen, setEpisodeOpen] = useState(false);
+  const [doseModalMed, setDoseModalMed] = useState<SavedMedication | null>(
+    null
+  );
+  const [doseModalTab, setDoseModalTab] = useState<DoseModalTab>("adjust");
+  const [medManagerExpanded, setMedManagerExpanded] = useState(false);
+
+  function openDoseModal(med: SavedMedication, tab: DoseModalTab) {
+    setDoseModalTab(tab);
+    setDoseModalMed(med);
+  }
 
   const { data: dailyLogs = [] } = useQuery({
     queryKey: qk.dailyLogs,
@@ -136,17 +159,25 @@ export default function MedicalPlannerDashboard() {
                 Care planner
               </h1>
               <p className="mt-2 max-w-xl text-sm leading-relaxed text-slate-400">
-                Mood and quick actions first, fuel and movement next, pain map
-                center, mood and vitals timeline below — medications with Smart
-                Add at the bottom.
+                Mood check-in and quick actions up top, today&apos;s doses and
+                planner sections follow — open the medication manager at the
+                bottom when you need Smart Add or dose edits.
               </p>
             </div>
-            <Link
-              href="/daily"
-              className="shrink-0 rounded-lg border border-amber-800/60 bg-amber-950/30 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-amber-100 hover:bg-amber-950/50"
-            >
-              Daily summary (MCAS)
-            </Link>
+            <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+              <Link
+                href="/emergency"
+                className="rounded-lg border border-red-800/60 bg-red-950/35 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-red-100 hover:bg-red-950/50"
+              >
+                Medical ID
+              </Link>
+              <Link
+                href="/daily"
+                className="rounded-lg border border-amber-800/60 bg-amber-950/30 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-amber-100 hover:bg-amber-950/50"
+              >
+                Daily summary (MCAS)
+              </Link>
+            </div>
           </div>
         </header>
 
@@ -185,7 +216,11 @@ export default function MedicalPlannerDashboard() {
           </div>
         </section>
 
-        <TodayMedicationStrip />
+        <TodayMedicationStrip
+          onSelectMedication={(m) => openDoseModal(m, "adjust")}
+        />
+
+        <SjogrensCareCard />
 
         <PlannerSection
             title="Food & exercise"
@@ -295,8 +330,63 @@ export default function MedicalPlannerDashboard() {
           />
         </PlannerSection>
 
-        <MedicationManager />
+        <section className="overflow-hidden rounded-xl border border-slate-600 bg-slate-900/85 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] ring-1 ring-black/20">
+          <button
+            type="button"
+            onClick={() => setMedManagerExpanded((v) => !v)}
+            aria-expanded={medManagerExpanded}
+            id="med-manager-accordion-trigger"
+            aria-controls="med-manager-panel"
+            className="flex w-full items-center justify-between gap-3 bg-slate-950/40 px-4 py-3.5 text-left transition hover:bg-slate-900/55"
+          >
+            <div className="flex min-w-0 items-center gap-3">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-violet-950/50 ring-1 ring-violet-800/50">
+                <Pill
+                  className="h-5 w-5 text-violet-300"
+                  aria-hidden
+                />
+              </span>
+              <div className="min-w-0">
+                <p className="text-[10px] font-bold uppercase tracking-[0.35em] text-slate-500">
+                  Med manager
+                </p>
+                <p className="truncate text-sm font-semibold text-slate-100">
+                  Medications &amp; Smart Add
+                </p>
+              </div>
+            </div>
+            <ChevronDown
+              className={`h-5 w-5 shrink-0 text-slate-400 transition-transform duration-300 ${
+                medManagerExpanded ? "rotate-180" : ""
+              }`}
+              aria-hidden
+            />
+          </button>
+          <div
+            id="med-manager-panel"
+            role="region"
+            aria-labelledby="med-manager-accordion-trigger"
+            className={`grid border-t border-slate-800/90 transition-[grid-template-rows] duration-300 ease-out ${
+              medManagerExpanded ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
+            }`}
+          >
+            <div className="min-h-0 overflow-hidden">
+              <div className="px-4 pb-4 pt-1">
+                <MedicationManager
+                  embedded
+                  onOpenDoseModal={openDoseModal}
+                />
+              </div>
+            </div>
+          </div>
+        </section>
       </div>
+      <DoseAdjustmentModal
+        med={doseModalMed}
+        open={!!doseModalMed}
+        initialTab={doseModalTab}
+        onClose={() => setDoseModalMed(null)}
+      />
       <LogEpisodeFab
         open={episodeOpen}
         onClose={() => setEpisodeOpen(false)}

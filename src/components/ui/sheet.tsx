@@ -28,16 +28,35 @@ const SheetOverlay = React.forwardRef<
 ));
 SheetOverlay.displayName = SheetPrimitive.Overlay.displayName;
 
+type SheetSide = "right" | "bottom";
+
+const sheetSideStyles: Record<
+  SheetSide,
+  string
+> = {
+  right:
+    "inset-y-0 right-0 h-full max-h-none max-w-md border-l border-slate-700 data-[state=closed]:translate-x-full data-[state=open]:translate-x-0",
+  bottom:
+    "inset-x-0 bottom-0 top-auto h-auto max-h-[min(88vh,560px)] rounded-t-2xl border-t border-slate-700 data-[state=closed]:translate-y-full data-[state=open]:translate-y-0",
+};
+
+type SheetContentProps = React.ComponentPropsWithoutRef<
+  typeof SheetPrimitive.Content
+> & {
+  side?: SheetSide;
+};
+
 const SheetContent = React.forwardRef<
   React.ElementRef<typeof SheetPrimitive.Content>,
-  React.ComponentPropsWithoutRef<typeof SheetPrimitive.Content>
->(({ className, children, ...props }, ref) => (
+  SheetContentProps
+>(({ className, children, side = "right", ...props }, ref) => (
   <SheetPortal>
     <SheetOverlay />
     <SheetPrimitive.Content
       ref={ref}
       className={cn(
-        "fixed inset-y-0 right-0 z-50 flex h-full w-full max-w-md flex-col border-l border-slate-700 bg-slate-950 shadow-xl duration-300 ease-out data-[state=closed]:pointer-events-none data-[state=closed]:translate-x-full data-[state=open]:translate-x-0",
+        "fixed z-50 flex w-full flex-col bg-slate-950 shadow-xl duration-300 ease-out data-[state=closed]:pointer-events-none",
+        sheetSideStyles[side],
         className,
       )}
       {...props}

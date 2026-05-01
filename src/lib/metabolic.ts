@@ -124,6 +124,17 @@ export const checkMetabolicConflict = (
   };
 };
 
+/** Live Smart Add preview: CYP3A4 inhibitor vs substrates already on the list. */
+export function getCyp3a4BottleneckHint(
+  newMed: Medication,
+  currentMeds: Medication[]
+): string | null {
+  if (newMed.pathway !== "CYP3A4" || !newMed.name.trim()) return null;
+  const check = checkMetabolicConflict(newMed, currentMeds);
+  if (!check.isSafe && check.severity === "RED_ALERT") return check.message;
+  return null;
+}
+
 const SUBSTRATE_LABEL_NAMES = ["Gleevec", "Latuda"] as const;
 
 function normalizeDrug(n: string): string {

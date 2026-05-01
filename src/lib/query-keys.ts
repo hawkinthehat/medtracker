@@ -12,7 +12,7 @@ export const qk = {
   /** Post-dose symptom rows for tolerability / specialist reports */
   sideEffectLogs: ["sideEffectLogs"] as const,
   /** Dose amount, unit, and scheduled times per medication id */
-  medicationProfiles: ["medicationProfiles", "v1"] as const,
+  medicationProfiles: ["medicationProfiles", "v2"] as const,
   /** Append-only dose/time changes (synced to Supabase medication_history) */
   medicationHistory: ["medicationHistory", "v1"] as const,
   /** Taper schedules keyed by medication id */
@@ -30,4 +30,7 @@ export const qk = {
   painMap: (bodyPartId: string) => ["painMap", bodyPartId] as const,
   /** Distinct body_part_id values present in `pain_map` (for mapper highlights) */
   painMapActiveBodyParts: ["painMap", "activeBodyParts"] as const,
+  /** Per-day Sjögren / sicca rows (`clinical_markers`) */
+  clinicalMarkers: (dateKey: string) =>
+    ["clinicalMarkers", dateKey] as const,
 };

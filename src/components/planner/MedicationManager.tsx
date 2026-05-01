@@ -4,7 +4,10 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Pill, ChevronUp, History, Settings2 } from "lucide-react";
 import { useMemo, useState, useEffect, useRef } from "react";
 import Link from "next/link";
-import { checkMetabolicConflict } from "@/lib/metabolic";
+import {
+  checkMetabolicConflict,
+  getCyp3a4BottleneckHint,
+} from "@/lib/metabolic";
 import {
   buildMedicationLookupCatalog,
   resolveMedicationDraftFromCatalog,
@@ -15,7 +18,13 @@ import {
   type SavedMedication,
 } from "@/lib/seed-medications";
 import type { SafetyGateBlockEvent } from "@/lib/types";
-import DoseAdjustmentModal, { type DoseModalTab } from "./DoseAdjustmentModal";
+import type { DoseModalTab } from "./DoseAdjustmentModal";
+
+export type MedicationManagerProps = {
+  /** When true, omit outer card chrome (used inside dashboard accordion). */
+  embedded?: boolean;
+  onOpenDoseModal: (med: SavedMedication, tab: DoseModalTab) => void;
+};
 
 function substrateForConflict(
   draft: { pathway: string; is_inhibitor: boolean; name: string },
@@ -27,16 +36,14 @@ function substrateForConflict(
   );
 }
 
-export default function MedicationManager() {
+export default function MedicationManager({
+  embedded = false,
+  onOpenDoseModal,
+}: MedicationManagerProps) {
   const qc = useQueryClient();
   const [query, setQuery] = useState("");
   const [drawerOpen, setDrawerOpen] = useState(false);
   const drawerRef = useRef<HTMLDivElement>(null);
-  const [doseModalMed, setDoseModalMed] = useState<SavedMedication | null>(
-    null
-  );
-  const [doseModalTab, setDoseModalTab] =
-    useState<DoseModalTab>("adjust");
 
   const { data: medications = [] } = useQuery({
     queryKey: qk.medications,
@@ -75,6 +82,14 @@ export default function MedicationManager() {
   const bottleneckMessage = conflictSubstrate
     ? `Warning: This will bottleneck ${conflictSubstrate.name} levels.`
     : null;
+
+  const cyp3a4LiveHint = useMemo(
+    () =>
+      draftMed.name.trim()
+        ? getCyp3a4BottleneckHint(draftMed, medications)
+        : null,
+    [draftMed, medications]
+  );
 
   const addMutation = useMutation({
     mutationFn: async (med: SavedMedication) => med,
@@ -143,14 +158,13 @@ export default function MedicationManager() {
     );
 
   function openDoseModal(m: SavedMedication, tab: DoseModalTab) {
-    setDoseModalTab(tab);
-    setDoseModalMed(m);
+    onOpenDoseModal(m, tab);
     setDrawerOpen(false);
   }
 
-  return (
+  const body = (
     <>
-      <section className="overflow-hidden rounded-xl border border-slate-600 bg-slate-900/85 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] ring-1 ring-black/20">
+      {!embedded && (
         <div className="flex items-center justify-between gap-2 border-b border-slate-700/90 bg-slate-950/40 px-4 py-2.5">
           <div className="flex items-center gap-2">
             <Pill className="h-4 w-4 text-violet-400" aria-hidden />
@@ -167,103 +181,133 @@ export default function MedicationManager() {
             All ({medications.length})
           </button>
         </div>
+      )}
 
-        <div className="space-y-4 p-4">
-          <form onSubmit={handleSubmit} className="space-y-3">
-            <label htmlFor="smart-med-input" className="sr-only">
-              Add medication
-            </label>
-            <div
-              className={`rounded-[1.25rem] border bg-slate-950/90 px-4 py-3 shadow-[inset_0_2px_8px_rgba(0,0,0,0.35)] transition-[box-shadow,border-color] ${
-                hasConflict
-                  ? "border-red-500/90 shadow-[0_0_0_1px_rgba(239,68,68,0.5),0_0_28px_rgba(239,68,68,0.35)]"
-                  : "border-slate-600 focus-within:border-sky-500/50 focus-within:shadow-[inset_0_2px_8px_rgba(0,0,0,0.35),0_0_0_1px_rgba(56,189,248,0.25)]"
-              }`}
-            >
-              <input
-                id="smart-med-input"
-                type="text"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Add medication…"
-                autoComplete="off"
-                className="w-full border-0 bg-transparent text-base text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-0"
-              />
-            </div>
-
-            {hasConflict && bottleneckMessage && (
-              <p className="text-sm font-semibold text-red-300" role="alert">
-                {bottleneckMessage}
-              </p>
-            )}
-
-            <div className="rounded-xl border border-slate-700/90 bg-slate-950/50 px-3 py-3">
-              <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500">
-                Interaction preview
-              </p>
-              {query.trim() === "" ? (
-                <p className="mt-2 text-sm text-slate-500">
-                  Type a drug name to preview pathway interactions against your
-                  current list.
-                </p>
-              ) : (
-                <>
-                  <p className="mt-2 text-sm leading-relaxed text-slate-300">
-                    {preview?.isSafe
-                      ? preview.message
-                      : preview?.message ?? "—"}
-                  </p>
-                  {recognized && (
-                    <p className="mt-2 text-xs text-sky-300/90">
-                      Matched profile: {draftMed.name} · {draftMed.pathway}
-                      {draftMed.is_inhibitor ? " · inhibitor" : ""}
-                      {draftMed.is_substrate ? " · substrate" : ""}
-                    </p>
-                  )}
-                  {!recognized && query.trim() && (
-                    <p className="mt-2 text-xs text-amber-200/80">
-                      No saved profile for this spelling — preview uses “Other /
-                      Unknown”. Refine on the{" "}
-                      <Link
-                        href="/meds"
-                        className="font-medium text-sky-400 underline-offset-2 hover:underline"
-                      >
-                        Meds
-                      </Link>{" "}
-                      page for pathway flags.
-                    </p>
-                  )}
-                </>
-              )}
-            </div>
-
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="submit"
-                disabled={
-                  !draftMed.name.trim() || addMutation.isPending || hasConflict
-                }
-                className="rounded-full bg-sky-600 px-6 py-2.5 text-sm font-semibold text-white shadow-lg shadow-sky-950/40 hover:bg-sky-500 disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                Add to list
-              </button>
-              <Link
-                href="/meds"
-                className="rounded-full border border-slate-600 px-4 py-2.5 text-sm font-medium text-slate-300 hover:bg-slate-800"
-              >
-                Advanced editor
-              </Link>
-            </div>
-          </form>
+      {embedded && (
+        <div className="mb-3 flex items-center justify-end gap-2">
+          <button
+            type="button"
+            onClick={() => setDrawerOpen(true)}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-600 bg-slate-950/80 px-3 py-1.5 text-xs font-semibold text-slate-200 hover:border-slate-500 hover:bg-slate-900"
+          >
+            <ChevronUp className="h-4 w-4 text-slate-400" aria-hidden />
+            All ({medications.length})
+          </button>
         </div>
-      </section>
+      )}
 
-      <DoseAdjustmentModal
-        med={doseModalMed}
-        open={!!doseModalMed}
-        initialTab={doseModalTab}
-        onClose={() => setDoseModalMed(null)}
-      />
+      <div className={embedded ? "space-y-4" : "space-y-4 p-4"}>
+        <form onSubmit={handleSubmit} className="space-y-3">
+          <label htmlFor="smart-med-input" className="sr-only">
+            Smart Add medication
+          </label>
+          <p className="text-[10px] font-bold uppercase tracking-[0.35em] text-slate-500">
+            Smart Add
+          </p>
+          <div
+            className={`rounded-[1.25rem] border bg-slate-950/90 px-4 py-3 shadow-[inset_0_2px_8px_rgba(0,0,0,0.35)] transition-[box-shadow,border-color] ${
+              hasConflict
+                ? "border-red-500/90 shadow-[0_0_0_1px_rgba(239,68,68,0.5),0_0_28px_rgba(239,68,68,0.35)]"
+                : "border-slate-600 focus-within:border-sky-500/50 focus-within:shadow-[inset_0_2px_8px_rgba(0,0,0,0.35),0_0_0_1px_rgba(56,189,248,0.25)]"
+            }`}
+          >
+            <input
+              id="smart-med-input"
+              type="text"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Type a medication name…"
+              autoComplete="off"
+              className="w-full border-0 bg-transparent text-base text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-0"
+            />
+          </div>
+
+          {cyp3a4LiveHint && (
+            <p
+              className="text-sm font-semibold leading-snug text-amber-200/95"
+              role="status"
+            >
+              {cyp3a4LiveHint}
+            </p>
+          )}
+
+          {hasConflict && bottleneckMessage && !cyp3a4LiveHint && (
+            <p className="text-sm font-semibold text-red-300" role="alert">
+              {bottleneckMessage}
+            </p>
+          )}
+
+          <div className="rounded-xl border border-slate-700/90 bg-slate-950/50 px-3 py-3">
+            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500">
+              Interaction preview
+            </p>
+            {query.trim() === "" ? (
+              <p className="mt-2 text-sm text-slate-500">
+                Type a drug name to preview pathway interactions against your
+                current list.
+              </p>
+            ) : (
+              <>
+                <p className="mt-2 text-sm leading-relaxed text-slate-300">
+                  {preview?.isSafe
+                    ? preview.message
+                    : preview?.message ?? "—"}
+                </p>
+                {recognized && (
+                  <p className="mt-2 text-xs text-sky-300/90">
+                    Matched profile: {draftMed.name} · {draftMed.pathway}
+                    {draftMed.is_inhibitor ? " · inhibitor" : ""}
+                    {draftMed.is_substrate ? " · substrate" : ""}
+                  </p>
+                )}
+                {!recognized && query.trim() && (
+                  <p className="mt-2 text-xs text-amber-200/80">
+                    No saved profile for this spelling — preview uses “Other /
+                    Unknown”. Refine on the{" "}
+                    <Link
+                      href="/meds"
+                      className="font-medium text-sky-400 underline-offset-2 hover:underline"
+                    >
+                      Meds
+                    </Link>{" "}
+                    page for pathway flags.
+                  </p>
+                )}
+              </>
+            )}
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="submit"
+              disabled={
+                !draftMed.name.trim() || addMutation.isPending || hasConflict
+              }
+              className="rounded-full bg-sky-600 px-6 py-2.5 text-sm font-semibold text-white shadow-lg shadow-sky-950/40 hover:bg-sky-500 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Add to list
+            </button>
+            <Link
+              href="/meds"
+              className="rounded-full border border-slate-600 px-4 py-2.5 text-sm font-medium text-slate-300 hover:bg-slate-800"
+            >
+              Advanced editor
+            </Link>
+          </div>
+        </form>
+      </div>
+    </>
+  );
+
+  return (
+    <>
+      {embedded ? (
+        <div className="min-h-0">{body}</div>
+      ) : (
+        <section className="overflow-hidden rounded-xl border border-slate-600 bg-slate-900/85 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] ring-1 ring-black/20">
+          {body}
+        </section>
+      )}
 
       {drawerOpen && (
         <div className="fixed inset-0 z-[70] flex flex-col justify-end">
@@ -308,7 +352,11 @@ export default function MedicationManager() {
                   key={m.id}
                   className="border-b border-slate-800/90 py-3 last:border-0"
                 >
-                  <div className="flex items-start justify-between gap-3 px-1">
+                  <button
+                    type="button"
+                    onClick={() => openDoseModal(m, "adjust")}
+                    className="flex w-full items-start justify-between gap-3 rounded-lg px-1 py-1.5 text-left transition hover:bg-slate-800/60"
+                  >
                     <div className="min-w-0 flex-1">
                       <span className="font-medium text-slate-100">{m.name}</span>
                       {m.pathway_role && (
@@ -316,11 +364,14 @@ export default function MedicationManager() {
                           {m.pathway_role}
                         </p>
                       )}
+                      <p className="mt-1 text-[11px] text-violet-400/90">
+                        Tap for dose &amp; timing
+                      </p>
                     </div>
                     <span className="shrink-0 rounded-md bg-slate-950/80 px-2 py-1 text-xs text-slate-400 ring-1 ring-slate-700">
                       {m.pathway}
                     </span>
-                  </div>
+                  </button>
                   <div className="mt-3 flex items-center justify-end gap-2 px-1">
                     <button
                       type="button"

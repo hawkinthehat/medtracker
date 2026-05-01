@@ -3,7 +3,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { Pill } from "lucide-react";
 import { useMemo } from "react";
-import type { MedicationProfile, TaperPlan } from "@/lib/medication-profile-types";
 import { formatDoseLabel } from "@/lib/medication-profile-types";
 import { defaultDoseMgForMedicationName } from "@/lib/medication-dose-defaults";
 import { qk } from "@/lib/query-keys";
@@ -15,9 +14,18 @@ import {
   getEffectiveTaperDoseMg,
   isDuringTaperSchedule,
 } from "@/lib/taper-plan";
-import { loadTaperPlansMap } from "@/lib/supabase/medication-history";
+import {
+  fetchMedicationProfilesFromSupabase,
+  loadTaperPlansMap,
+} from "@/lib/supabase/medication-history";
 
-export default function TodayMedicationStrip() {
+type Props = {
+  onSelectMedication?: (med: SavedMedication) => void;
+};
+
+export default function TodayMedicationStrip({
+  onSelectMedication,
+}: Props) {
   const { data: medications = [] } = useQuery({
     queryKey: qk.medications,
     queryFn: async (): Promise<SavedMedication[]> => SEED_SAVED_MEDICATIONS,
@@ -28,10 +36,10 @@ export default function TodayMedicationStrip() {
 
   const { data: profiles = {} } = useQuery({
     queryKey: qk.medicationProfiles,
-    queryFn: async (): Promise<Record<string, MedicationProfile>> => ({}),
-    staleTime: Infinity,
+    queryFn: fetchMedicationProfilesFromSupabase,
+    staleTime: 1000 * 60 * 2,
     gcTime: 1000 * 60 * 60 * 24 * 30,
-    refetchOnWindowFocus: false,
+    refetchOnWindowFocus: true,
   });
 
   const { data: taperPlans = {} } = useQuery({
@@ -82,22 +90,30 @@ export default function TodayMedicationStrip() {
       </div>
       <ul className="max-h-[220px] divide-y divide-slate-800 overflow-y-auto px-4 py-2">
         {rows.map(({ med, label, sub, time }) => (
-          <li
-            key={med.id}
-            className="flex items-start justify-between gap-3 py-2.5 text-sm"
-          >
-            <div>
-              <span className="font-medium text-slate-100">{med.name}</span>
-              {sub && (
-                <p className="mt-0.5 text-xs text-slate-500">{sub}</p>
-              )}
-            </div>
-            <div className="text-right">
-              <span className="font-mono tabular-nums text-emerald-200">
-                {label}
-              </span>
-              <p className="mt-0.5 font-mono text-xs text-slate-500">{time}</p>
-            </div>
+          <li key={med.id}>
+            <button
+              type="button"
+              onClick={() => onSelectMedication?.(med)}
+              disabled={!onSelectMedication}
+              className={`flex w-full items-start justify-between gap-3 py-2.5 text-left text-sm transition ${
+                onSelectMedication
+                  ? "rounded-lg hover:bg-slate-800/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-400/80"
+                  : "cursor-default"
+              }`}
+            >
+              <div>
+                <span className="font-medium text-slate-100">{med.name}</span>
+                {sub && (
+                  <p className="mt-0.5 text-xs text-slate-500">{sub}</p>
+                )}
+              </div>
+              <div className="text-right">
+                <span className="font-mono tabular-nums text-emerald-200">
+                  {label}
+                </span>
+                <p className="mt-0.5 font-mono text-xs text-slate-500">{time}</p>
+              </div>
+            </button>
           </li>
         ))}
       </ul>

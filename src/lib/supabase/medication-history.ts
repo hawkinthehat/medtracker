@@ -1,5 +1,6 @@
 import type {
   MedicationHistoryEntry,
+  MedicationProfile,
   TaperPlan,
   TaperSegment,
 } from "@/lib/medication-profile-types";
@@ -111,4 +112,49 @@ export async function fetchTaperPlansFromSupabase(): Promise<TaperPlan[]> {
 export async function loadTaperPlansMap(): Promise<Record<string, TaperPlan>> {
   const list = await fetchTaperPlansFromSupabase();
   return Object.fromEntries(list.map((p) => [p.medicationId, p]));
+}
+
+export async function fetchMedicationProfilesFromSupabase(): Promise<
+  Record<string, MedicationProfile>
+> {
+  const sb = getSupabaseBrowserClient();
+  if (!sb) return {};
+  const { data, error } = await sb.from("medication_profiles").select("*");
+  if (error || !data?.length) return {};
+  const out: Record<string, MedicationProfile> = {};
+  for (const row of data) {
+    const r = row as Record<string, unknown>;
+    const id = String(r.medication_id);
+    const unit = r.dose_unit === "mcg" ? "mcg" : "mg";
+    const doseVal = Number(r.dose_value);
+    const times = Array.isArray(r.scheduled_times)
+      ? (r.scheduled_times as string[])
+      : [];
+    if (!Number.isFinite(doseVal)) continue;
+    out[id] = {
+      doseValue: doseVal,
+      doseUnit: unit,
+      scheduledTimes: times.length ? times : ["20:00"],
+    };
+  }
+  return out;
+}
+
+export async function upsertMedicationProfileRemote(
+  medicationId: string,
+  profile: MedicationProfile
+): Promise<boolean> {
+  const sb = getSupabaseBrowserClient();
+  if (!sb) return false;
+  const { error } = await sb.from("medication_profiles").upsert(
+    {
+      medication_id: medicationId,
+      dose_value: profile.doseValue,
+      dose_unit: profile.doseUnit,
+      scheduled_times: profile.scheduledTimes,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "medication_id" }
+  );
+  return !error;
 }

@@ -28,8 +28,10 @@ import {
 } from "@/lib/seed-medications";
 import {
   fetchMedicationHistoryFromSupabase,
+  fetchMedicationProfilesFromSupabase,
   insertMedicationHistoryRow,
   loadTaperPlansMap,
+  upsertMedicationProfileRemote,
   upsertTaperPlanRemote,
 } from "@/lib/supabase/medication-history";
 import { calendarDaysSinceStart } from "@/lib/taper-plan";
@@ -70,10 +72,10 @@ export default function DoseAdjustmentModal({
 
   const { data: profiles = {} } = useQuery({
     queryKey: qk.medicationProfiles,
-    queryFn: async (): Promise<Record<string, MedicationProfile>> => ({}),
-    staleTime: Infinity,
+    queryFn: fetchMedicationProfilesFromSupabase,
+    staleTime: 1000 * 60 * 2,
     gcTime: 1000 * 60 * 60 * 24 * 30,
-    refetchOnWindowFocus: false,
+    refetchOnWindowFocus: true,
   });
 
   const { data: history = [] } = useQuery({
@@ -237,6 +239,7 @@ export default function DoseAdjustmentModal({
       };
 
       await insertMedicationHistoryRow(entry);
+      await upsertMedicationProfileRemote(med.id, nextProfile);
 
       return { entry, nextProfile };
     },
@@ -254,6 +257,7 @@ export default function DoseAdjustmentModal({
         })
       );
       qc.invalidateQueries({ queryKey: qk.medicationTimeline });
+      qc.invalidateQueries({ queryKey: qk.medicationProfiles });
       onClose();
     },
   });
@@ -302,6 +306,7 @@ export default function DoseAdjustmentModal({
         [med.id]: data.plan,
       }));
       qc.invalidateQueries({ queryKey: qk.medicationTimeline });
+      qc.invalidateQueries({ queryKey: qk.medicationProfiles });
       onClose();
     },
   });
@@ -342,7 +347,7 @@ export default function DoseAdjustmentModal({
             </span>
             <div>
               <h2 id="dose-modal-title" className="text-lg font-semibold text-slate-50">
-                Dose adjustment
+                Dose and timing
               </h2>
               <p className="mt-1 text-sm text-slate-400">{med.name}</p>
             </div>
@@ -498,7 +503,7 @@ export default function DoseAdjustmentModal({
 
               <div>
                 <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500">
-                  Safety re-check
+                  Safety re-check (checkMetabolicConflict)
                 </p>
                 <div className="mt-2 space-y-2 rounded-xl border border-slate-700 bg-slate-950/60 px-3 py-3 text-sm">
                   <p
@@ -509,6 +514,10 @@ export default function DoseAdjustmentModal({
                     }
                   >
                     {metabolicPreview?.message ?? "—"}
+                  </p>
+                  <p className="text-xs text-slate-500">
+                    Saving writes dose &amp; time to Supabase and refreshes your
+                    planner timeline.
                   </p>
                   {escalationWarning && (
                     <p className="font-semibold text-amber-200" role="alert">
