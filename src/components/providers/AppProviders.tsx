@@ -1,5 +1,7 @@
 "use client";
 
+/** Light mode only — no `next-themes` ThemeProvider; shell uses fixed light palette. */
+
 import { QueryClient } from "@tanstack/react-query";
 import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
 import { createSyncStoragePersister } from "@tanstack/query-sync-storage-persister";

@@ -26,7 +26,7 @@ export default function MedicationsSafetyPanel({ medications }: Props) {
 
   return (
     <div className="space-y-4">
-      <div className="rounded-2xl border border-slate-700/90 bg-slate-900/60 p-4 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)] ring-1 ring-white/5">
+      <div className="rounded-2xl border border-slate-300 bg-slate-50 p-4 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)] ring-1 ring-slate-200/60">
         <h2 className="text-[11px] font-bold uppercase tracking-[0.25em] text-slate-500">
           Safety audit
         </h2>
@@ -67,7 +67,7 @@ export default function MedicationsSafetyPanel({ medications }: Props) {
               {cumulativeWarning}
             </div>
           ) : (
-            <p className="rounded-xl border border-slate-700/80 bg-slate-950/40 px-3 py-2.5 text-[13px] leading-relaxed text-slate-400">
+            <p className="rounded-xl border border-slate-300 bg-slate-50/95 px-3 py-2.5 text-[13px] leading-relaxed text-slate-400">
               Cumulative OH / dizziness: high-risk band starts above three meds
               with either label on this screen (each med counts once).
             </p>
@@ -75,8 +75,8 @@ export default function MedicationsSafetyPanel({ medications }: Props) {
         </div>
       </div>
 
-      <div className="overflow-hidden rounded-2xl border border-dashed border-slate-600/80 bg-gradient-to-b from-slate-900/90 to-slate-950/95 shadow-[inset_0_2px_12px_rgba(0,0,0,0.35)] ring-1 ring-white/[0.06]">
-        <div className="border-b border-slate-700/80 bg-slate-900/80 px-4 py-3">
+      <div className="overflow-hidden rounded-2xl border border-dashed border-slate-300/80 bg-gradient-to-b from-slate-900/90 to-slate-950/95 shadow-[inset_0_2px_12px_rgba(0,0,0,0.35)] ring-1 ring-white/[0.06]">
+        <div className="border-b border-slate-300 bg-white/98 px-4 py-3">
           <h2
             id="med-list-heading"
             className="text-[11px] font-bold uppercase tracking-[0.25em] text-slate-500"
@@ -112,7 +112,7 @@ export default function MedicationsSafetyPanel({ medications }: Props) {
                       >
                         {String(index + 1).padStart(2, "0")}.
                       </span>
-                      <p className="truncate font-medium text-slate-100">
+                      <p className="truncate font-medium text-slate-900">
                         {m.name}
                       </p>
                     </div>
@@ -132,7 +132,7 @@ export default function MedicationsSafetyPanel({ medications }: Props) {
                       </span>
                     )}
                     {m.is_substrate && (
-                      <span className="rounded-full bg-slate-800 px-2 py-1 text-slate-300 ring-1 ring-slate-600">
+                      <span className="rounded-full bg-slate-800 px-2 py-1 text-slate-700 ring-1 ring-slate-600">
                         Substrate
                       </span>
                     )}

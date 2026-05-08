@@ -111,7 +111,7 @@ export default function VitalsPage() {
   return (
     <div className="space-y-8">
       <header>
-        <h1 className="text-2xl font-semibold tracking-tight text-slate-50">
+        <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
           Vitals
         </h1>
         <p className="mt-2 text-sm leading-relaxed text-slate-400">
@@ -126,8 +126,8 @@ export default function VitalsPage() {
       />
 
       {orthostatic.length > 0 && standing3mReading(orthostatic[0]) && (
-        <section className="rounded-2xl border border-slate-700 bg-slate-900/80 p-4 ring-1 ring-white/5">
-          <h2 className="text-lg font-semibold text-slate-50">
+        <section className="rounded-2xl border border-slate-300 bg-white/98 p-4 ring-1 ring-slate-200/60">
+          <h2 className="text-lg font-semibold text-slate-900">
             Positional comparison (latest session)
           </h2>
           <p className="mt-1 text-sm text-slate-400">
@@ -139,7 +139,7 @@ export default function VitalsPage() {
             <VitalsChart session={orthostatic[0]} />
           </div>
 
-          <h3 className="mt-8 text-base font-semibold text-slate-200">
+          <h3 className="mt-8 text-base font-semibold text-slate-800">
             Delta vs lying
           </h3>
           <p className="mt-1 text-sm text-slate-400">
@@ -151,8 +151,8 @@ export default function VitalsPage() {
         </section>
       )}
 
-      <section className="rounded-2xl border border-slate-700 bg-slate-900/80 p-4 ring-1 ring-white/5">
-        <h2 className="text-lg font-semibold text-slate-50">Swelling check</h2>
+      <section className="rounded-2xl border border-slate-300 bg-white/98 p-4 ring-1 ring-slate-200/60">
+        <h2 className="text-lg font-semibold text-slate-900">Swelling check</h2>
         <p className="mt-1 text-sm text-slate-400">
           Pitting depth uses your database{" "}
           <code className="rounded bg-slate-800 px-1 py-0.5 text-xs text-sky-200">
@@ -162,7 +162,7 @@ export default function VitalsPage() {
         </p>
         <form onSubmit={submitSwelling} className="mt-4 space-y-4">
           <fieldset>
-            <legend className="text-sm font-medium text-slate-300">
+            <legend className="text-sm font-medium text-slate-700">
               Edema level
             </legend>
             <div className="mt-2 flex flex-col gap-2">
@@ -171,8 +171,8 @@ export default function VitalsPage() {
                   key={value}
                   className={`flex cursor-pointer items-center gap-3 rounded-lg border px-3 py-2.5 text-sm transition-colors ${
                     edemaLevel === value
-                      ? "border-sky-500/60 bg-sky-950/40 text-slate-50"
-                      : "border-slate-700 bg-slate-950/50 text-slate-300 hover:border-slate-600"
+                      ? "border-sky-500/60 bg-sky-950/40 text-slate-900"
+                      : "border-slate-300 bg-slate-100/80 text-slate-700 hover:border-slate-300"
                   }`}
                 >
                   <input
@@ -188,10 +188,10 @@ export default function VitalsPage() {
               ))}
             </div>
           </fieldset>
-          <label className="flex flex-col gap-1 text-sm text-slate-300">
+          <label className="flex flex-col gap-1 text-sm text-slate-700">
             Notes (optional)
             <input
-              className="rounded-lg border border-slate-600 bg-slate-950 px-3 py-2 text-slate-50"
+              className="rounded-lg border border-slate-300 bg-gray-50 px-3 py-2 text-slate-900"
               value={swellingNotes}
               onChange={(e) => setSwellingNotes(e.target.value)}
               placeholder="Location, symmetry, meds…"
@@ -205,13 +205,13 @@ export default function VitalsPage() {
           </button>
         </form>
         {swellingChecks.length > 0 && (
-          <ul className="mt-4 space-y-2 border-t border-slate-800 pt-4">
+          <ul className="mt-4 space-y-2 border-t border-slate-200 pt-4">
             {swellingChecks.slice(0, 6).map((s) => (
               <li
                 key={s.id}
                 className="flex flex-wrap items-baseline justify-between gap-2 text-xs text-slate-400"
               >
-                <span className="font-medium text-slate-200">
+                <span className="font-medium text-slate-800">
                   {EDEMA_LEVEL_TYPE_LABELS[s.edemaLevel]}
                 </span>
                 <time dateTime={s.recordedAt}>
@@ -226,42 +226,42 @@ export default function VitalsPage() {
         )}
       </section>
 
-      <section className="rounded-2xl border border-slate-700 bg-slate-900/80 p-4 ring-1 ring-white/5">
-        <h2 className="text-lg font-semibold text-slate-50">Spot BP check</h2>
+      <section className="rounded-2xl border border-slate-300 bg-white/98 p-4 ring-1 ring-slate-200/60">
+        <h2 className="text-lg font-semibold text-slate-900">Spot BP check</h2>
         <form onSubmit={submitSpot} className="mt-4 space-y-3">
           <div className="flex flex-wrap gap-3">
-            <label className="flex flex-col gap-1 text-sm text-slate-300">
+            <label className="flex flex-col gap-1 text-sm text-slate-700">
               Systolic
               <input
                 inputMode="numeric"
-                className="w-28 rounded-lg border border-slate-600 bg-slate-950 px-3 py-2 text-slate-50"
+                className="w-28 rounded-lg border border-slate-300 bg-gray-50 px-3 py-2 text-slate-900"
                 value={sys}
                 onChange={(e) => setSys(e.target.value)}
               />
             </label>
-            <label className="flex flex-col gap-1 text-sm text-slate-300">
+            <label className="flex flex-col gap-1 text-sm text-slate-700">
               Diastolic
               <input
                 inputMode="numeric"
-                className="w-28 rounded-lg border border-slate-600 bg-slate-950 px-3 py-2 text-slate-50"
+                className="w-28 rounded-lg border border-slate-300 bg-gray-50 px-3 py-2 text-slate-900"
                 value={dia}
                 onChange={(e) => setDia(e.target.value)}
               />
             </label>
-            <label className="flex flex-col gap-1 text-sm text-slate-300">
+            <label className="flex flex-col gap-1 text-sm text-slate-700">
               HR (optional)
               <input
                 inputMode="numeric"
-                className="w-28 rounded-lg border border-slate-600 bg-slate-950 px-3 py-2 text-slate-50"
+                className="w-28 rounded-lg border border-slate-300 bg-gray-50 px-3 py-2 text-slate-900"
                 value={hr}
                 onChange={(e) => setHr(e.target.value)}
               />
             </label>
           </div>
-          <label className="flex flex-col gap-1 text-sm text-slate-300">
+          <label className="flex flex-col gap-1 text-sm text-slate-700">
             Notes
             <input
-              className="rounded-lg border border-slate-600 bg-slate-950 px-3 py-2 text-slate-50"
+              className="rounded-lg border border-slate-300 bg-gray-50 px-3 py-2 text-slate-900"
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
             />
@@ -286,7 +286,7 @@ export default function VitalsPage() {
           {orthostatic.slice(0, 8).map((o) => (
             <li
               key={o.id}
-              className="rounded-xl border border-slate-800 bg-slate-900/50 px-3 py-3 text-sm"
+              className="rounded-xl border border-slate-200 bg-slate-50/95 px-3 py-3 text-sm"
             >
               <div className="flex flex-wrap items-baseline justify-between gap-2">
                 <span className="text-slate-400">
@@ -300,7 +300,7 @@ export default function VitalsPage() {
                   <span className="text-slate-500">Within common thresholds</span>
                 )}
               </div>
-              <p className="mt-2 font-mono text-slate-200">
+              <p className="mt-2 font-mono text-slate-800">
                 L {o.lying.systolic}/{o.lying.diastolic} · S{" "}
                 {o.sitting.systolic}/{o.sitting.diastolic}
                 {o.standing1m
@@ -329,9 +329,9 @@ export default function VitalsPage() {
           {vitals.slice(0, 12).map((v) => (
             <li
               key={v.id}
-              className="flex flex-wrap items-baseline justify-between gap-2 rounded-xl border border-slate-800 bg-slate-900/50 px-3 py-2 text-sm"
+              className="flex flex-wrap items-baseline justify-between gap-2 rounded-xl border border-slate-200 bg-slate-50/95 px-3 py-2 text-sm"
             >
-              <span className="font-mono text-slate-100">
+              <span className="font-mono text-slate-900">
                 {v.systolic}/{v.diastolic}
                 {v.heartRate != null ? ` · HR ${v.heartRate}` : ""}
               </span>

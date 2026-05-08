@@ -335,9 +335,9 @@ export default function DoseAdjustmentModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="dose-modal-title"
-        className="relative z-[81] m-0 flex max-h-[min(92vh,720px)] w-full max-w-lg flex-col overflow-hidden rounded-t-2xl border border-slate-500/80 bg-slate-900 shadow-[0_0_0_1px_rgba(15,23,42,0.6),0_25px_50px_-12px_rgba(0,0,0,0.5)] sm:m-4 sm:rounded-2xl"
+        className="relative z-[81] m-0 flex max-h-[min(92vh,720px)] w-full max-w-lg flex-col overflow-hidden rounded-t-2xl border border-slate-500/80 bg-white shadow-[0_0_0_1px_rgba(15,23,42,0.6),0_25px_50px_-12px_rgba(0,0,0,0.5)] sm:m-4 sm:rounded-2xl"
       >
-        <div className="flex items-start justify-between gap-3 border-b border-slate-700 px-5 py-4">
+        <div className="flex items-start justify-between gap-3 border-b border-slate-300 px-5 py-4">
           <div className="flex items-start gap-3">
             <span className="mt-0.5 flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-sky-500/20 to-violet-600/20 ring-1 ring-sky-500/30">
               <SlidersHorizontal
@@ -346,7 +346,7 @@ export default function DoseAdjustmentModal({
               />
             </span>
             <div>
-              <h2 id="dose-modal-title" className="text-lg font-semibold text-slate-50">
+              <h2 id="dose-modal-title" className="text-lg font-semibold text-slate-900">
                 Dose and timing
               </h2>
               <p className="mt-1 text-sm text-slate-400">{med.name}</p>
@@ -355,14 +355,14 @@ export default function DoseAdjustmentModal({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg p-2 text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+            className="rounded-lg p-2 text-slate-400 hover:bg-slate-800 hover:text-slate-800"
             aria-label="Close"
           >
             <X className="h-5 w-5" />
           </button>
         </div>
 
-        <div className="flex gap-1 border-b border-slate-800 px-3 pt-2">
+        <div className="flex gap-1 border-b border-slate-200 px-3 pt-2">
           {(
             [
               ["adjust", "Adjust"],
@@ -377,7 +377,7 @@ export default function DoseAdjustmentModal({
               className={`rounded-t-lg px-4 py-2 text-sm font-semibold transition ${
                 tab === id
                   ? "bg-slate-800 text-sky-200"
-                  : "text-slate-500 hover:text-slate-300"
+                  : "text-slate-500 hover:text-slate-700"
               }`}
             >
               {label}
@@ -388,19 +388,19 @@ export default function DoseAdjustmentModal({
         <div className="flex-1 overflow-y-auto px-5 py-4">
           {tab === "adjust" && (
             <div className="space-y-6">
-              <div className="rounded-2xl border border-slate-600/90 bg-gradient-to-b from-slate-900 to-slate-950 p-4 ring-1 ring-white/5">
+              <div className="rounded-2xl border border-slate-300/90 bg-gradient-to-b from-slate-900 to-slate-950 p-4 ring-1 ring-slate-200/60">
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-xs font-bold uppercase tracking-[0.2em] text-slate-500">
                     Dose
                   </span>
-                  <div className="flex rounded-full bg-slate-950 p-1 ring-1 ring-slate-700">
+                  <div className="flex rounded-full bg-gray-50 p-1 ring-1 ring-slate-700">
                     <button
                       type="button"
                       onClick={() => setDoseUnit("mg")}
                       className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
                         doseUnit === "mg"
                           ? "bg-sky-600 text-white shadow"
-                          : "text-slate-400 hover:text-slate-200"
+                          : "text-slate-400 hover:text-slate-800"
                       }`}
                     >
                       mg
@@ -411,7 +411,7 @@ export default function DoseAdjustmentModal({
                       className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
                         doseUnit === "mcg"
                           ? "bg-sky-600 text-white shadow"
-                          : "text-slate-400 hover:text-slate-200"
+                          : "text-slate-400 hover:text-slate-800"
                       }`}
                     >
                       mcg
@@ -432,7 +432,7 @@ export default function DoseAdjustmentModal({
                     type="button"
                     onClick={() => stepDose(-1)}
                     disabled={doseValue <= 1}
-                    className="flex h-14 min-w-14 shrink-0 items-center justify-center rounded-2xl border border-slate-600 bg-slate-950 text-slate-100 shadow-inner transition hover:border-sky-500/50 hover:bg-slate-900 disabled:opacity-30 active:scale-95"
+                    className="flex h-14 min-w-14 shrink-0 items-center justify-center rounded-2xl border border-slate-300 bg-gray-50 text-slate-900 shadow-inner transition hover:border-sky-500/50 hover:bg-white disabled:opacity-30 active:scale-95"
                     aria-label="Decrease dose"
                   >
                     <Minus className="h-6 w-6" strokeWidth={2.5} />
@@ -454,7 +454,7 @@ export default function DoseAdjustmentModal({
                     type="button"
                     onClick={() => stepDose(1)}
                     disabled={doseValue >= sliderMax}
-                    className="flex h-14 min-w-14 shrink-0 items-center justify-center rounded-2xl border border-slate-600 bg-slate-950 text-slate-100 shadow-inner transition hover:border-sky-500/50 hover:bg-slate-900 disabled:opacity-30 active:scale-95"
+                    className="flex h-14 min-w-14 shrink-0 items-center justify-center rounded-2xl border border-slate-300 bg-gray-50 text-slate-900 shadow-inner transition hover:border-sky-500/50 hover:bg-white disabled:opacity-30 active:scale-95"
                     aria-label="Increase dose"
                   >
                     <Plus className="h-6 w-6" strokeWidth={2.5} />
@@ -475,15 +475,15 @@ export default function DoseAdjustmentModal({
                         )
                       )
                     }
-                    className="mx-auto w-28 rounded-xl border border-slate-600 bg-slate-950 px-2 py-2 text-center font-mono text-lg text-sky-100 tabular-nums"
+                    className="mx-auto w-28 rounded-xl border border-slate-300 bg-gray-50 px-2 py-2 text-center font-mono text-lg text-sky-100 tabular-nums"
                   />
                 </label>
               </div>
 
-              <div className="rounded-2xl border border-slate-600/90 bg-slate-950/50 p-4 ring-1 ring-white/5">
+              <div className="rounded-2xl border border-slate-300/90 bg-slate-100/80 p-4 ring-1 ring-slate-200/60">
                 <label
                   htmlFor="med-time"
-                  className="flex items-center gap-2 text-sm font-medium text-slate-200"
+                  className="flex items-center gap-2 text-sm font-medium text-slate-800"
                 >
                   <Clock className="h-4 w-4 text-sky-400" aria-hidden />
                   Scheduled time
@@ -493,7 +493,7 @@ export default function DoseAdjustmentModal({
                   type="time"
                   value={timeStr}
                   onChange={(e) => setTimeStr(e.target.value)}
-                  className="mt-3 min-h-[52px] w-full rounded-2xl border-2 border-slate-600 bg-slate-950 px-4 py-3 text-lg text-slate-100 transition focus:border-sky-500/70 focus:outline-none focus:ring-2 focus:ring-sky-500/30"
+                  className="mt-3 min-h-[52px] w-full rounded-2xl border-2 border-slate-300 bg-gray-50 px-4 py-3 text-lg text-slate-900 transition focus:border-sky-500/70 focus:outline-none focus:ring-2 focus:ring-sky-500/30"
                 />
                 <p className="mt-2 text-xs leading-relaxed text-slate-500">
                   Example: move a bedtime dose later to ease morning orthostatic
@@ -505,11 +505,11 @@ export default function DoseAdjustmentModal({
                 <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500">
                   Safety re-check (checkMetabolicConflict)
                 </p>
-                <div className="mt-2 space-y-2 rounded-xl border border-slate-700 bg-slate-950/60 px-3 py-3 text-sm">
+                <div className="mt-2 space-y-2 rounded-xl border border-slate-300 bg-slate-100/70 px-3 py-3 text-sm">
                   <p
                     className={
                       metabolicPreview?.isSafe
-                        ? "text-slate-300"
+                        ? "text-slate-700"
                         : "text-red-300"
                     }
                   >
@@ -528,13 +528,13 @@ export default function DoseAdjustmentModal({
               </div>
 
               <div>
-                <label className="text-sm font-medium text-slate-200">
+                <label className="text-sm font-medium text-slate-800">
                   Reason for change
                 </label>
                 <select
                   value={reason}
                   onChange={(e) => setReason(e.target.value)}
-                  className="mt-2 w-full rounded-xl border border-slate-600 bg-slate-950 px-3 py-3 text-slate-100"
+                  className="mt-2 w-full rounded-xl border border-slate-300 bg-gray-50 px-3 py-3 text-slate-900"
                 >
                   {REASON_PRESETS.map((r) => (
                     <option key={r} value={r}>
@@ -548,7 +548,7 @@ export default function DoseAdjustmentModal({
                     onChange={(e) => setReasonCustom(e.target.value)}
                     rows={2}
                     placeholder="Describe…"
-                    className="mt-2 w-full rounded-xl border border-slate-600 bg-slate-950 px-3 py-2 text-sm text-slate-100"
+                    className="mt-2 w-full rounded-xl border border-slate-300 bg-gray-50 px-3 py-2 text-sm text-slate-900"
                   />
                 )}
               </div>
@@ -572,7 +572,7 @@ export default function DoseAdjustmentModal({
               {historyForMed.map((h) => (
                 <li
                   key={h.id}
-                  className="rounded-xl border border-slate-700 bg-slate-950/50 px-3 py-3 text-sm"
+                  className="rounded-xl border border-slate-300 bg-slate-100/80 px-3 py-3 text-sm"
                 >
                   <time
                     className="text-xs text-slate-500"
@@ -580,7 +580,7 @@ export default function DoseAdjustmentModal({
                   >
                     {new Date(h.recordedAt).toLocaleString()}
                   </time>
-                  <p className="mt-1 text-slate-200">
+                  <p className="mt-1 text-slate-800">
                     <span className="font-medium text-sky-300">
                       {h.changeKind}
                     </span>
@@ -611,14 +611,14 @@ export default function DoseAdjustmentModal({
                 active dose uses this schedule on the planner.
               </p>
               <div>
-                <label className="text-sm font-medium text-slate-200">
+                <label className="text-sm font-medium text-slate-800">
                   Start date
                 </label>
                 <input
                   type="date"
                   value={taperStart}
                   onChange={(e) => setTaperStart(e.target.value)}
-                  className="mt-2 w-full rounded-xl border border-slate-600 bg-slate-950 px-3 py-3 text-slate-100"
+                  className="mt-2 w-full rounded-xl border border-slate-300 bg-gray-50 px-3 py-3 text-slate-900"
                 />
               </div>
               <div className="space-y-2">
@@ -628,7 +628,7 @@ export default function DoseAdjustmentModal({
                 {taperSegments.map((seg, idx) => (
                   <div
                     key={idx}
-                    className="flex flex-wrap items-end gap-2 rounded-xl border border-slate-700 bg-slate-950/40 p-3"
+                    className="flex flex-wrap items-end gap-2 rounded-xl border border-slate-300 bg-slate-50/95 p-3"
                   >
                     <label className="text-xs text-slate-400">
                       mg
@@ -644,7 +644,7 @@ export default function DoseAdjustmentModal({
                             )
                           );
                         }}
-                        className="mt-1 block w-24 rounded border border-slate-600 bg-slate-950 px-2 py-2 text-slate-100"
+                        className="mt-1 block w-24 rounded border border-slate-300 bg-gray-50 px-2 py-2 text-slate-900"
                       />
                     </label>
                     <label className="text-xs text-slate-400">
@@ -661,7 +661,7 @@ export default function DoseAdjustmentModal({
                             )
                           );
                         }}
-                        className="mt-1 block w-24 rounded border border-slate-600 bg-slate-950 px-2 py-2 text-slate-100"
+                        className="mt-1 block w-24 rounded border border-slate-300 bg-gray-50 px-2 py-2 text-slate-900"
                       />
                     </label>
                     {taperSegments.length > 1 && (
@@ -694,13 +694,13 @@ export default function DoseAdjustmentModal({
               </div>
 
               <div>
-                <label className="text-sm font-medium text-slate-200">
+                <label className="text-sm font-medium text-slate-800">
                   Reason
                 </label>
                 <select
                   value={reason}
                   onChange={(e) => setReason(e.target.value)}
-                  className="mt-2 w-full rounded-xl border border-slate-600 bg-slate-950 px-3 py-3 text-slate-100"
+                  className="mt-2 w-full rounded-xl border border-slate-300 bg-gray-50 px-3 py-3 text-slate-900"
                 >
                   {REASON_PRESETS.map((r) => (
                     <option key={r} value={r}>
@@ -713,7 +713,7 @@ export default function DoseAdjustmentModal({
                     value={reasonCustom}
                     onChange={(e) => setReasonCustom(e.target.value)}
                     rows={2}
-                    className="mt-2 w-full rounded-xl border border-slate-600 bg-slate-950 px-3 py-2 text-sm text-slate-100"
+                    className="mt-2 w-full rounded-xl border border-slate-300 bg-gray-50 px-3 py-2 text-sm text-slate-900"
                   />
                 )}
               </div>

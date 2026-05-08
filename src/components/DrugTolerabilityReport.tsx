@@ -102,20 +102,20 @@ export default function DrugTolerabilityReport() {
   }
 
   return (
-    <section className="rounded-2xl border border-slate-700 bg-slate-900/80 p-4 ring-1 ring-white/5">
+    <section className="rounded-2xl border border-slate-300 bg-white/98 p-4 ring-1 ring-slate-200/60">
       <div className="flex flex-wrap items-start gap-3">
         <FileText
           className="mt-0.5 h-6 w-6 shrink-0 text-violet-400"
           aria-hidden
         />
         <div className="min-w-0 flex-1">
-          <h2 className="text-lg font-semibold text-slate-50">
+          <h2 className="text-lg font-semibold text-slate-900">
             Drug Tolerability Report
           </h2>
           <p className="mt-1 max-w-prose text-sm text-slate-400">
             Cover letter for Missouri specialists. Side-effect logs are grouped
             by medication and dose; rates show how often{" "}
-            <span className="text-slate-200">Dizziness</span> was logged after a
+            <span className="text-slate-800">Dizziness</span> was logged after a
             dose.
           </p>
         </div>
@@ -125,7 +125,7 @@ export default function DrugTolerabilityReport() {
         <p className="text-xs font-semibold uppercase tracking-wide text-violet-300/90">
           Cover letter
         </p>
-        <p className="mt-3 text-sm leading-relaxed text-slate-100">
+        <p className="mt-3 text-sm leading-relaxed text-slate-900">
           {COVER_LETTER}
         </p>
       </div>
@@ -156,10 +156,10 @@ export default function DrugTolerabilityReport() {
             {grouped.map((g) => (
               <li
                 key={g.medicationId}
-                className="rounded-xl border border-slate-700 bg-slate-950/50 px-4 py-4"
+                className="rounded-xl border border-slate-300 bg-slate-100/80 px-4 py-4"
               >
                 <div className="flex flex-wrap items-baseline justify-between gap-2">
-                  <h3 className="font-semibold text-slate-100">
+                  <h3 className="font-semibold text-slate-900">
                     {g.medicationName}
                   </h3>
                   <span className="font-mono text-sm tabular-nums text-sky-200">
@@ -175,7 +175,7 @@ export default function DrugTolerabilityReport() {
                   <div className="mt-4 overflow-x-auto">
                     <table className="w-full min-w-[280px] text-left text-sm">
                       <thead>
-                        <tr className="border-b border-slate-700 text-xs uppercase tracking-wide text-slate-500">
+                        <tr className="border-b border-slate-300 text-xs uppercase tracking-wide text-slate-500">
                           <th className="pb-2 pr-3 font-medium">Dose</th>
                           <th className="pb-2 pr-3 font-medium">Logs</th>
                           <th className="pb-2 font-medium">Dizziness</th>
@@ -185,9 +185,9 @@ export default function DrugTolerabilityReport() {
                         {g.byDose.map((d) => (
                           <tr
                             key={d.doseLabel}
-                            className="border-b border-slate-800/80 last:border-0"
+                            className="border-b border-slate-200 last:border-0"
                           >
-                            <td className="py-2 pr-3 text-slate-200">
+                            <td className="py-2 pr-3 text-slate-800">
                               {d.doseLabel}
                             </td>
                             <td className="py-2 pr-3 font-mono tabular-nums text-slate-400">
@@ -210,7 +210,7 @@ export default function DrugTolerabilityReport() {
 
       <form
         onSubmit={submitLog}
-        className="mt-8 space-y-4 rounded-xl border border-slate-700 bg-slate-950/40 p-4"
+        className="mt-8 space-y-4 rounded-xl border border-slate-300 bg-slate-50/95 p-4"
       >
         <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
           Log symptoms after a dose
@@ -218,13 +218,13 @@ export default function DrugTolerabilityReport() {
         <div>
           <label
             htmlFor="tol-med"
-            className="text-sm font-medium text-slate-200"
+            className="text-sm font-medium text-slate-800"
           >
             Medication
           </label>
           <select
             id="tol-med"
-            className="mt-1 w-full rounded-xl border border-slate-600 bg-slate-950 px-3 py-3 text-base text-slate-50"
+            className="mt-1 w-full rounded-xl border border-slate-300 bg-gray-50 px-3 py-3 text-base text-slate-900"
             value={medicationId}
             onChange={(e) => setMedicationId(e.target.value)}
             required
@@ -240,14 +240,14 @@ export default function DrugTolerabilityReport() {
         <div>
           <label
             htmlFor="tol-dose"
-            className="text-sm font-medium text-slate-200"
+            className="text-sm font-medium text-slate-800"
           >
             Dose label{" "}
             <span className="font-normal text-slate-500">(optional)</span>
           </label>
           <input
             id="tol-dose"
-            className="mt-1 w-full rounded-xl border border-slate-600 bg-slate-950 px-3 py-3 text-slate-50"
+            className="mt-1 w-full rounded-xl border border-slate-300 bg-gray-50 px-3 py-3 text-slate-900"
             value={doseLabel}
             onChange={(e) => setDoseLabel(e.target.value)}
             placeholder="e.g. 40 mg evening"
@@ -255,7 +255,7 @@ export default function DrugTolerabilityReport() {
           />
         </div>
         <div>
-          <p className="text-sm font-medium text-slate-200">Symptoms</p>
+          <p className="text-sm font-medium text-slate-800">Symptoms</p>
           <div className="mt-2 flex flex-wrap gap-2">
             {SYMPTOM_OPTIONS.map((s) => (
               <button
@@ -265,7 +265,7 @@ export default function DrugTolerabilityReport() {
                 className={`rounded-full border px-3 py-1.5 text-sm font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-400 ${
                   picked.has(s)
                     ? "border-violet-500/60 bg-violet-950/50 text-violet-100"
-                    : "border-slate-600 bg-slate-950/60 text-slate-300 hover:border-slate-500"
+                    : "border-slate-300 bg-slate-100/70 text-slate-700 hover:border-slate-500"
                 }`}
               >
                 {s}

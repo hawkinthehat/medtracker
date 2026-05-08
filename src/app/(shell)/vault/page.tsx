@@ -14,7 +14,6 @@ import {
 } from "@/lib/seed-medications";
 import type {
   BrainFogEntry,
-  DailyLogEntry,
   JournalEntry,
   MoodEntry,
   OrthostaticSession,
@@ -29,6 +28,8 @@ import { AlertTriangle, FileDown } from "lucide-react";
 import ClinicalSummaryCard from "@/components/ClinicalSummaryCard";
 import DrugTolerabilityReport from "@/components/DrugTolerabilityReport";
 import TaperSensitivitySection from "@/components/TaperSensitivitySection";
+import VaultPlannerSections from "@/components/planner/VaultPlannerSections";
+import { dailyLogsQueryFn } from "@/lib/daily-logs-query-fn";
 
 function formatWindowMinutes(ms: number) {
   return Math.round(ms / (60 * 1000));
@@ -37,10 +38,11 @@ function formatWindowMinutes(ms: number) {
 export default function VaultPage() {
   const { data: dailyLogs = [] } = useQuery({
     queryKey: qk.dailyLogs,
-    queryFn: async (): Promise<DailyLogEntry[]> => [],
-    staleTime: Infinity,
+    queryFn: dailyLogsQueryFn,
+    staleTime: 60_000,
     gcTime: 1000 * 60 * 60 * 24 * 30,
-    refetchOnWindowFocus: false,
+    refetchOnWindowFocus: true,
+    refetchOnMount: true,
   });
 
   const { data: journal = [] } = useQuery({
@@ -134,25 +136,25 @@ export default function VaultPage() {
   return (
     <div className="space-y-8">
       <header>
-        <h1 className="text-2xl font-semibold tracking-tight text-slate-50">
+        <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
           Vault
         </h1>
         <p className="mt-2 max-w-prose text-sm leading-relaxed text-slate-400">
           Trigger Finder compares{" "}
-          <span className="text-slate-200">daily_logs</span> (food) with{" "}
-          <span className="text-slate-200">symptom_journal</span> entries. When a
+          <span className="text-slate-800">daily_logs</span> (food) with{" "}
+          <span className="text-slate-800">symptom_journal</span> entries. When a
           flare or pain note lands within{" "}
           {formatWindowMinutes(HISTAMINE_TRIGGER_WINDOW_MS)} minutes{" "}
-          <strong className="font-medium text-slate-300">after</strong> a food
+          <strong className="font-medium text-slate-700">after</strong> a food
           log, that food is flagged here as a suspected histamine trigger for
           your allergist-led diet planning.
         </p>
       </header>
 
-      <section className="rounded-2xl border border-slate-700 bg-slate-900/80 p-4 ring-1 ring-white/5">
+      <section className="rounded-2xl border border-slate-300 bg-white/98 p-4 ring-1 ring-slate-200/60">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <h2 className="text-lg font-semibold text-slate-50">
+            <h2 className="text-lg font-semibold text-slate-900">
               Transition Summary
             </h2>
             <p className="mt-1 max-w-prose text-sm text-slate-400">
@@ -173,33 +175,33 @@ export default function VaultPage() {
         </div>
 
         <dl className="mt-6 grid gap-4 sm:grid-cols-3">
-          <div className="rounded-xl border border-slate-700 bg-slate-950/60 px-4 py-3">
+          <div className="rounded-xl border border-slate-300 bg-slate-100/70 px-4 py-3">
             <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">
               Mood (7d avg)
             </dt>
-            <dd className="mt-1 font-mono text-2xl tabular-nums text-slate-50">
+            <dd className="mt-1 font-mono text-2xl tabular-nums text-slate-900">
               {moodAvg7 != null ? moodAvg7.toFixed(2) : "—"}
               <span className="ml-1 text-sm font-sans font-normal text-slate-500">
                 /5
               </span>
             </dd>
           </div>
-          <div className="rounded-xl border border-slate-700 bg-slate-950/60 px-4 py-3">
+          <div className="rounded-xl border border-slate-300 bg-slate-100/70 px-4 py-3">
             <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">
               Brain fog (7d avg)
             </dt>
-            <dd className="mt-1 font-mono text-2xl tabular-nums text-slate-50">
+            <dd className="mt-1 font-mono text-2xl tabular-nums text-slate-900">
               {fogAvg7 != null ? fogAvg7.toFixed(2) : "—"}
               <span className="ml-1 text-sm font-sans font-normal text-slate-500">
                 /10
               </span>
             </dd>
           </div>
-          <div className="rounded-xl border border-slate-700 bg-slate-950/60 px-4 py-3">
+          <div className="rounded-xl border border-slate-300 bg-slate-100/70 px-4 py-3">
             <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">
               Orthostatic Δ (7d mean)
             </dt>
-            <dd className="mt-1 font-mono text-lg leading-snug tabular-nums text-slate-50">
+            <dd className="mt-1 font-mono text-lg leading-snug tabular-nums text-slate-900">
               {orthoDelta7.count === 0 ? (
                 <span className="text-slate-500">No sessions</span>
               ) : (
@@ -230,13 +232,13 @@ export default function VaultPage() {
 
       <ClinicalSummaryCard />
 
-      <section className="rounded-2xl border border-slate-700 bg-slate-900/80 p-4 ring-1 ring-white/5">
+      <section className="rounded-2xl border border-slate-300 bg-white/98 p-4 ring-1 ring-slate-200/60">
         <div className="flex flex-wrap items-center gap-2">
           <AlertTriangle
             className="h-5 w-5 text-amber-400"
             aria-hidden
           />
-          <h2 className="text-lg font-semibold text-slate-50">
+          <h2 className="text-lg font-semibold text-slate-900">
             Suspected histamine triggers
           </h2>
           <span className="rounded-full bg-amber-950/80 px-2 py-0.5 text-xs font-medium text-amber-200">
@@ -258,7 +260,7 @@ export default function VaultPage() {
                 className="rounded-xl border border-amber-900/40 bg-amber-950/20 px-4 py-3"
               >
                 <div className="flex flex-wrap items-baseline justify-between gap-2">
-                  <span className="font-medium text-slate-100">{row.label}</span>
+                  <span className="font-medium text-slate-900">{row.label}</span>
                   <time
                     className="text-xs text-slate-500"
                     dateTime={row.recordedAt}
@@ -277,6 +279,8 @@ export default function VaultPage() {
           </ul>
         )}
       </section>
+
+      <VaultPlannerSections />
     </div>
   );
 }

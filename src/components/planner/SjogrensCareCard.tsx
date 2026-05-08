@@ -66,14 +66,14 @@ export default function SjogrensCareCard() {
   const swallowHard = row?.difficulty_swallowing_dry_food ?? false;
 
   return (
-    <section className="overflow-hidden rounded-xl border border-slate-600 bg-slate-900/85 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] ring-1 ring-black/20">
+    <section className="overflow-hidden rounded-xl border border-slate-300 bg-white shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] ring-1 ring-slate-300/40">
       <button
         type="button"
         onClick={() => setExpanded((v) => !v)}
         aria-expanded={expanded}
         id="sjogren-care-trigger"
         aria-controls="sjogren-care-panel"
-        className="flex w-full items-center justify-between gap-3 bg-slate-950/40 px-4 py-3.5 text-left transition hover:bg-slate-900/55"
+        className="flex w-full items-center justify-between gap-3 bg-slate-50/95 px-4 py-3.5 text-left transition hover:bg-slate-50"
       >
         <div className="flex min-w-0 items-center gap-3">
           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-sky-950/50 ring-1 ring-sky-800/50">
@@ -83,7 +83,7 @@ export default function SjogrensCareCard() {
             <p className="text-[10px] font-bold uppercase tracking-[0.35em] text-slate-500">
               Daily logging
             </p>
-            <p className="truncate text-sm font-semibold text-slate-100">
+            <p className="truncate text-sm font-semibold text-slate-900">
               Sjögren&apos;s Care
             </p>
           </div>
@@ -99,7 +99,7 @@ export default function SjogrensCareCard() {
         id="sjogren-care-panel"
         role="region"
         aria-labelledby="sjogren-care-trigger"
-        className={`grid border-t border-slate-800/90 transition-[grid-template-rows] duration-300 ease-out ${
+        className={`grid border-t border-slate-200 transition-[grid-template-rows] duration-300 ease-out ${
           expanded ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
         }`}
       >
@@ -117,8 +117,8 @@ export default function SjogrensCareCard() {
               </p>
             )}
             <div className="grid gap-3 sm:grid-cols-2">
-              <div className="flex flex-col gap-2 rounded-xl border border-slate-700/90 bg-slate-950/45 p-3">
-                <div className="flex items-center gap-2 text-slate-300">
+              <div className="flex flex-col gap-2 rounded-xl border border-slate-300 bg-gray-50/45 p-3">
+                <div className="flex items-center gap-2 text-slate-700">
                   <Droplet className="h-4 w-4 shrink-0 text-sky-400" aria-hidden />
                   <span className="text-xs font-bold uppercase tracking-wide">
                     Eye drop uses
@@ -133,12 +133,12 @@ export default function SjogrensCareCard() {
                         eye_drop_uses: Math.max(0, eyeDrops - 1),
                       })
                     }
-                    className="rounded-lg border border-slate-600 px-3 py-2 text-sm font-semibold text-slate-200 hover:bg-slate-800 disabled:opacity-40"
+                    className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-800 disabled:opacity-40"
                   >
                     −
                   </button>
                   <span
-                    className="font-mono text-2xl font-bold tabular-nums text-slate-50"
+                    className="font-mono text-2xl font-bold tabular-nums text-slate-900"
                     aria-live="polite"
                   >
                     {eyeDrops}
@@ -153,8 +153,8 @@ export default function SjogrensCareCard() {
                   </button>
                 </div>
               </div>
-              <div className="flex flex-col gap-2 rounded-xl border border-slate-700/90 bg-slate-950/45 p-3">
-                <div className="flex items-center gap-2 text-slate-300">
+              <div className="flex flex-col gap-2 rounded-xl border border-slate-300 bg-gray-50/45 p-3">
+                <div className="flex items-center gap-2 text-slate-700">
                   <GlassWater className="h-4 w-4 shrink-0 text-cyan-400" aria-hidden />
                   <span className="text-xs font-bold uppercase tracking-wide">
                     Oral rinses
@@ -169,12 +169,12 @@ export default function SjogrensCareCard() {
                         oral_rinses: Math.max(0, rinses - 1),
                       })
                     }
-                    className="rounded-lg border border-slate-600 px-3 py-2 text-sm font-semibold text-slate-200 hover:bg-slate-800 disabled:opacity-40"
+                    className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-800 disabled:opacity-40"
                   >
                     −
                   </button>
                   <span
-                    className="font-mono text-2xl font-bold tabular-nums text-slate-50"
+                    className="font-mono text-2xl font-bold tabular-nums text-slate-900"
                     aria-live="polite"
                   >
                     {rinses}
@@ -190,7 +190,7 @@ export default function SjogrensCareCard() {
                 </div>
               </div>
             </div>
-            <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-700/90 bg-slate-950/45 p-3">
+            <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-300 bg-gray-50/45 p-3">
               <input
                 type="checkbox"
                 checked={swallowHard}
@@ -200,15 +200,15 @@ export default function SjogrensCareCard() {
                     difficulty_swallowing_dry_food: e.target.checked,
                   })
                 }
-                className="mt-1 h-4 w-4 shrink-0 rounded border-slate-500 bg-slate-900 text-sky-500 focus:ring-sky-500"
+                className="mt-1 h-4 w-4 shrink-0 rounded border-slate-500 bg-white text-sky-500 focus:ring-sky-500"
               />
-              <span className="flex items-start gap-2 text-sm leading-snug text-slate-200">
+              <span className="flex items-start gap-2 text-sm leading-snug text-slate-800">
                 <Utensils
                   className="mt-0.5 h-4 w-4 shrink-0 text-slate-400"
                   aria-hidden
                 />
                 <span>
-                  <span className="font-semibold text-slate-100">
+                  <span className="font-semibold text-slate-900">
                     Difficulty swallowing dry food
                   </span>
                   <span className="mt-0.5 block text-xs text-slate-500">

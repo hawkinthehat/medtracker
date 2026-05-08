@@ -6,7 +6,7 @@ export default function SideEffectsPage() {
   return (
     <div className="space-y-8">
       <header className="space-y-3">
-        <h1 className="text-2xl font-semibold tracking-tight text-slate-50">
+        <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
           Side effects
         </h1>
         <p className="max-w-prose text-sm leading-relaxed text-slate-400">

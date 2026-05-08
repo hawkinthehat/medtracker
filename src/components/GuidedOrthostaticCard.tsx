@@ -33,7 +33,7 @@ function StageInputs({
         {title}
       </h3>
       {subtitle && (
-        <p className="mt-1 text-xs text-slate-300">{subtitle}</p>
+        <p className="mt-1 text-xs text-slate-700">{subtitle}</p>
       )}
       <div className="mt-4 flex flex-wrap gap-4">
         <label className="flex min-w-[7rem] flex-col gap-1.5 text-xs font-semibold text-white">
@@ -164,7 +164,7 @@ export function GuidedOrthostaticCard({ onSaveSession }: Props) {
           <h2 className="text-lg font-bold tracking-tight text-white">
             Guided Orthostatic Test
           </h2>
-          <p className="mt-1.5 text-sm leading-relaxed text-slate-300">
+          <p className="mt-1.5 text-sm leading-relaxed text-slate-700">
             Lying (baseline) → sitting → standing. Deltas use{" "}
             <span className="font-medium text-amber-200">lying vs standing</span>{" "}
             as you type.

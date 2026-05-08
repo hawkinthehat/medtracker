@@ -5,7 +5,6 @@ import { qk } from "@/lib/query-keys";
 import type {
   ClinicalCorrelationSnapshot,
   ClinicalSnapshotsMap,
-  DailyLogEntry,
   JournalEntry,
   OrthostaticSession,
   VitalRow,
@@ -16,6 +15,7 @@ import {
 } from "@/lib/clinical-correlation";
 import { generateClinicalCorrelationLockedPdf } from "@/lib/pdf-export";
 import { useState } from "react";
+import { dailyLogsQueryFn } from "@/lib/daily-logs-query-fn";
 
 export default function ClinicalCorrelationPage() {
   const qc = useQueryClient();
@@ -48,10 +48,11 @@ export default function ClinicalCorrelationPage() {
 
   const { data: dailyLogs = [] } = useQuery({
     queryKey: qk.dailyLogs,
-    queryFn: async (): Promise<DailyLogEntry[]> => [],
-    staleTime: Infinity,
+    queryFn: dailyLogsQueryFn,
+    staleTime: 60_000,
     gcTime: 1000 * 60 * 60 * 24 * 30,
-    refetchOnWindowFocus: false,
+    refetchOnWindowFocus: true,
+    refetchOnMount: true,
   });
 
   const { data: journal = [] } = useQuery({
@@ -135,19 +136,19 @@ export default function ClinicalCorrelationPage() {
   return (
     <div className="space-y-8">
       <header className="space-y-3">
-        <h1 className="text-2xl font-semibold tracking-tight text-slate-50">
+        <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
           Clinical correlation
         </h1>
         <p className="text-sm leading-relaxed text-slate-400">
-          Each night at <span className="text-slate-200">9:00 PM</span> (your device
+          Each night at <span className="text-slate-800">9:00 PM</span> (your device
           clock), MedTracker summarizes today&apos;s vitals, orthostatic checks,
           daily logs, and journal using simple timing rules. This is a{" "}
-          <span className="text-slate-200">hypothesis aid</span>, not a diagnosis.
+          <span className="text-slate-800">hypothesis aid</span>, not a diagnosis.
         </p>
       </header>
 
       <div
-        className="rounded-xl border border-slate-700 bg-slate-900/70 px-4 py-3 text-sm text-slate-300"
+        className="rounded-xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm text-slate-700"
         role="status"
       >
         {afterNine ? (
@@ -166,13 +167,13 @@ export default function ClinicalCorrelationPage() {
       </div>
 
       <section
-        className="space-y-4 rounded-2xl border border-slate-700 bg-slate-900/80 p-4 ring-1 ring-white/5"
+        className="space-y-4 rounded-2xl border border-slate-300 bg-white/98 p-4 ring-1 ring-slate-200/60"
         aria-labelledby="cc-summary-heading"
       >
         <div className="flex flex-wrap items-start justify-between gap-3">
           <h2
             id="cc-summary-heading"
-            className="text-lg font-semibold text-slate-50"
+            className="text-lg font-semibold text-slate-900"
           >
             Today&apos;s summary
           </h2>
@@ -198,7 +199,7 @@ export default function ClinicalCorrelationPage() {
                 ? "Nightly engine"
                 : "Preview"}
             </p>
-            <ul className="list-inside list-disc space-y-2 text-sm leading-relaxed text-slate-200">
+            <ul className="list-inside list-disc space-y-2 text-sm leading-relaxed text-slate-800">
               {snapshot.narratives.map((line, i) => (
                 <li key={i}>{line}</li>
               ))}
@@ -216,7 +217,7 @@ export default function ClinicalCorrelationPage() {
             type="button"
             onClick={() => preview.mutate()}
             disabled={preview.isPending || snapshot?.locked}
-            className="flex-1 rounded-xl border border-slate-600 bg-slate-950/80 py-3 text-sm font-semibold text-slate-100 hover:bg-slate-900 disabled:opacity-50"
+            className="flex-1 rounded-xl border border-slate-300 bg-slate-100/90 py-3 text-sm font-semibold text-slate-900 hover:bg-white disabled:opacity-50"
           >
             {preview.isPending ? "Building preview…" : "Preview correlations now"}
           </button>

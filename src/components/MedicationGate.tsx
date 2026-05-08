@@ -56,7 +56,7 @@ export default function MedicationGate() {
       className={`rounded-2xl border-2 p-4 shadow-lg transition-colors duration-200 sm:p-5 ${
         unsafe
           ? "border-red-600 bg-red-600 text-white ring-4 ring-red-500/50"
-          : "border-slate-600 bg-slate-900 text-slate-100 ring-1 ring-white/10"
+          : "border-slate-300 bg-white text-slate-900 ring-1 ring-white/10"
       }`}
       role="region"
       aria-label="Medication metabolic gate"
@@ -78,19 +78,19 @@ export default function MedicationGate() {
       </p>
 
       <div className="mt-4 space-y-3">
-        <label className="block text-xs font-medium text-slate-300">
+        <label className="block text-xs font-medium text-slate-700">
           New medication name
           <input
-            className="mt-1 w-full rounded-lg border border-slate-500 bg-slate-950 px-3 py-2 text-sm text-slate-50 placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-sky-500 disabled:opacity-80"
+            className="mt-1 w-full rounded-lg border border-slate-500 bg-gray-50 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-sky-500 disabled:opacity-80"
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="e.g., clarithromycin"
           />
         </label>
-        <label className="block text-xs font-medium text-slate-300">
+        <label className="block text-xs font-medium text-slate-700">
           Pathway
           <select
-            className="mt-1 w-full rounded-lg border border-slate-500 bg-slate-950 px-3 py-2 text-sm text-slate-50 focus:outline-none focus:ring-2 focus:ring-sky-500"
+            className="mt-1 w-full rounded-lg border border-slate-500 bg-gray-50 px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-sky-500"
             value={pathway}
             onChange={(e) => setPathway(e.target.value)}
           >
@@ -109,7 +109,7 @@ export default function MedicationGate() {
               checked={isInhibitor}
               onChange={(e) => setIsInhibitor(e.target.checked)}
             />
-            <span className={unsafe ? "text-white" : "text-slate-300"}>
+            <span className={unsafe ? "text-white" : "text-slate-700"}>
               Inhibits this pathway
             </span>
           </label>
@@ -120,7 +120,7 @@ export default function MedicationGate() {
               checked={isSubstrate}
               onChange={(e) => setIsSubstrate(e.target.checked)}
             />
-            <span className={unsafe ? "text-white" : "text-slate-300"}>
+            <span className={unsafe ? "text-white" : "text-slate-700"}>
               Substrate of this pathway
             </span>
           </label>
@@ -131,7 +131,7 @@ export default function MedicationGate() {
               checked={orthostaticSideEffect}
               onChange={(e) => setOrthostaticSideEffect(e.target.checked)}
             />
-            <span className={unsafe ? "text-white" : "text-slate-300"}>
+            <span className={unsafe ? "text-white" : "text-slate-700"}>
               Lists orthostatic hypotension as a side effect
             </span>
           </label>
@@ -152,7 +152,7 @@ export default function MedicationGate() {
         className={`mt-4 rounded-xl border px-3 py-3 text-sm leading-relaxed ${
           unsafe
             ? "border-red-800 bg-red-700/90 font-medium text-white"
-            : "border-slate-700 bg-slate-950/80 text-slate-300"
+            : "border-slate-300 bg-slate-100/90 text-slate-700"
         }`}
         role="status"
         aria-live="polite"

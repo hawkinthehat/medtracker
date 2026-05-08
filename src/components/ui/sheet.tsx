@@ -19,7 +19,7 @@ const SheetOverlay = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <SheetPrimitive.Overlay
     className={cn(
-      "fixed inset-0 z-50 bg-black/70 transition-opacity duration-200 data-[state=closed]:pointer-events-none data-[state=closed]:opacity-0 data-[state=open]:opacity-100",
+      "fixed inset-0 z-50 bg-slate-50/90 transition-opacity duration-200 data-[state=closed]:pointer-events-none data-[state=closed]:opacity-0 data-[state=open]:opacity-100",
       className,
     )}
     {...props}
@@ -35,9 +35,9 @@ const sheetSideStyles: Record<
   string
 > = {
   right:
-    "inset-y-0 right-0 h-full max-h-none max-w-md border-l border-slate-700 data-[state=closed]:translate-x-full data-[state=open]:translate-x-0",
+    "inset-y-0 right-0 h-full max-h-none max-w-md border-l-2 border-slate-300 data-[state=closed]:translate-x-full data-[state=open]:translate-x-0",
   bottom:
-    "inset-x-0 bottom-0 top-auto h-auto max-h-[min(88vh,560px)] rounded-t-2xl border-t border-slate-700 data-[state=closed]:translate-y-full data-[state=open]:translate-y-0",
+    "inset-x-0 bottom-0 top-auto h-auto max-h-[min(88vh,560px)] rounded-t-2xl border-t-2 border-slate-300 data-[state=closed]:translate-y-full data-[state=open]:translate-y-0",
 };
 
 type SheetContentProps = React.ComponentPropsWithoutRef<
@@ -55,14 +55,14 @@ const SheetContent = React.forwardRef<
     <SheetPrimitive.Content
       ref={ref}
       className={cn(
-        "fixed z-50 flex w-full flex-col bg-slate-950 shadow-xl duration-300 ease-out data-[state=closed]:pointer-events-none",
+        "fixed z-50 flex w-full flex-col border-slate-200 bg-white shadow-xl duration-300 ease-out data-[state=closed]:pointer-events-none",
         sheetSideStyles[side],
         className,
       )}
       {...props}
     >
       {children}
-      <SheetPrimitive.Close className="absolute right-4 top-4 rounded-lg p-2 text-slate-400 opacity-90 ring-offset-slate-950 transition hover:bg-slate-800 hover:text-slate-100 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:ring-offset-2 focus:ring-offset-slate-950 disabled:pointer-events-none">
+      <SheetPrimitive.Close className="absolute right-4 top-4 rounded-lg border border-transparent p-2 text-slate-600 opacity-90 ring-offset-white transition hover:border-slate-300 hover:bg-slate-100 hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:ring-offset-2 focus:ring-offset-white disabled:pointer-events-none">
         <X className="h-5 w-5" />
         <span className="sr-only">Close</span>
       </SheetPrimitive.Close>
@@ -77,7 +77,7 @@ const SheetHeader = ({
 }: React.HTMLAttributes<HTMLDivElement>) => (
   <div
     className={cn(
-      "flex flex-col gap-1 border-b border-slate-800 px-6 pb-4 pt-6 text-left",
+      "flex flex-col gap-1 border-b border-slate-200 px-6 pb-4 pt-6 text-left",
       className,
     )}
     {...props}
@@ -90,7 +90,7 @@ const SheetTitle = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <SheetPrimitive.Title
     ref={ref}
-    className={cn("text-lg font-semibold tracking-tight text-slate-50", className)}
+    className={cn("text-lg font-semibold tracking-tight text-slate-900", className)}
     {...props}
   />
 ));
@@ -102,7 +102,7 @@ const SheetDescription = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <SheetPrimitive.Description
     ref={ref}
-    className={cn("text-sm text-slate-400", className)}
+    className={cn("text-sm text-slate-600", className)}
     {...props}
   />
 ));

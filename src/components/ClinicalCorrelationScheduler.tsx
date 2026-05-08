@@ -5,7 +5,6 @@ import { useEffect } from "react";
 import { qk } from "@/lib/query-keys";
 import type {
   ClinicalSnapshotsMap,
-  DailyLogEntry,
   JournalEntry,
   OrthostaticSession,
   VitalRow,
@@ -14,6 +13,7 @@ import {
   buildClinicalCorrelationSnapshot,
   todayLocalDateKey,
 } from "@/lib/clinical-correlation";
+import { dailyLogsQueryFn } from "@/lib/daily-logs-query-fn";
 
 /**
  * Runs the nightly (local 9:00 PM) clinical correlation once per calendar day
@@ -48,10 +48,11 @@ export default function ClinicalCorrelationScheduler() {
 
   const { data: dailyLogs = [] } = useQuery({
     queryKey: qk.dailyLogs,
-    queryFn: async (): Promise<DailyLogEntry[]> => [],
-    staleTime: Infinity,
+    queryFn: dailyLogsQueryFn,
+    staleTime: 60_000,
     gcTime: 1000 * 60 * 60 * 24 * 30,
-    refetchOnWindowFocus: false,
+    refetchOnWindowFocus: true,
+    refetchOnMount: true,
   });
 
   const { data: journal = [] } = useQuery({

@@ -1,8 +1,12 @@
+import type { MedicationHistoryEntry } from "@/lib/medication-profile-types";
+import type { SavedMedication } from "@/lib/seed-medications";
 import type {
   ClinicalCorrelationSnapshot,
   DailyLogEntry,
   JournalEntry,
   OrthostaticSession,
+  SafetyGateBlockEvent,
+  SideEffectLog,
   VitalRow,
 } from "@/lib/types";
 import { labelJournalSetting } from "@/lib/journal-setting";
@@ -382,5 +386,304 @@ export async function generateClinicalCorrelationLockedPdf(params: {
 
   doc.save(
     `medtracker-st-louis-clinical-correlation-${params.dateKey}.pdf`
+  );
+}
+
+/** Bundles “deep” app data for silent auditing / specialist PDF export. */
+export type DoctorReportInput = {
+  patientLabel?: string;
+  medications: SavedMedication[];
+  medicationHistory: MedicationHistoryEntry[];
+  orthostatic: OrthostaticSession[];
+  vitals: VitalRow[];
+  dailyLogs: DailyLogEntry[];
+  safetyGateBlocks: SafetyGateBlockEvent[];
+  sideEffectLogs: SideEffectLog[];
+};
+
+export function compileDoctorReportBundle(
+  input: DoctorReportInput
+): DoctorReportInput & { compiledAt: string } {
+  return {
+    ...input,
+    compiledAt: new Date().toISOString(),
+  };
+}
+
+/**
+ * Clean white-background PDF for a new specialist: meds, change history,
+ * positional BP deltas, gate events, and embedded body sketches from daily_logs.
+ */
+export async function generateDoctorSpecialistPdf(
+  input: DoctorReportInput
+): Promise<void> {
+  const [{ default: jsPDF }, { default: autoTable }] = await Promise.all([
+    import("jspdf"),
+    import("jspdf-autotable"),
+  ]);
+
+  const bundle = compileDoctorReportBundle(input);
+  const doc = new jsPDF({ unit: "mm", format: "letter" });
+  const pageW = doc.internal.pageSize.getWidth();
+  let y = 14;
+
+  doc.setFillColor(255, 255, 255);
+  doc.rect(0, 0, pageW, doc.internal.pageSize.getHeight(), "F");
+
+  doc.setTextColor(15, 23, 42);
+  doc.setFontSize(16);
+  doc.text("Clinical summary — specialist handoff", 14, y);
+  y += 9;
+  doc.setFontSize(10);
+  doc.setTextColor(71, 85, 105);
+  doc.text(`Generated: ${new Date(bundle.compiledAt).toLocaleString()}`, 14, y);
+  y += 5;
+  doc.text(
+    bundle.patientLabel ?? "Patient: Jade · MedTracker export",
+    14,
+    y,
+    { maxWidth: pageW - 28 }
+  );
+  y += 10;
+
+  doc.setFontSize(12);
+  doc.setTextColor(15, 23, 42);
+  doc.text("Active medication list", 14, y);
+  y += 5;
+
+  autoTable(doc, {
+    startY: y,
+    head: [["Medication", "Class / notes (seed)"]],
+    body: bundle.medications.map((m) => [
+      m.name,
+      m.pathway_role ?? m.pathway,
+    ]),
+    styles: { fontSize: 9, cellPadding: 2, textColor: [15, 23, 42] },
+    headStyles: {
+      fillColor: [241, 245, 249],
+      textColor: [15, 23, 42],
+      fontStyle: "bold",
+    },
+    alternateRowStyles: { fillColor: [255, 255, 255] },
+    theme: "plain",
+  });
+
+  let nextY = (doc as PdfWithAutoTable).lastAutoTable.finalY;
+
+  doc.setFontSize(12);
+  doc.text("Medication & schedule change history", 14, nextY + 12);
+  autoTable(doc, {
+    startY: nextY + 16,
+    head: [["Date", "Medication", "Change", "Reason"]],
+    body: bundle.medicationHistory.slice(0, 80).map((h) => [
+      new Date(h.recordedAt).toLocaleString(),
+      h.medicationName,
+      `${h.changeKind}: ${h.newDoseLabel ?? ""} ${(h.newScheduledTimes ?? []).join(", ")}`.trim(),
+      h.reason,
+    ]),
+    styles: { fontSize: 8, cellPadding: 1.8 },
+    headStyles: {
+      fillColor: [241, 245, 249],
+      textColor: [15, 23, 42],
+      fontStyle: "bold",
+    },
+    columnStyles: { 3: { cellWidth: 55 } },
+    theme: "plain",
+  });
+
+  nextY = (doc as PdfWithAutoTable).lastAutoTable.finalY;
+
+  doc.setFontSize(12);
+  doc.setTextColor(127, 29, 29);
+  doc.text("Orthostatic / positional BP (delta lying → standing)", 14, nextY + 12);
+  doc.setTextColor(71, 85, 105);
+  doc.setFontSize(9);
+  doc.text(
+    "Δ values highlight positional drops relevant to OH screening.",
+    14,
+    nextY + 17,
+    { maxWidth: 180 }
+  );
+
+  autoTable(doc, {
+    startY: nextY + 22,
+    head: [
+      [
+        "Date",
+        "Lying",
+        "Standing",
+        "Δ Sys",
+        "Δ Dia",
+        "Positive screen",
+      ],
+    ],
+    body: bundle.orthostatic.slice(0, 40).map((o) => [
+      new Date(o.recordedAt).toLocaleString(),
+      `${o.lying.systolic}/${o.lying.diastolic}`,
+      `${standing3mReading(o)?.systolic ?? "—"}/${standing3mReading(o)?.diastolic ?? "—"}`,
+      `${o.deltaSystolic}`,
+      `${o.deltaDiastolic}`,
+      o.positiveOrthostatic ? "Yes" : "No",
+    ]),
+    styles: { fontSize: 8, cellPadding: 1.8 },
+    headStyles: {
+      fillColor: [254, 226, 226],
+      textColor: [127, 29, 29],
+      fontStyle: "bold",
+    },
+    theme: "plain",
+  });
+
+  nextY = (doc as PdfWithAutoTable).lastAutoTable.finalY;
+
+  doc.setFontSize(12);
+  doc.setTextColor(15, 23, 42);
+  doc.text("Home BP spot checks", 14, nextY + 12);
+  autoTable(doc, {
+    startY: nextY + 16,
+    head: [["Date / time", "Systolic", "Diastolic", "HR", "Notes"]],
+    body: bundle.vitals.slice(0, 60).map((v) => [
+      new Date(v.recordedAt).toLocaleString(),
+      String(v.systolic),
+      String(v.diastolic),
+      v.heartRate != null ? String(v.heartRate) : "—",
+      v.notes ?? "",
+    ]),
+    styles: { fontSize: 8, cellPadding: 1.8 },
+    headStyles: {
+      fillColor: [241, 245, 249],
+      textColor: [15, 23, 42],
+      fontStyle: "bold",
+    },
+    theme: "plain",
+  });
+
+  nextY = (doc as PdfWithAutoTable).lastAutoTable.finalY;
+
+  doc.setFontSize(12);
+  doc.text("Metabolic pathway / safety gate events (CYP bottlenecks)", 14, nextY + 12);
+  autoTable(doc, {
+    startY: nextY + 16,
+    head: [["Date", "Pathway", "Inhibitor added", "Blocked substrate"]],
+    body: bundle.safetyGateBlocks.slice(0, 40).map((b) => [
+      new Date(b.recordedAt).toLocaleString(),
+      b.pathway,
+      b.draftInhibitorName,
+      b.blockedSubstrateName,
+    ]),
+    styles: { fontSize: 8, cellPadding: 1.8 },
+    headStyles: {
+      fillColor: [241, 245, 249],
+      textColor: [15, 23, 42],
+      fontStyle: "bold",
+    },
+    theme: "plain",
+  });
+
+  nextY = (doc as PdfWithAutoTable).lastAutoTable.finalY;
+
+  doc.setFontSize(12);
+  doc.text("Post-dose tolerability (recent)", 14, nextY + 12);
+  autoTable(doc, {
+    startY: nextY + 16,
+    head: [["Date", "Medication", "Symptoms"]],
+    body: bundle.sideEffectLogs.slice(0, 40).map((s) => [
+      new Date(s.recordedAt).toLocaleString(),
+      s.medicationName,
+      s.symptoms.join(", "),
+    ]),
+    styles: { fontSize: 8, cellPadding: 1.8 },
+    headStyles: {
+      fillColor: [241, 245, 249],
+      textColor: [15, 23, 42],
+      fontStyle: "bold",
+    },
+    theme: "plain",
+  });
+
+  nextY = (doc as PdfWithAutoTable).lastAutoTable.finalY;
+
+  const sketchLogs = bundle.dailyLogs.filter(
+    (l) => l.sketchPngBase64 && l.sketchPngBase64.length > 80
+  );
+
+  const thumbW = 75;
+  const thumbH = 100;
+  let imgY = 24;
+  let imgX = 14;
+
+  if (sketchLogs.length > 0) {
+    doc.addPage();
+    doc.setFillColor(255, 255, 255);
+    doc.rect(
+      0,
+      0,
+      pageW,
+      doc.internal.pageSize.getHeight(),
+      "F"
+    );
+    doc.setFontSize(12);
+    doc.setTextColor(15, 23, 42);
+    doc.text(
+      `Body symptom sketches (${sketchLogs.length} from daily log)`,
+      14,
+      16
+    );
+    imgY = 28;
+    imgX = 14;
+  }
+
+  for (let i = 0; i < Math.min(sketchLogs.length, 8); i++) {
+    const s = sketchLogs[i];
+    if (imgY + thumbH > doc.internal.pageSize.getHeight() - 20) {
+      doc.addPage();
+      doc.setFillColor(255, 255, 255);
+      doc.rect(
+        0,
+        0,
+        pageW,
+        doc.internal.pageSize.getHeight(),
+        "F"
+      );
+      imgY = 20;
+      imgX = 14;
+    }
+    doc.setFontSize(9);
+    doc.setTextColor(71, 85, 105);
+    doc.text(
+      `${s.sketchSide ?? "?"} · ${s.sketchBrushPreset ?? "?"} · ${new Date(s.recordedAt).toLocaleString()}`,
+      imgX,
+      imgY - 2
+    );
+    try {
+      doc.addImage(
+        `data:image/png;base64,${s.sketchPngBase64}`,
+        "PNG",
+        imgX,
+        imgY,
+        thumbW,
+        thumbH
+      );
+    } catch {
+      doc.text("(Sketch image could not be embedded)", imgX, imgY + 10);
+    }
+    imgX += thumbW + 10;
+    if (imgX + thumbW > pageW - 14) {
+      imgX = 14;
+      imgY += thumbH + 16;
+    }
+  }
+
+  doc.setFontSize(8);
+  doc.setTextColor(100, 116, 139);
+  doc.text(
+    "MedTracker local export · verify against formal medical records · Body sketches are patient-drawn overlays for symptom localization.",
+    14,
+    doc.internal.pageSize.getHeight() - 12,
+    { maxWidth: pageW - 28 }
+  );
+
+  doc.save(
+    `medtracker-doctor-report-${new Date().toISOString().slice(0, 10)}.pdf`
   );
 }

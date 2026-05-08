@@ -86,7 +86,7 @@ export default function MoodVitalsTimeline({
                 key={m}
                 type="button"
                 onClick={() => onLogMood(m)}
-                className="rounded-lg border border-slate-600 bg-slate-950 px-2 py-1.5 text-lg leading-none hover:border-sky-500/50 hover:bg-slate-900"
+                className="rounded-lg border border-slate-300 bg-gray-50 px-2 py-1.5 text-lg leading-none hover:border-sky-500/50 hover:bg-white"
                 title={`Log mood ${m}/5`}
                 aria-label={`Log mood ${m} of 5`}
               >
@@ -97,7 +97,7 @@ export default function MoodVitalsTimeline({
         )}
       </div>
 
-      <div className="relative max-h-[320px] overflow-y-auto rounded-xl border border-slate-700/80 bg-slate-950/40 pr-1">
+      <div className="relative max-h-[320px] overflow-y-auto rounded-xl border border-slate-300 bg-slate-50/95 pr-1">
         <ul className="divide-y divide-slate-800/90">
           {rows.length === 0 && (
             <li className="px-4 py-8 text-center text-sm text-slate-500">
@@ -136,7 +136,7 @@ export default function MoodVitalsTimeline({
                 )}
               </div>
               {row.kind === "vital" && (
-                <p className="mt-1 font-mono text-sm text-slate-100">
+                <p className="mt-1 font-mono text-sm text-slate-900">
                   {row.vital.systolic}/{row.vital.diastolic}
                   {row.vital.heartRate != null
                     ? ` · HR ${row.vital.heartRate}`
@@ -144,7 +144,7 @@ export default function MoodVitalsTimeline({
                 </p>
               )}
               {row.kind === "mood" && (
-                <p className="mt-1 text-sm text-slate-200">
+                <p className="mt-1 text-sm text-slate-800">
                   <span className="mr-2 text-lg">
                     {MOOD_EMOJI[row.mood.mood]}
                   </span>
@@ -153,12 +153,12 @@ export default function MoodVitalsTimeline({
                 </p>
               )}
               {row.kind === "episode" && (
-                <p className="mt-1 whitespace-pre-wrap text-sm leading-snug text-slate-200">
+                <p className="mt-1 whitespace-pre-wrap text-sm leading-snug text-slate-800">
                   {row.episode.description}
                 </p>
               )}
               {row.kind === "pain" && (
-                <p className="mt-1 text-xs leading-relaxed text-slate-300">
+                <p className="mt-1 text-xs leading-relaxed text-slate-700">
                   {(Object.entries(row.pain.regions) as [PainRegionId, number][])
                     .filter(([, lvl]) => (lvl ?? 0) > 0)
                     .map(([reg, lvl]) => `${PAIN_LABELS[reg]} (${lvl})`)

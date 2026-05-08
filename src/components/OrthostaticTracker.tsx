@@ -177,10 +177,10 @@ export default function OrthostaticTracker({ onComplete }: Props) {
   }, [onComplete, reset, result]);
 
   return (
-    <section className="rounded-2xl border border-slate-700 bg-slate-900/80 p-4 shadow-lg ring-1 ring-white/5">
+    <section className="rounded-2xl border border-slate-300 bg-white/98 p-4 shadow-lg ring-1 ring-slate-200/60">
       <div className="mb-4 flex items-start justify-between gap-3">
         <div>
-          <h2 className="text-lg font-semibold text-slate-50">
+          <h2 className="text-lg font-semibold text-slate-900">
             Orthostatic BP
           </h2>
           <p className="mt-1 text-sm text-slate-400">
@@ -195,17 +195,17 @@ export default function OrthostaticTracker({ onComplete }: Props) {
       </div>
 
       <ol className="space-y-6">
-        <li className="rounded-xl border border-slate-700/80 bg-slate-950/50 p-4">
-          <p className="mb-3 font-medium text-slate-200">1. Lying</p>
+        <li className="rounded-xl border border-slate-300 bg-slate-100/80 p-4">
+          <p className="mb-3 font-medium text-slate-800">1. Lying</p>
           <p className="mb-3 text-sm text-slate-400">
             Lie flat ~5 minutes, then measure blood pressure.
           </p>
           <div className="flex flex-wrap gap-3">
-            <label className="flex flex-col gap-1 text-sm text-slate-300">
+            <label className="flex flex-col gap-1 text-sm text-slate-700">
               Systolic
               <input
                 inputMode="numeric"
-                className="w-28 rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-slate-50 placeholder:text-slate-600 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                className="w-28 rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900 placeholder:text-slate-600 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
                 placeholder="120"
                 value={lying.sys}
                 onChange={(e) =>
@@ -213,11 +213,11 @@ export default function OrthostaticTracker({ onComplete }: Props) {
                 }
               />
             </label>
-            <label className="flex flex-col gap-1 text-sm text-slate-300">
+            <label className="flex flex-col gap-1 text-sm text-slate-700">
               Diastolic
               <input
                 inputMode="numeric"
-                className="w-28 rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-slate-50 placeholder:text-slate-600 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                className="w-28 rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900 placeholder:text-slate-600 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
                 placeholder="80"
                 value={lying.dia}
                 onChange={(e) =>
@@ -237,8 +237,8 @@ export default function OrthostaticTracker({ onComplete }: Props) {
           )}
         </li>
 
-        <li className="rounded-xl border border-slate-700/80 bg-slate-950/50 p-4">
-          <p className="mb-3 font-medium text-slate-200">2. Sitting</p>
+        <li className="rounded-xl border border-slate-300 bg-slate-100/80 p-4">
+          <p className="mb-3 font-medium text-slate-800">2. Sitting</p>
           {sitTimerActive && stage === "sitting" && (
             <p
               className="mb-3 font-mono text-2xl font-semibold tabular-nums text-sky-300"
@@ -259,22 +259,22 @@ export default function OrthostaticTracker({ onComplete }: Props) {
           {showSittingInputs && (
             <>
               <div className="flex flex-wrap gap-3">
-                <label className="flex flex-col gap-1 text-sm text-slate-300">
+                <label className="flex flex-col gap-1 text-sm text-slate-700">
                   Systolic
                   <input
                     inputMode="numeric"
-                    className="w-28 rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-slate-50 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                    className="w-28 rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
                     value={sitting.sys}
                     onChange={(e) =>
                       setSitting((p) => ({ ...p, sys: e.target.value }))
                     }
                   />
                 </label>
-                <label className="flex flex-col gap-1 text-sm text-slate-300">
+                <label className="flex flex-col gap-1 text-sm text-slate-700">
                   Diastolic
                   <input
                     inputMode="numeric"
-                    className="w-28 rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-slate-50 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                    className="w-28 rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
                     value={sitting.dia}
                     onChange={(e) =>
                       setSitting((p) => ({ ...p, dia: e.target.value }))
@@ -295,8 +295,8 @@ export default function OrthostaticTracker({ onComplete }: Props) {
           )}
         </li>
 
-        <li className="rounded-xl border border-slate-700/80 bg-slate-950/50 p-4">
-          <p className="mb-3 font-medium text-slate-200">3. Standing (1m &amp; 3m)</p>
+        <li className="rounded-xl border border-slate-300 bg-slate-100/80 p-4">
+          <p className="mb-3 font-medium text-slate-800">3. Standing (1m &amp; 3m)</p>
           {showStandTimer && (
             <p
               className="mb-3 font-mono text-2xl font-semibold tabular-nums text-sky-300"
@@ -323,22 +323,22 @@ export default function OrthostaticTracker({ onComplete }: Props) {
           {showStanding1Inputs && (
             <>
               <div className="flex flex-wrap gap-3">
-                <label className="flex flex-col gap-1 text-sm text-slate-300">
+                <label className="flex flex-col gap-1 text-sm text-slate-700">
                   Systolic (1m standing)
                   <input
                     inputMode="numeric"
-                    className="w-28 rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-slate-50 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                    className="w-28 rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
                     value={standing1m.sys}
                     onChange={(e) =>
                       setStanding1m((p) => ({ ...p, sys: e.target.value }))
                     }
                   />
                 </label>
-                <label className="flex flex-col gap-1 text-sm text-slate-300">
+                <label className="flex flex-col gap-1 text-sm text-slate-700">
                   Diastolic (1m standing)
                   <input
                     inputMode="numeric"
-                    className="w-28 rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-slate-50 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                    className="w-28 rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
                     value={standing1m.dia}
                     onChange={(e) =>
                       setStanding1m((p) => ({ ...p, dia: e.target.value }))
@@ -359,22 +359,22 @@ export default function OrthostaticTracker({ onComplete }: Props) {
           )}
           {showStanding2Inputs && (
             <div className="flex flex-wrap gap-3">
-              <label className="flex flex-col gap-1 text-sm text-slate-300">
+              <label className="flex flex-col gap-1 text-sm text-slate-700">
                 Systolic (3m standing)
                 <input
                   inputMode="numeric"
-                  className="w-28 rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-slate-50 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                  className="w-28 rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
                   value={standing3m.sys}
                   onChange={(e) =>
                     setStanding3m((p) => ({ ...p, sys: e.target.value }))
                   }
                 />
               </label>
-              <label className="flex flex-col gap-1 text-sm text-slate-300">
+              <label className="flex flex-col gap-1 text-sm text-slate-700">
                 Diastolic (3m standing)
                 <input
                   inputMode="numeric"
-                  className="w-28 rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-slate-50 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                  className="w-28 rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
                   value={standing3m.dia}
                   onChange={(e) =>
                     setStanding3m((p) => ({ ...p, dia: e.target.value }))
@@ -387,11 +387,11 @@ export default function OrthostaticTracker({ onComplete }: Props) {
       </ol>
 
       {result && (
-        <div className="mt-6 space-y-3 rounded-xl border border-slate-600 bg-slate-900 p-4">
-          <p className="text-sm font-medium text-slate-200">
+        <div className="mt-6 space-y-3 rounded-xl border border-slate-300 bg-white p-4">
+          <p className="text-sm font-medium text-slate-800">
             Delta (Lying → Standing 3m)
           </p>
-          <p className="font-mono text-lg tabular-nums text-slate-100">
+          <p className="font-mono text-lg tabular-nums text-slate-900">
             Δ Systolic: {result.deltaSystolic} mmHg · Δ Diastolic:{" "}
             {result.deltaDiastolic} mmHg
           </p>
@@ -418,7 +418,7 @@ export default function OrthostaticTracker({ onComplete }: Props) {
             <button
               type="button"
               onClick={reset}
-              className="rounded-xl border border-slate-600 px-4 py-3 text-sm font-medium text-slate-300 hover:bg-slate-800"
+              className="rounded-xl border border-slate-300 px-4 py-3 text-sm font-medium text-slate-700 hover:bg-slate-800"
             >
               Discard
             </button>

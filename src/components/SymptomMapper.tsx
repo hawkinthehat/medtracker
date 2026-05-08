@@ -261,7 +261,7 @@ export default function SymptomMapper() {
         >
           Body symptom mapper
         </h2>
-        <p className="text-sm leading-relaxed text-slate-300">
+        <p className="text-sm leading-relaxed text-slate-700">
           Front and back views — tap <span className="text-white">head</span>,{" "}
           <span className="text-white">torso</span>,{" "}
           <span className="text-white">arms</span>, or{" "}
@@ -410,7 +410,7 @@ export default function SymptomMapper() {
                       key={`${r.category}-${r.id}`}
                       className="flex justify-between gap-2 border-b border-white/10 pb-2 last:border-0"
                     >
-                      <span className="text-slate-200">{r.category}</span>
+                      <span className="text-slate-800">{r.category}</span>
                       <span className="font-mono text-amber-200">
                         {r.intensity != null ? `${r.intensity}/10` : "—"}
                       </span>

@@ -69,7 +69,7 @@ export default function LogEpisodeFab({
         role="dialog"
         aria-modal="true"
         aria-labelledby="episode-title"
-        className="relative z-[61] m-4 w-full max-w-md rounded-2xl border border-slate-600 bg-slate-900 p-5 shadow-2xl ring-1 ring-white/10 outline-none"
+        className="relative z-[61] m-4 w-full max-w-md rounded-2xl border border-slate-300 bg-white p-5 shadow-2xl ring-1 ring-white/10 outline-none"
       >
         <div className="flex items-start justify-between gap-3">
           <h2
@@ -81,7 +81,7 @@ export default function LogEpisodeFab({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg p-2 text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+            className="rounded-lg p-2 text-slate-400 hover:bg-slate-800 hover:text-slate-800"
             aria-label="Close"
           >
             <X className="h-5 w-5" />
@@ -93,26 +93,26 @@ export default function LogEpisodeFab({
         </p>
         <form onSubmit={handleSubmit} className="mt-4 space-y-4">
           <label className="block">
-            <span className="text-sm font-medium text-slate-200">
+            <span className="text-sm font-medium text-slate-800">
               What happened?
             </span>
             <textarea
               name="episode-desc"
               rows={4}
               required
-              className="mt-2 w-full rounded-xl border border-slate-600 bg-slate-950 px-3 py-3 text-sm text-slate-50 placeholder:text-slate-600 focus:border-red-500/60 focus:outline-none focus:ring-1 focus:ring-red-500/50"
+              className="mt-2 w-full rounded-xl border border-slate-300 bg-gray-50 px-3 py-3 text-sm text-slate-900 placeholder:text-slate-600 focus:border-red-500/60 focus:outline-none focus:ring-1 focus:ring-red-500/50"
               placeholder="Onset, duration, triggers, associated symptoms…"
             />
           </label>
           {hasPain && (
-            <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-700 bg-slate-950/60 px-3 py-3">
+            <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-300 bg-slate-100/70 px-3 py-3">
               <input
                 type="checkbox"
                 name="attach-pain"
                 defaultChecked
-                className="mt-1 h-4 w-4 rounded border-slate-600 text-red-600 focus:ring-red-500"
+                className="mt-1 h-4 w-4 rounded border-slate-300 text-red-600 focus:ring-red-500"
               />
-              <span className="text-sm text-slate-300">
+              <span className="text-sm text-slate-700">
                 Attach current pain map (regions with intensity &gt; 0)
               </span>
             </label>
@@ -121,7 +121,7 @@ export default function LogEpisodeFab({
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 rounded-xl border border-slate-600 py-3 text-sm font-medium text-slate-300 hover:bg-slate-800"
+              className="flex-1 rounded-xl border border-slate-300 py-3 text-sm font-medium text-slate-700 hover:bg-slate-800"
             >
               Cancel
             </button>

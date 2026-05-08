@@ -81,10 +81,10 @@ export default function TodayMedicationStrip({
   }, [medications, profiles, taperPlans]);
 
   return (
-    <section className="overflow-hidden rounded-xl border border-slate-600 bg-slate-900/85 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] ring-1 ring-black/20">
-      <div className="flex items-center gap-2 border-b border-slate-700/90 bg-slate-950/40 px-4 py-2.5">
+    <section className="overflow-hidden rounded-xl border border-slate-300 bg-white shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] ring-1 ring-slate-300/40">
+      <div className="flex items-center gap-2 border-b border-slate-300 bg-slate-50/95 px-4 py-2.5">
         <Pill className="h-4 w-4 text-emerald-400" aria-hidden />
-        <h2 className="text-sm font-bold uppercase tracking-[0.15em] text-slate-200">
+        <h2 className="text-sm font-bold uppercase tracking-[0.15em] text-slate-800">
           Today&apos;s doses
         </h2>
       </div>
@@ -102,7 +102,7 @@ export default function TodayMedicationStrip({
               }`}
             >
               <div>
-                <span className="font-medium text-slate-100">{med.name}</span>
+                <span className="font-medium text-slate-900">{med.name}</span>
                 {sub && (
                   <p className="mt-0.5 text-xs text-slate-500">{sub}</p>
                 )}

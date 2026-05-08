@@ -1,6 +1,6 @@
-import MedicalPlannerDashboard from "@/components/planner/MedicalPlannerDashboard";
+import MinimalHomeDashboard from "@/components/planner/MinimalHomeDashboard";
 
-/** Home care planner: mood & quick actions first; collapsible med manager at bottom. */
+/** Minimal high-contrast home: pulse, hydration, crisis sketch, due meds. */
 export default function PlannerHomePage() {
-  return <MedicalPlannerDashboard />;
+  return <MinimalHomeDashboard />;
 }

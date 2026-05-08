@@ -68,10 +68,10 @@ export default function DailySchedule() {
   }, [lanes]);
 
   return (
-    <section className="rounded-2xl border border-slate-700 bg-slate-900/80 p-4 ring-1 ring-white/5">
+    <section className="rounded-2xl border border-slate-300 bg-white/98 p-4 ring-1 ring-slate-200/60">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="text-lg font-semibold text-slate-50">
+          <h2 className="text-lg font-semibold text-slate-900">
             Daily schedule (24h)
           </h2>
           <p className="mt-1 max-w-prose text-sm text-slate-400">
@@ -91,7 +91,7 @@ export default function DailySchedule() {
 
       <div className="relative mt-6">
         <div
-          className="relative overflow-hidden rounded-xl border border-slate-800 bg-slate-950/80"
+          className="relative overflow-hidden rounded-xl border border-slate-200 bg-slate-100/90"
           style={{ height: `${96 + laneCount * 40}px` }}
         >
           {/* Hour grid */}
@@ -99,7 +99,7 @@ export default function DailySchedule() {
             {Array.from({ length: 24 }, (_, h) => (
               <div
                 key={h}
-                className="flex-1 border-l border-slate-800/80 first:border-l-0"
+                className="flex-1 border-l border-slate-200 first:border-l-0"
                 title={formatHourTick(h)}
               />
             ))}
@@ -154,7 +154,7 @@ export default function DailySchedule() {
                   key={d.id}
                   className={`${base} ${bg} ${
                     subGlow
-                      ? "ring-2 ring-red-500 ring-offset-2 ring-offset-slate-950 [box-shadow:0_0_18px_rgba(239,68,68,0.85)]"
+                      ? "ring-2 ring-red-500 ring-offset-2 ring-offset-white [box-shadow:0_0_18px_rgba(239,68,68,0.85)]"
                       : ""
                   }`}
                   style={{

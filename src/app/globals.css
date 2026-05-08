@@ -3,12 +3,15 @@
 @tailwind utilities;
 
 :root {
-  --background: #020617;
-  --foreground: #f8fafc;
+  --background: #f9fafb;
+  --foreground: #0f172a;
+  --card: #ffffff;
+  --card-border: #e2e8f0;
+  --muted: #475569;
 }
 
 html {
-  color-scheme: dark;
+  color-scheme: light;
 }
 
 body {
@@ -41,12 +44,12 @@ body {
     animation: pulse-strip 2.8s ease-in-out infinite;
     background: radial-gradient(
       ellipse 80% 60% at 50% 0%,
-      rgba(56, 189, 248, 0.22),
+      rgba(14, 165, 233, 0.18),
       transparent 65%
     );
   }
 
-  /** Tactile dose slider — larger thumb for touch */
+  /** Tactile dose slider — larger thumb for touch (light UI) */
   .dose-range-slider {
     -webkit-appearance: none;
     appearance: none;
@@ -54,9 +57,10 @@ body {
     border-radius: 9999px;
     background: linear-gradient(
       to right,
-      rgb(14 165 233 / 0.35) 0%,
-      rgb(51 65 85) 100%
+      rgb(125 211 252 / 0.85) 0%,
+      rgb(226 232 240) 100%
     );
+    border: 1px solid rgb(203 213 225);
   }
   .dose-range-slider::-webkit-slider-thumb {
     -webkit-appearance: none;
@@ -64,18 +68,19 @@ body {
     width: 1.35rem;
     height: 1.35rem;
     border-radius: 9999px;
-    background: rgb(56 189 248);
-    box-shadow: 0 2px 10px rgb(14 165 233 / 0.45);
+    background: rgb(2 132 199);
+    box-shadow: 0 2px 10px rgb(14 165 233 / 0.35);
     cursor: pointer;
     margin-top: -0.35rem;
+    border: 2px solid rgb(255 255 255);
   }
   .dose-range-slider::-moz-range-thumb {
     width: 1.35rem;
     height: 1.35rem;
-    border: none;
+    border: 2px solid rgb(255 255 255);
     border-radius: 9999px;
-    background: rgb(56 189 248);
-    box-shadow: 0 2px 10px rgb(14 165 233 / 0.45);
+    background: rgb(2 132 199);
+    box-shadow: 0 2px 10px rgb(14 165 233 / 0.35);
     cursor: pointer;
   }
 }
@@ -94,11 +99,11 @@ body {
 @keyframes pulse-strip {
   0%,
   100% {
-    opacity: 0.28;
+    opacity: 0.35;
     transform: scale(1);
   }
   50% {
-    opacity: 0.55;
+    opacity: 0.58;
     transform: scale(1.02);
   }
 }

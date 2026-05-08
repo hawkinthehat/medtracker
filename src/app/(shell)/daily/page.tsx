@@ -13,6 +13,9 @@ import { labelJournalSetting } from "@/lib/journal-setting";
 import { useMemo, useState } from "react";
 import { ChevronLeft } from "lucide-react";
 import TodayMedicationStrip from "@/components/planner/TodayMedicationStrip";
+import { dailyLogsQueryFn } from "@/lib/daily-logs-query-fn";
+import { persistDailyLogToSupabase } from "@/lib/supabase/daily-logs";
+import { getSupabaseBrowserClient } from "@/lib/supabase/browser-client";
 
 const CATEGORIES: { value: DailyLogCategory; label: string }[] = [
   { value: "food", label: "Food" },
@@ -30,10 +33,11 @@ export default function DailySummaryPage() {
   const qc = useQueryClient();
   const { data: dailyLogs = [] } = useQuery({
     queryKey: qk.dailyLogs,
-    queryFn: async (): Promise<DailyLogEntry[]> => [],
-    staleTime: Infinity,
+    queryFn: dailyLogsQueryFn,
+    staleTime: 60_000,
     gcTime: 1000 * 60 * 60 * 24 * 30,
-    refetchOnWindowFocus: false,
+    refetchOnWindowFocus: true,
+    refetchOnMount: true,
   });
 
   const { data: journal = [] } = useQuery({
@@ -62,12 +66,20 @@ export default function DailySummaryPage() {
   );
 
   const addLog = useMutation({
-    mutationFn: async (row: DailyLogEntry) => row,
+    mutationFn: async (row: DailyLogEntry) => {
+      const sb = getSupabaseBrowserClient();
+      if (sb) {
+        const ok = await persistDailyLogToSupabase(row);
+        if (!ok) throw new Error("Could not save log — check Supabase.");
+      }
+      return row;
+    },
     onSuccess: (row) => {
       qc.setQueryData<DailyLogEntry[]>(qk.dailyLogs, (prev = []) => [
         row,
         ...prev,
       ]);
+      void qc.invalidateQueries({ queryKey: qk.dailyLogs });
       setLabel("");
       setNotes("");
       setRecordedAtLocal(toDatetimeLocalInput(new Date()));
@@ -100,12 +112,12 @@ export default function DailySummaryPage() {
           Journal
         </Link>
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-slate-50">
+          <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
             Daily summary
           </h1>
           <p className="mt-2 text-sm leading-relaxed text-slate-400">
-            One timeline for <span className="text-slate-200">daily_logs</span>{" "}
-            and <span className="text-slate-200">symptom_journal</span>. Food and
+            One timeline for <span className="text-slate-800">daily_logs</span>{" "}
+            and <span className="text-slate-800">symptom_journal</span>. Food and
             symptom entries within{" "}
             {formatProximityHours(MCAS_PROXIMITY_MS)} hours are highlighted as
             possible MCAS triggers.
@@ -127,22 +139,22 @@ export default function DailySummaryPage() {
 
       <form
         onSubmit={submitDaily}
-        className="space-y-4 rounded-2xl border border-slate-700 bg-slate-900/80 p-4 ring-1 ring-white/5"
+        className="space-y-4 rounded-2xl border border-slate-300 bg-white/98 p-4 ring-1 ring-slate-200/60"
       >
-        <h2 className="text-sm font-semibold text-slate-200">
+        <h2 className="text-sm font-semibold text-slate-800">
           Add daily log
         </h2>
         <div>
           <label
             htmlFor="log-time"
-            className="text-sm font-medium text-slate-300"
+            className="text-sm font-medium text-slate-700"
           >
             Time
           </label>
           <input
             id="log-time"
             type="datetime-local"
-            className="mt-1 w-full rounded-xl border border-slate-600 bg-slate-950 px-3 py-3 text-slate-50"
+            className="mt-1 w-full rounded-xl border border-slate-300 bg-gray-50 px-3 py-3 text-slate-900"
             value={recordedAtLocal}
             onChange={(e) => setRecordedAtLocal(e.target.value)}
           />
@@ -150,13 +162,13 @@ export default function DailySummaryPage() {
         <div>
           <label
             htmlFor="log-category"
-            className="text-sm font-medium text-slate-300"
+            className="text-sm font-medium text-slate-700"
           >
             Category
           </label>
           <select
             id="log-category"
-            className="mt-1 w-full rounded-xl border border-slate-600 bg-slate-950 px-3 py-3 text-slate-50"
+            className="mt-1 w-full rounded-xl border border-slate-300 bg-gray-50 px-3 py-3 text-slate-900"
             value={category}
             onChange={(e) =>
               setCategory(e.target.value as DailyLogCategory)
@@ -172,13 +184,13 @@ export default function DailySummaryPage() {
         <div>
           <label
             htmlFor="log-label"
-            className="text-sm font-medium text-slate-300"
+            className="text-sm font-medium text-slate-700"
           >
             Label
           </label>
           <input
             id="log-label"
-            className="mt-1 w-full rounded-xl border border-slate-600 bg-slate-950 px-3 py-3 text-slate-50 placeholder:text-slate-600"
+            className="mt-1 w-full rounded-xl border border-slate-300 bg-gray-50 px-3 py-3 text-slate-900 placeholder:text-slate-600"
             placeholder="e.g., oatmeal with berries, walked 10 min"
             value={label}
             onChange={(e) => setLabel(e.target.value)}
@@ -187,13 +199,13 @@ export default function DailySummaryPage() {
         <div>
           <label
             htmlFor="log-notes"
-            className="text-sm font-medium text-slate-300"
+            className="text-sm font-medium text-slate-700"
           >
             Notes (optional)
           </label>
           <input
             id="log-notes"
-            className="mt-1 w-full rounded-xl border border-slate-600 bg-slate-950 px-3 py-3 text-slate-50"
+            className="mt-1 w-full rounded-xl border border-slate-300 bg-gray-50 px-3 py-3 text-slate-900"
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
           />
@@ -220,7 +232,7 @@ export default function DailySummaryPage() {
             nearby times to see MCAS proximity highlighting.
           </p>
         ) : (
-          <ol className="relative mt-4 border-l border-slate-700 pl-6">
+          <ol className="relative mt-4 border-l border-slate-300 pl-6">
             {timeline.map((row) => {
               const id = row.entry.id;
               const mcas = highlightIds.has(id);
@@ -236,7 +248,7 @@ export default function DailySummaryPage() {
                     className={`rounded-2xl border px-4 py-3 ${
                       mcas
                         ? "border-amber-500/70 bg-amber-950/30 ring-1 ring-amber-500/25"
-                        : "border-slate-800 bg-slate-900/60"
+                        : "border-slate-200 bg-slate-50"
                     }`}
                   >
                     <div className="flex flex-wrap items-center gap-2 text-xs">
@@ -263,14 +275,14 @@ export default function DailySummaryPage() {
                         </span>
                       )}
                       {row.source === "symptom_journal" && (
-                        <span className="rounded-full bg-slate-800/90 px-2 py-0.5 font-medium text-slate-300 ring-1 ring-slate-600/50">
+                        <span className="rounded-full bg-slate-800/90 px-2 py-0.5 font-medium text-slate-700 ring-1 ring-slate-600/50">
                           {labelJournalSetting(row.entry.setting)}
                         </span>
                       )}
                     </div>
                     {row.source === "daily_log" ? (
                       <>
-                        <p className="mt-2 font-medium text-slate-100">
+                        <p className="mt-2 font-medium text-slate-900">
                           {row.entry.label}
                         </p>
                         {row.entry.notes && (
@@ -280,7 +292,7 @@ export default function DailySummaryPage() {
                         )}
                       </>
                     ) : (
-                      <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-slate-200">
+                      <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-slate-800">
                         {row.entry.text}
                       </p>
                     )}

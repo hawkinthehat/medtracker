@@ -53,7 +53,7 @@ export default function ContextualSideEffect({
         <button
           type="button"
           onClick={onDismiss}
-          className="rounded-full border border-slate-600 px-4 py-2 text-sm font-medium text-slate-300 hover:bg-slate-800"
+          className="rounded-full border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-800"
         >
           Not now
         </button>

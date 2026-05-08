@@ -165,17 +165,17 @@ export default function MedicationManager({
   const body = (
     <>
       {!embedded && (
-        <div className="flex items-center justify-between gap-2 border-b border-slate-700/90 bg-slate-950/40 px-4 py-2.5">
+        <div className="flex items-center justify-between gap-2 border-b border-slate-300 bg-slate-50/95 px-4 py-2.5">
           <div className="flex items-center gap-2">
             <Pill className="h-4 w-4 text-violet-400" aria-hidden />
-            <h2 className="text-sm font-bold uppercase tracking-[0.15em] text-slate-200">
+            <h2 className="text-sm font-bold uppercase tracking-[0.15em] text-slate-800">
               Medications
             </h2>
           </div>
           <button
             type="button"
             onClick={() => setDrawerOpen(true)}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-600 bg-slate-950/80 px-3 py-1.5 text-xs font-semibold text-slate-200 hover:border-slate-500 hover:bg-slate-900"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-slate-100/90 px-3 py-1.5 text-xs font-semibold text-slate-800 hover:border-slate-500 hover:bg-white"
           >
             <ChevronUp className="h-4 w-4 text-slate-400" aria-hidden />
             All ({medications.length})
@@ -188,7 +188,7 @@ export default function MedicationManager({
           <button
             type="button"
             onClick={() => setDrawerOpen(true)}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-600 bg-slate-950/80 px-3 py-1.5 text-xs font-semibold text-slate-200 hover:border-slate-500 hover:bg-slate-900"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-slate-100/90 px-3 py-1.5 text-xs font-semibold text-slate-800 hover:border-slate-500 hover:bg-white"
           >
             <ChevronUp className="h-4 w-4 text-slate-400" aria-hidden />
             All ({medications.length})
@@ -205,10 +205,10 @@ export default function MedicationManager({
             Smart Add
           </p>
           <div
-            className={`rounded-[1.25rem] border bg-slate-950/90 px-4 py-3 shadow-[inset_0_2px_8px_rgba(0,0,0,0.35)] transition-[box-shadow,border-color] ${
+            className={`rounded-[1.25rem] border bg-white/90 px-4 py-3 shadow-[inset_0_2px_8px_rgba(0,0,0,0.35)] transition-[box-shadow,border-color] ${
               hasConflict
                 ? "border-red-500/90 shadow-[0_0_0_1px_rgba(239,68,68,0.5),0_0_28px_rgba(239,68,68,0.35)]"
-                : "border-slate-600 focus-within:border-sky-500/50 focus-within:shadow-[inset_0_2px_8px_rgba(0,0,0,0.35),0_0_0_1px_rgba(56,189,248,0.25)]"
+                : "border-slate-300 focus-within:border-sky-500/50 focus-within:shadow-[inset_0_2px_8px_rgba(0,0,0,0.35),0_0_0_1px_rgba(56,189,248,0.25)]"
             }`}
           >
             <input
@@ -218,7 +218,7 @@ export default function MedicationManager({
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Type a medication name…"
               autoComplete="off"
-              className="w-full border-0 bg-transparent text-base text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-0"
+              className="w-full border-0 bg-transparent text-base text-slate-900 placeholder:text-slate-500 focus:outline-none focus:ring-0"
             />
           </div>
 
@@ -237,7 +237,7 @@ export default function MedicationManager({
             </p>
           )}
 
-          <div className="rounded-xl border border-slate-700/90 bg-slate-950/50 px-3 py-3">
+          <div className="rounded-xl border border-slate-300 bg-slate-100/80 px-3 py-3">
             <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500">
               Interaction preview
             </p>
@@ -248,7 +248,7 @@ export default function MedicationManager({
               </p>
             ) : (
               <>
-                <p className="mt-2 text-sm leading-relaxed text-slate-300">
+                <p className="mt-2 text-sm leading-relaxed text-slate-700">
                   {preview?.isSafe
                     ? preview.message
                     : preview?.message ?? "—"}
@@ -289,7 +289,7 @@ export default function MedicationManager({
             </button>
             <Link
               href="/meds"
-              className="rounded-full border border-slate-600 px-4 py-2.5 text-sm font-medium text-slate-300 hover:bg-slate-800"
+              className="rounded-full border border-slate-300 px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-800"
             >
               Advanced editor
             </Link>
@@ -304,7 +304,7 @@ export default function MedicationManager({
       {embedded ? (
         <div className="min-h-0">{body}</div>
       ) : (
-        <section className="overflow-hidden rounded-xl border border-slate-600 bg-slate-900/85 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] ring-1 ring-black/20">
+        <section className="overflow-hidden rounded-xl border border-slate-300 bg-white shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] ring-1 ring-slate-300/40">
           {body}
         </section>
       )}
@@ -323,20 +323,20 @@ export default function MedicationManager({
             role="dialog"
             aria-modal="true"
             aria-labelledby="med-drawer-title"
-            className="relative z-[71] max-h-[min(78vh,560px)] w-full overflow-hidden rounded-t-2xl border border-slate-600 border-b-0 bg-slate-900 shadow-2xl ring-1 ring-white/10 motion-safe:animate-slide-up-drawer"
+            className="relative z-[71] max-h-[min(78vh,560px)] w-full overflow-hidden rounded-t-2xl border border-slate-300 border-b-0 bg-white shadow-2xl ring-1 ring-white/10 motion-safe:animate-slide-up-drawer"
           >
             <div className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-slate-600" />
-            <div className="flex items-center justify-between gap-3 border-b border-slate-700 px-5 py-4">
+            <div className="flex items-center justify-between gap-3 border-b border-slate-300 px-5 py-4">
               <h2
                 id="med-drawer-title"
-                className="text-lg font-semibold text-slate-50"
+                className="text-lg font-semibold text-slate-900"
               >
                 Your medications
               </h2>
               <button
                 type="button"
                 onClick={() => setDrawerOpen(false)}
-                className="rounded-lg px-3 py-1.5 text-sm font-medium text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+                className="rounded-lg px-3 py-1.5 text-sm font-medium text-slate-400 hover:bg-slate-800 hover:text-slate-800"
               >
                 Done
               </button>
@@ -350,7 +350,7 @@ export default function MedicationManager({
               {medications.map((m) => (
                 <li
                   key={m.id}
-                  className="border-b border-slate-800/90 py-3 last:border-0"
+                  className="border-b border-slate-200 py-3 last:border-0"
                 >
                   <button
                     type="button"
@@ -358,7 +358,7 @@ export default function MedicationManager({
                     className="flex w-full items-start justify-between gap-3 rounded-lg px-1 py-1.5 text-left transition hover:bg-slate-800/60"
                   >
                     <div className="min-w-0 flex-1">
-                      <span className="font-medium text-slate-100">{m.name}</span>
+                      <span className="font-medium text-slate-900">{m.name}</span>
                       {m.pathway_role && (
                         <p className="mt-0.5 text-xs text-slate-500">
                           {m.pathway_role}
@@ -368,7 +368,7 @@ export default function MedicationManager({
                         Tap for dose &amp; timing
                       </p>
                     </div>
-                    <span className="shrink-0 rounded-md bg-slate-950/80 px-2 py-1 text-xs text-slate-400 ring-1 ring-slate-700">
+                    <span className="shrink-0 rounded-md bg-slate-100/90 px-2 py-1 text-xs text-slate-400 ring-1 ring-slate-700">
                       {m.pathway}
                     </span>
                   </button>
@@ -386,7 +386,7 @@ export default function MedicationManager({
                     <button
                       type="button"
                       onClick={() => openDoseModal(m, "history")}
-                      className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center gap-2 rounded-xl border border-slate-600 bg-slate-950/80 px-3 py-2.5 text-sm font-medium text-slate-300 transition hover:border-slate-500 hover:bg-slate-800 hover:text-slate-100 active:scale-[0.98]"
+                      className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center gap-2 rounded-xl border border-slate-300 bg-slate-100/90 px-3 py-2.5 text-sm font-medium text-slate-700 transition hover:border-slate-500 hover:bg-slate-800 hover:text-slate-900 active:scale-[0.98]"
                       aria-label={`Dosage history for ${m.name}`}
                       title="History"
                     >

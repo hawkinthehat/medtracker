@@ -77,7 +77,7 @@ function highlightFlags(
     out.push(
       <li
         key="no-inh"
-        className="rounded-lg border border-slate-600 bg-slate-950/50 px-3 py-2 text-sm text-slate-300"
+        className="rounded-lg border border-slate-300 bg-slate-100/80 px-3 py-2 text-sm text-slate-700"
       >
         No CYP inhibitor matched on your med list or today&apos;s schedule for
         this check. Add inhibitors under Meds to refine bottleneck screening.
@@ -129,12 +129,12 @@ export default function SideEffectAuditor() {
 
   return (
     <div className="space-y-6">
-      <section className="rounded-2xl border border-slate-700 bg-slate-900/80 p-4 ring-1 ring-white/5">
+      <section className="rounded-2xl border border-slate-300 bg-white/98 p-4 ring-1 ring-slate-200/60">
         <label htmlFor="side-effect-search" className="sr-only">
           Search or describe a symptom
         </label>
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <h2 className="text-lg font-semibold text-slate-50">
+          <h2 className="text-lg font-semibold text-slate-900">
             Symptom input
           </h2>
           <p className="text-xs text-slate-500">
@@ -147,7 +147,7 @@ export default function SideEffectAuditor() {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search or type a symptom (e.g. dizziness, nausea)…"
-          className="mt-4 w-full rounded-xl border border-slate-600 bg-slate-950/80 px-4 py-3 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500/50 focus:outline-none focus:ring-2 focus:ring-sky-500/30"
+          className="mt-4 w-full rounded-xl border border-slate-300 bg-slate-100/90 px-4 py-3 text-sm text-slate-900 placeholder:text-slate-500 focus:border-sky-500/50 focus:outline-none focus:ring-2 focus:ring-sky-500/30"
           autoComplete="off"
         />
 
@@ -170,7 +170,7 @@ export default function SideEffectAuditor() {
                   className={`rounded-full border px-3 py-1.5 text-sm font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-400 ${
                     activeSymptom === tag
                       ? "border-sky-500/60 bg-sky-950/50 text-sky-100"
-                      : "border-slate-600 bg-slate-950/60 text-slate-300 hover:border-slate-500 hover:text-slate-100"
+                      : "border-slate-300 bg-slate-100/70 text-slate-700 hover:border-slate-500 hover:text-slate-900"
                   }`}
                 >
                   {tag}
@@ -183,14 +183,14 @@ export default function SideEffectAuditor() {
 
       {activeSymptom ? (
         <>
-          <section className="rounded-2xl border border-slate-700 bg-slate-900/80 p-4 ring-1 ring-white/5">
+          <section className="rounded-2xl border border-slate-300 bg-white/98 p-4 ring-1 ring-slate-200/60">
             <div className="flex items-start gap-3">
               <Sparkles
                 className="mt-0.5 h-5 w-5 shrink-0 text-sky-400"
                 aria-hidden
               />
               <div>
-                <h2 className="text-lg font-semibold text-slate-50">
+                <h2 className="text-lg font-semibold text-slate-900">
                   Probability card
                 </h2>
                 <p className="mt-1 text-sm text-slate-400">
@@ -200,34 +200,34 @@ export default function SideEffectAuditor() {
               </div>
             </div>
             {probability ? (
-              <p className="mt-4 rounded-xl border border-sky-500/25 bg-sky-950/30 px-4 py-3 text-sm leading-relaxed text-slate-100">
+              <p className="mt-4 rounded-xl border border-sky-500/25 bg-sky-950/30 px-4 py-3 text-sm leading-relaxed text-slate-900">
                 Based on your current meds, this symptom is most likely linked to{" "}
                 <span className="font-semibold text-sky-200">
                   {probability.drugName}
                 </span>{" "}
                 due to{" "}
-                <span className="text-slate-200">
+                <span className="text-slate-800">
                   {probability.pathwayLine}
                 </span>
                 .
               </p>
             ) : (
-              <p className="mt-4 rounded-xl border border-slate-700 bg-slate-950/50 px-4 py-3 text-sm text-slate-400">
+              <p className="mt-4 rounded-xl border border-slate-300 bg-slate-100/80 px-4 py-3 text-sm text-slate-400">
                 No automated single-drug link for &quot;{activeSymptom}&quot;
                 with your current list. Review flags below or add meds under{" "}
-                <span className="text-slate-300">Meds</span>.
+                <span className="text-slate-700">Meds</span>.
               </p>
             )}
           </section>
 
-          <section className="rounded-2xl border border-slate-700 bg-slate-900/80 p-4 ring-1 ring-white/5">
+          <section className="rounded-2xl border border-slate-300 bg-white/98 p-4 ring-1 ring-slate-200/60">
             <div className="flex items-start gap-3">
               <AlertTriangle
                 className="mt-0.5 h-5 w-5 shrink-0 text-amber-400"
                 aria-hidden
               />
               <div>
-                <h2 className="text-lg font-semibold text-slate-50">
+                <h2 className="text-lg font-semibold text-slate-900">
                   Cross-reference
                 </h2>
                 <p className="mt-1 text-sm text-slate-400">

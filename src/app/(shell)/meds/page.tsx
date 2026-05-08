@@ -114,7 +114,7 @@ export default function MedsPage() {
   return (
     <div className="space-y-8">
       <header>
-        <h1 className="text-2xl font-semibold tracking-tight text-slate-50">
+        <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
           Medications
         </h1>
         <p className="mt-2 text-sm leading-relaxed text-slate-400">
@@ -129,18 +129,18 @@ export default function MedsPage() {
 
       <form
         onSubmit={handleAdd}
-        className="space-y-4 rounded-2xl border border-slate-700 bg-slate-900/80 p-4 ring-1 ring-white/5"
+        className="space-y-4 rounded-2xl border border-slate-300 bg-white/98 p-4 ring-1 ring-slate-200/60"
       >
         <div>
           <label
             htmlFor="med-name"
-            className="text-sm font-medium text-slate-200"
+            className="text-sm font-medium text-slate-800"
           >
             Medication name
           </label>
           <input
             id="med-name"
-            className="mt-1 w-full rounded-xl border border-slate-600 bg-slate-950 px-3 py-3 text-base text-slate-50 placeholder:text-slate-600 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
+            className="mt-1 w-full rounded-xl border border-slate-300 bg-gray-50 px-3 py-3 text-base text-slate-900 placeholder:text-slate-600 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
             placeholder="e.g., medication name"
             value={name}
             onChange={(e) => setName(e.target.value)}
@@ -151,13 +151,13 @@ export default function MedsPage() {
         <div>
           <label
             htmlFor="pathway"
-            className="text-sm font-medium text-slate-200"
+            className="text-sm font-medium text-slate-800"
           >
             Primary pathway
           </label>
           <select
             id="pathway"
-            className="mt-1 w-full rounded-xl border border-slate-600 bg-slate-950 px-3 py-3 text-base text-slate-50 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
+            className="mt-1 w-full rounded-xl border border-slate-300 bg-gray-50 px-3 py-3 text-base text-slate-900 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
             value={pathway}
             onChange={(e) => setPathway(e.target.value)}
           >
@@ -173,41 +173,41 @@ export default function MedsPage() {
           </p>
         </div>
 
-        <fieldset className="flex flex-col gap-3 rounded-xl border border-slate-700/80 bg-slate-950/50 p-3">
-          <legend className="px-1 text-sm font-medium text-slate-300">
+        <fieldset className="flex flex-col gap-3 rounded-xl border border-slate-300 bg-slate-100/80 p-3">
+          <legend className="px-1 text-sm font-medium text-slate-700">
             Enzyme relationship
           </legend>
-          <label className="flex cursor-pointer items-center gap-3 text-sm text-slate-200">
+          <label className="flex cursor-pointer items-center gap-3 text-sm text-slate-800">
             <input
               type="checkbox"
-              className="h-5 w-5 rounded border-slate-600 bg-slate-900 text-sky-600 focus:ring-sky-500"
+              className="h-5 w-5 rounded border-slate-300 bg-white text-sky-600 focus:ring-sky-500"
               checked={isInhibitor}
               onChange={(e) => setIsInhibitor(e.target.checked)}
             />
             This medication inhibits this pathway
           </label>
-          <label className="flex cursor-pointer items-center gap-3 text-sm text-slate-200">
+          <label className="flex cursor-pointer items-center gap-3 text-sm text-slate-800">
             <input
               type="checkbox"
-              className="h-5 w-5 rounded border-slate-600 bg-slate-900 text-sky-600 focus:ring-sky-500"
+              className="h-5 w-5 rounded border-slate-300 bg-white text-sky-600 focus:ring-sky-500"
               checked={isSubstrate}
               onChange={(e) => setIsSubstrate(e.target.checked)}
             />
             This medication relies on this pathway (substrate)
           </label>
-          <label className="flex cursor-pointer items-center gap-3 text-sm text-slate-200">
+          <label className="flex cursor-pointer items-center gap-3 text-sm text-slate-800">
             <input
               type="checkbox"
-              className="h-5 w-5 rounded border-slate-600 bg-slate-900 text-sky-600 focus:ring-sky-500"
+              className="h-5 w-5 rounded border-slate-300 bg-white text-sky-600 focus:ring-sky-500"
               checked={orthostaticSideEffect}
               onChange={(e) => setOrthostaticSideEffect(e.target.checked)}
             />
             Lists orthostatic hypotension as a side effect
           </label>
-          <label className="flex cursor-pointer items-center gap-3 text-sm text-slate-200">
+          <label className="flex cursor-pointer items-center gap-3 text-sm text-slate-800">
             <input
               type="checkbox"
-              className="h-5 w-5 rounded border-slate-600 bg-slate-900 text-sky-600 focus:ring-sky-500"
+              className="h-5 w-5 rounded border-slate-300 bg-white text-sky-600 focus:ring-sky-500"
               checked={dizzinessSideEffect}
               onChange={(e) => setDizzinessSideEffect(e.target.checked)}
             />
@@ -230,7 +230,7 @@ export default function MedsPage() {
             className={`rounded-xl border px-3 py-3 text-sm leading-relaxed ${
               alert.severity === "RED_ALERT"
                 ? "border-red-500/60 bg-red-950/50 text-red-200"
-                : "border-slate-600 bg-slate-950/80 text-slate-300"
+                : "border-slate-300 bg-slate-100/90 text-slate-700"
             }`}
           >
             {alert.message}

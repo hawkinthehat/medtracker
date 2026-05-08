@@ -101,13 +101,13 @@ export default function TransferPage() {
     <div className="space-y-8">
       <header className="space-y-4">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-slate-50">
+          <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
             Transfer & specialists
           </h1>
           <p className="mt-2 text-sm leading-relaxed text-slate-400">
             Notes for{" "}
-            <span className="text-slate-200">KU Medical Center</span> and{" "}
-            <span className="text-slate-200">WashU</span>, plus a PDF packet for
+            <span className="text-slate-800">KU Medical Center</span> and{" "}
+            <span className="text-slate-800">WashU</span>, plus a PDF packet for
             appointments.
           </p>
         </div>
@@ -129,18 +129,18 @@ export default function TransferPage() {
 
       <form
         onSubmit={submit}
-        className="space-y-4 rounded-2xl border border-slate-700 bg-slate-900/80 p-4 ring-1 ring-white/5"
+        className="space-y-4 rounded-2xl border border-slate-300 bg-white/98 p-4 ring-1 ring-slate-200/60"
       >
         <div>
           <label
             htmlFor="facility"
-            className="text-sm font-medium text-slate-200"
+            className="text-sm font-medium text-slate-800"
           >
             Site
           </label>
           <select
             id="facility"
-            className="mt-1 w-full rounded-xl border border-slate-600 bg-slate-950 px-3 py-3 text-base text-slate-50"
+            className="mt-1 w-full rounded-xl border border-slate-300 bg-gray-50 px-3 py-3 text-base text-slate-900"
             value={facility}
             onChange={(e) =>
               setFacility(e.target.value as SpecialistFacility)
@@ -153,26 +153,26 @@ export default function TransferPage() {
         <div>
           <label
             htmlFor="specialist"
-            className="text-sm font-medium text-slate-200"
+            className="text-sm font-medium text-slate-800"
           >
             Specialist / clinic (optional)
           </label>
           <input
             id="specialist"
-            className="mt-1 w-full rounded-xl border border-slate-600 bg-slate-950 px-3 py-3 text-slate-50"
+            className="mt-1 w-full rounded-xl border border-slate-300 bg-gray-50 px-3 py-3 text-slate-900"
             value={specialist}
             onChange={(e) => setSpecialist(e.target.value)}
             placeholder="Name or department"
           />
         </div>
         <div>
-          <label htmlFor="note-body" className="text-sm font-medium text-slate-200">
+          <label htmlFor="note-body" className="text-sm font-medium text-slate-800">
             Notes for next visit
           </label>
           <textarea
             id="note-body"
             rows={4}
-            className="mt-1 w-full rounded-xl border border-slate-600 bg-slate-950 px-3 py-3 text-slate-50"
+            className="mt-1 w-full rounded-xl border border-slate-300 bg-gray-50 px-3 py-3 text-slate-900"
             value={body}
             onChange={(e) => setBody(e.target.value)}
             placeholder="Questions, medication changes, imaging follow-ups…"
@@ -212,7 +212,7 @@ function SiteSection({
         {items.map((n) => (
           <li
             key={n.id}
-            className="rounded-2xl border border-slate-800 bg-slate-900/50 p-4"
+            className="rounded-2xl border border-slate-200 bg-slate-50/95 p-4"
           >
             <div className="flex flex-wrap items-baseline justify-between gap-2">
               <time
@@ -227,7 +227,7 @@ function SiteSection({
                 </span>
               )}
             </div>
-            <p className="mt-2 whitespace-pre-wrap text-sm text-slate-200">
+            <p className="mt-2 whitespace-pre-wrap text-sm text-slate-800">
               {n.notes}
             </p>
           </li>
