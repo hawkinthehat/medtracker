@@ -119,7 +119,7 @@ export default function MedsPage() {
         <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
           Medications
         </h1>
-        <p className="mt-2 text-sm leading-relaxed text-slate-600">
+        <p className="mt-2 text-sm font-medium leading-relaxed text-slate-900">
           Safety audit, scrollable journal list, and pathway screen when adding a
           new drug.
         </p>
@@ -136,7 +136,7 @@ export default function MedsPage() {
         <div>
           <label
             htmlFor="med-name"
-            className="text-sm font-medium text-slate-800"
+            className="text-sm font-semibold text-slate-900"
           >
             Medication name
           </label>
@@ -153,7 +153,7 @@ export default function MedsPage() {
         <div>
           <label
             htmlFor="pathway"
-            className="text-sm font-medium text-slate-800"
+            className="text-sm font-semibold text-slate-900"
           >
             Primary pathway
           </label>
@@ -169,17 +169,17 @@ export default function MedsPage() {
               </option>
             ))}
           </select>
-          <p className="mt-1 text-xs text-slate-500">
+          <p className="mt-1 text-xs font-medium text-slate-900">
             CYP3A4 is listed first — it metabolizes a large share of common
             medications and is a frequent interaction hotspot.
           </p>
         </div>
 
         <fieldset className="flex flex-col gap-3 rounded-xl border border-slate-300 bg-slate-100/80 p-3">
-          <legend className="px-1 text-sm font-medium text-slate-700">
+          <legend className="px-1 text-sm font-semibold text-slate-900">
             Enzyme relationship
           </legend>
-          <label className="flex cursor-pointer items-center gap-3 text-sm text-slate-800">
+          <label className="flex cursor-pointer items-center gap-3 text-sm font-medium text-slate-900">
             <input
               type="checkbox"
               className="h-5 w-5 rounded border-slate-300 bg-white text-sky-600 focus:ring-sky-500"
@@ -188,7 +188,7 @@ export default function MedsPage() {
             />
             This medication inhibits this pathway
           </label>
-          <label className="flex cursor-pointer items-center gap-3 text-sm text-slate-800">
+          <label className="flex cursor-pointer items-center gap-3 text-sm font-medium text-slate-900">
             <input
               type="checkbox"
               className="h-5 w-5 rounded border-slate-300 bg-white text-sky-600 focus:ring-sky-500"
@@ -197,7 +197,7 @@ export default function MedsPage() {
             />
             This medication relies on this pathway (substrate)
           </label>
-          <label className="flex cursor-pointer items-center gap-3 text-sm text-slate-800">
+          <label className="flex cursor-pointer items-center gap-3 text-sm font-medium text-slate-900">
             <input
               type="checkbox"
               className="h-5 w-5 rounded border-slate-300 bg-white text-sky-600 focus:ring-sky-500"
@@ -206,7 +206,7 @@ export default function MedsPage() {
             />
             Lists orthostatic hypotension as a side effect
           </label>
-          <label className="flex cursor-pointer items-center gap-3 text-sm text-slate-800">
+          <label className="flex cursor-pointer items-center gap-3 text-sm font-medium text-slate-900">
             <input
               type="checkbox"
               className="h-5 w-5 rounded border-slate-300 bg-white text-sky-600 focus:ring-sky-500"
@@ -220,7 +220,7 @@ export default function MedsPage() {
         {cumulativePositionalWarning && (
           <div
             role="status"
-            className="rounded-xl border-4 border-amber-600 bg-amber-50 px-4 py-3 text-base font-semibold leading-relaxed text-amber-950"
+            className="rounded-xl border-4 border-amber-600 bg-amber-50 px-4 py-3 text-base font-semibold leading-relaxed text-slate-900"
           >
             {cumulativePositionalWarning}
           </div>
@@ -229,10 +229,10 @@ export default function MedsPage() {
         {alert && (
           <div
             role="status"
-            className={`rounded-xl border-4 px-4 py-3 text-base leading-relaxed ${
+            className={`rounded-xl border-4 px-4 py-3 text-base font-semibold leading-relaxed ${
               alert.severity === "RED_ALERT"
-                ? "border-red-700 bg-red-50 text-red-950"
-                : "border-slate-300 bg-slate-50 text-slate-800"
+                ? "border-red-700 bg-red-50 text-slate-900"
+                : "border-slate-300 bg-slate-50 text-slate-900"
             }`}
           >
             {alert.message}

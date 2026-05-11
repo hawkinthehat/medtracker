@@ -1,6 +1,6 @@
 "use client";
 
-/** Light mode only — no `next-themes` ThemeProvider; shell uses fixed light palette. */
+/** Light mode only — no `next-themes` ThemeProvider (not a dependency). Root `layout.tsx` sets `html.light` + CSS variables for a forced light shell. */
 
 import { QueryClient } from "@tanstack/react-query";
 import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";

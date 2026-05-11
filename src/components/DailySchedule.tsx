@@ -70,9 +70,9 @@ export default function DailySchedule() {
           <h2 className="text-lg font-semibold text-slate-900">
             Daily schedule (24h)
           </h2>
-          <p className="mt-1 max-w-prose text-sm text-slate-600">
+          <p className="mt-1 max-w-prose text-sm font-medium text-slate-900">
             Pulled from Supabase when{" "}
-            <code className="rounded border border-slate-300 bg-slate-100 px-1 py-0.5 text-xs text-slate-800">
+            <code className="rounded border border-slate-300 bg-slate-100 px-1 py-0.5 text-xs font-semibold text-slate-900">
               NEXT_PUBLIC_SUPABASE_URL
             </code>{" "}
             is set; otherwise demo times from your med list. Yellow bands: two
@@ -82,7 +82,7 @@ export default function DailySchedule() {
           </p>
         </div>
         {isFetching && (
-          <span className="text-xs font-medium text-slate-500">Updating…</span>
+          <span className="text-xs font-semibold text-slate-900">Updating…</span>
         )}
       </div>
 
@@ -175,7 +175,7 @@ export default function DailySchedule() {
           </div>
         </div>
 
-        <div className="mt-1 flex justify-between text-[10px] text-slate-500 sm:text-xs">
+        <div className="mt-1 flex justify-between text-[10px] font-semibold text-slate-900 sm:text-xs">
           <span>12 AM</span>
           <span>6 AM</span>
           <span>12 PM</span>
@@ -184,14 +184,14 @@ export default function DailySchedule() {
         </div>
       </div>
 
-      <ul className="mt-4 space-y-2 text-xs text-slate-600">
+      <ul className="mt-4 space-y-2 text-xs font-medium text-slate-900">
         <li>
-          <span className="font-semibold text-amber-800">Yellow band: </span>
+          <span className="font-bold text-slate-900">Yellow band: </span>
           two or more of Duloxetine, Trazodone, Lorazepam scheduled within 2
           hours (distinct meds).
         </li>
         <li>
-          <span className="font-semibold text-red-700">Red glow: </span>
+          <span className="font-bold text-slate-900">Red glow: </span>
           Gleevec or Latuda during overlapping modeled CYP3A4 inhibition periods
           (when an azole-class inhibitor or similar appears on your schedule).
         </li>

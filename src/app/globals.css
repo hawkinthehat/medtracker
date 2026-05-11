@@ -3,12 +3,14 @@
 @tailwind utilities;
 
 :root {
-  --background: #f9fafb;
+  --background: #ffffff;
   --foreground: #0f172a;
   --card: #ffffff;
   --card-border: #e2e8f0;
   --muted: #475569;
 }
+
+/* Intentionally no `@media (prefers-color-scheme: dark)` overrides — Tiaki is light-only. */
 
 html {
   color-scheme: light;

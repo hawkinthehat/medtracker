@@ -29,7 +29,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#f9fafb",
+  themeColor: "#ffffff",
   width: "device-width",
   initialScale: 1,
 };
@@ -40,8 +40,10 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="h-full">
-      <body className={`${inter.variable} min-h-dvh font-sans antialiased`}>
+    <html lang="en" className="light h-full">
+      <body
+        className={`${inter.variable} min-h-dvh bg-background font-sans text-foreground antialiased`}
+      >
         <AppProviders>{children}</AppProviders>
       </body>
     </html>
