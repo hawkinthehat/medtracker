@@ -289,7 +289,15 @@ export default function VaultPlannerSections() {
         >
           <div className="min-h-0 overflow-hidden">
             <div className="px-4 pb-4 pt-1">
-              <MedicationManager embedded onOpenDoseModal={openDoseModal} />
+              <MedicationManager
+                embedded
+                onOpenDoseModal={openDoseModal}
+                onOpenAdvancedMedication={(m) => {
+                  setQuickAdjustMed(null);
+                  setDoseModalTab("adjust");
+                  setDoseModalMed(m);
+                }}
+              />
             </div>
           </div>
         </div>

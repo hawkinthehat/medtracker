@@ -1,13 +1,13 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Pill, ChevronUp, History, Settings2, Stethoscope } from "lucide-react";
+import { Pill, ChevronUp, Stethoscope } from "lucide-react";
 import { useMemo, useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import {
-  getCyp3a4BottleneckHint,
-  previewMedicationInteraction,
-} from "@/lib/metabolic";
+  SAFETY_OVERLAP_NOTE,
+  shouldWarnMetabolicOverlap,
+} from "@/lib/metabolic-check";
 import {
   buildMedicationLookupCatalog,
   resolveMedicationDraftFromCatalog,
@@ -21,18 +21,24 @@ import { qk } from "@/lib/query-keys";
 import { fetchMedicationsQuery } from "@/lib/medications-query";
 import { setMedicationsAndPersist } from "@/lib/medications-persist";
 import type { SavedMedication } from "@/lib/seed-medications";
-import type { SafetyGateBlockEvent } from "@/lib/types";
 import type { DoseModalTab } from "./DoseAdjustmentModal";
+import MedicationEditRemoveModal from "@/components/meds/MedicationEditRemoveModal";
+import { timesForFrequency } from "@/lib/medication-dose-frequency-save";
+import { upsertPublicMedicationRemote } from "@/lib/supabase/medications-timeline";
+import { upsertUserMedicationRemote } from "@/lib/supabase/user-medications";
 
 export type MedicationManagerProps = {
   /** When true, omit outer card chrome (used inside dashboard accordion). */
   embedded?: boolean;
   onOpenDoseModal: (med: SavedMedication, tab: DoseModalTab) => void;
+  /** Opens the full dose / taper / history modal (home & vault wire this to DoseAdjustmentModal). */
+  onOpenAdvancedMedication?: (med: SavedMedication) => void;
 };
 
 export default function MedicationManager({
   embedded = false,
   onOpenDoseModal,
+  onOpenAdvancedMedication,
 }: MedicationManagerProps) {
   const qc = useQueryClient();
   const [query, setQuery] = useState("");
@@ -42,6 +48,8 @@ export default function MedicationManager({
   const [doctorInfoMed, setDoctorInfoMed] = useState<SavedMedication | null>(
     null,
   );
+  const [medicationMenuMed, setMedicationMenuMed] =
+    useState<SavedMedication | null>(null);
   const drawerRef = useRef<HTMLDivElement>(null);
 
   const { data: medications = [] } = useQuery({
@@ -67,29 +75,21 @@ export default function MedicationManager({
     [query, lookupCatalog]
   );
 
-  const preview = useMemo(
+  const metabolicOverlapWarn = useMemo(
     () =>
       draftMed.name.trim()
-        ? previewMedicationInteraction(draftMed, activeMedications)
-        : null,
-    [draftMed, activeMedications],
-  );
-
-  const hasConflict =
-    preview != null && !preview.isSafe && preview.severity === "RED_ALERT";
-
-  const cyp3a4LiveHint = useMemo(
-    () =>
-      draftMed.name.trim()
-        ? getCyp3a4BottleneckHint(draftMed, activeMedications)
-        : null,
+        ? shouldWarnMetabolicOverlap(draftMed, activeMedications)
+        : false,
     [draftMed, activeMedications],
   );
 
   const addMutation = useMutation({
     mutationFn: async (med: SavedMedication) => med,
-    onSuccess: (m) => {
+    onSuccess: async (m) => {
       setMedicationsAndPersist(qc, (prev = []) => [...prev, m]);
+      await upsertUserMedicationRemote(m);
+      const times = timesForFrequency(m.frequencyHint ?? "2x", undefined);
+      void upsertPublicMedicationRemote(m, times);
       setQuery("");
       setIsTemporary(false);
       setTempDaysStr("7");
@@ -117,33 +117,6 @@ export default function MedicationManager({
     const nDays = Math.max(1, Number.parseInt(tempDaysStr, 10));
     if (isTemporary && (!tempDaysStr.trim() || !Number.isFinite(nDays))) return;
 
-    const check = previewMedicationInteraction(draftMed, activeMedications);
-    if (!check.isSafe) {
-      if (draftMed.is_inhibitor) {
-        const conflict = activeMedications.find(
-          (m) =>
-            m.pathway === draftMed.pathway &&
-            draftMed.is_inhibitor &&
-            m.is_substrate,
-        );
-        if (conflict) {
-          qc.setQueryData<SafetyGateBlockEvent[]>(
-            qk.safetyGateBlocks,
-            (prev = []) => [
-              {
-                id: crypto.randomUUID(),
-                recordedAt: new Date().toISOString(),
-                pathway: draftMed.pathway,
-                draftInhibitorName: draftMed.name.trim(),
-                blockedSubstrateName: conflict.name,
-              },
-              ...prev,
-            ],
-          );
-        }
-      }
-      return;
-    }
     const startKey = calendarDayKeyLocal();
     addMutation.mutate({
       ...draftMed,
@@ -158,12 +131,6 @@ export default function MedicationManager({
         : {}),
     });
   }
-
-  const recognized =
-    query.trim() &&
-    lookupCatalog.some(
-      (m) => m.name.toLowerCase() === draftMed.name.toLowerCase()
-    );
 
   function openDoseModal(m: SavedMedication, tab: DoseModalTab) {
     onOpenDoseModal(m, tab);
@@ -214,8 +181,8 @@ export default function MedicationManager({
           </p>
           <div
             className={`rounded-2xl border-4 bg-white px-4 py-3 transition-[border-color,box-shadow] ${
-              hasConflict
-                ? "border-red-600 shadow-[0_0_0_1px_rgba(220,38,38,0.4)]"
+              metabolicOverlapWarn
+                ? "border-amber-600 shadow-[0_0_0_1px_rgba(217,119,6,0.35)]"
                 : "border-black"
             }`}
           >
@@ -230,29 +197,15 @@ export default function MedicationManager({
             />
           </div>
 
-          {hasConflict && query.trim() !== "" && (
+          {metabolicOverlapWarn && query.trim() !== "" && (
             <div
-              className="rounded-2xl border-4 border-black bg-white px-4 py-5 shadow-sm"
-              role="alert"
-            >
-              <p className="text-2xl font-black leading-snug text-slate-900">
-                ⚠️ Potential Reaction: Consult your doctor before adding.
-              </p>
-              {preview?.message && (
-                <p className="mt-3 text-base font-semibold leading-snug text-slate-800">
-                  {preview.message}
-                </p>
-              )}
-            </div>
-          )}
-
-          {cyp3a4LiveHint && (
-            <p
-              className="text-base font-semibold leading-snug text-amber-900"
+              className="rounded-2xl border-4 border-amber-600 bg-amber-50 px-4 py-5 shadow-sm"
               role="status"
             >
-              {cyp3a4LiveHint}
-            </p>
+              <p className="text-2xl font-black leading-snug text-slate-900">
+                {SAFETY_OVERLAP_NOTE}
+              </p>
+            </div>
           )}
 
           <div className="rounded-2xl border-4 border-violet-200 bg-violet-50/90 px-4 py-4">
@@ -295,34 +248,18 @@ export default function MedicationManager({
 
           <div className="rounded-2xl border-4 border-slate-200 bg-slate-50 px-3 py-3">
             <p className="text-xs font-bold uppercase tracking-[0.2em] text-slate-600">
-              Interaction preview
+              Smart check
             </p>
             {query.trim() === "" ? (
               <p className="mt-2 text-base text-slate-600">
-                Type a drug name to preview pathway interactions against your
-                current list.
+                Type a name to compare against what you already take.
               </p>
             ) : (
-              <>
-                <p className="mt-2 text-base leading-relaxed text-slate-800">
-                  {preview?.isSafe
-                    ? preview.message
-                    : (preview?.message ?? "—")}
-                </p>
-                {!recognized && query.trim() && (
-                  <p className="mt-2 text-sm text-amber-900">
-                    No saved profile for this spelling — preview uses “Other /
-                    Unknown”. Refine on the{" "}
-                    <Link
-                      href="/meds"
-                      className="font-bold text-sky-700 underline-offset-2 hover:underline"
-                    >
-                      Meds
-                    </Link>{" "}
-                    page for pathway flags.
-                  </p>
-                )}
-              </>
+              <p className="mt-2 text-base leading-relaxed text-slate-800">
+                {metabolicOverlapWarn
+                  ? SAFETY_OVERLAP_NOTE
+                  : "No extra routine caution flagged for this name. You can still add it."}
+              </p>
             )}
           </div>
 
@@ -332,7 +269,6 @@ export default function MedicationManager({
               disabled={
                 !draftMed.name.trim() ||
                 addMutation.isPending ||
-                hasConflict ||
                 (isTemporary &&
                   (!tempDaysStr.trim() ||
                     !Number.isFinite(Math.max(1, Number.parseInt(tempDaysStr, 10)))))
@@ -403,56 +339,43 @@ export default function MedicationManager({
               )}
               {activeMedications.map((m) => (
                 <li key={m.id}>
-                  <div className="rounded-2xl border-4 border-black bg-white p-4 shadow-sm">
-                    <div className="flex items-start gap-3">
+                  <div className="overflow-hidden rounded-2xl border-4 border-black bg-white shadow-sm">
+                    <button
+                      type="button"
+                      className="w-full px-4 py-4 text-left transition hover:bg-sky-50 active:bg-sky-100"
+                      onClick={() => setMedicationMenuMed(m)}
+                    >
+                      <span className="block text-xl font-black text-slate-900">
+                        {m.name}
+                      </span>
+                      {m.doseLabel ? (
+                        <span className="mt-1 block text-lg font-bold text-slate-800">
+                          {m.doseLabel}
+                        </span>
+                      ) : null}
+                      <span className="mt-4 flex min-h-[52px] w-full items-center justify-center rounded-2xl border-4 border-black bg-sky-600 px-4 text-base font-black uppercase tracking-wide text-white shadow-md">
+                        Medication settings
+                      </span>
+                    </button>
+                    <div className="flex gap-2 border-t-2 border-slate-200 bg-slate-50 px-3 py-3">
                       <button
                         type="button"
-                        onClick={() => openDoseModal(m, "adjust")}
-                        className="min-h-[60px] flex-1 text-left leading-tight text-slate-900"
+                        className="inline-flex min-h-[48px] flex-1 items-center justify-center rounded-xl border-4 border-slate-400 bg-white px-2 text-xs font-black uppercase text-slate-900"
+                        aria-label={`Dose history for ${m.name}`}
+                        onClick={() => openDoseModal(m, "history")}
                       >
-                        <span className="block text-xl font-black">{m.name}</span>
-                        {m.doseLabel ? (
-                          <span className="mt-1 block text-lg font-bold text-slate-800">
-                            {m.doseLabel}
-                          </span>
-                        ) : null}
+                        History
                       </button>
                       <button
                         type="button"
-                        className="flex h-[56px] w-[56px] shrink-0 items-center justify-center rounded-xl border-4 border-black bg-white"
+                        className="flex min-h-[48px] min-w-[48px] items-center justify-center rounded-xl border-4 border-black bg-white"
                         aria-label={`Doctor info for ${m.name}`}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setDoctorInfoMed(m);
-                        }}
+                        onClick={() => setDoctorInfoMed(m)}
                       >
                         <Stethoscope
-                          className="h-8 w-8 text-slate-900"
+                          className="h-7 w-7 text-slate-900"
                           aria-hidden
                         />
-                      </button>
-                    </div>
-                    <p className="mt-2 text-sm font-semibold text-slate-600">
-                      Tap name or Adjust for quick dose &amp; frequency
-                    </p>
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        onClick={() => openDoseModal(m, "adjust")}
-                        className="inline-flex min-h-[52px] min-w-[44px] flex-1 items-center justify-center gap-2 rounded-xl border-4 border-black bg-sky-50 px-4 text-base font-bold text-slate-900"
-                        aria-label={`Adjust dose and schedule for ${m.name}`}
-                      >
-                        <Settings2 className="h-6 w-6 shrink-0" aria-hidden />
-                        Adjust
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => openDoseModal(m, "history")}
-                        className="inline-flex min-h-[52px] min-w-[44px] items-center justify-center gap-2 rounded-xl border-4 border-slate-300 bg-white px-4 text-base font-bold text-slate-900"
-                        aria-label={`Dosage history for ${m.name}`}
-                      >
-                        <History className="h-6 w-6 shrink-0" aria-hidden />
-                        History
                       </button>
                     </div>
                   </div>
@@ -462,6 +385,20 @@ export default function MedicationManager({
           </div>
         </div>
       )}
+
+      <MedicationEditRemoveModal
+        med={medicationMenuMed}
+        open={!!medicationMenuMed}
+        onClose={() => setMedicationMenuMed(null)}
+        onOpenAdvanced={(m) => {
+          setMedicationMenuMed(null);
+          if (onOpenAdvancedMedication) {
+            onOpenAdvancedMedication(m);
+          } else {
+            onOpenDoseModal(m, "adjust");
+          }
+        }}
+      />
 
       {doctorInfoMed && (
         <div className="fixed inset-0 z-[72] flex items-end justify-center bg-black/50 p-4 sm:items-center">
@@ -483,13 +420,9 @@ export default function MedicationManager({
               </p>
             ) : null}
             <p className="mt-2 text-base font-semibold text-slate-600">
-              For your care team — pathways &amp; metabolism flags
+              For your care team — saved automatically for doctor reports
             </p>
             <dl className="mt-5 space-y-4 text-lg font-semibold text-slate-900">
-              <div>
-                <dt className="text-base font-bold text-slate-600">Pathway</dt>
-                <dd className="mt-1">{doctorInfoMed.pathway}</dd>
-              </div>
               {doctorInfoMed.pathway_role && (
                 <div>
                   <dt className="text-base font-bold text-slate-600">
@@ -499,16 +432,17 @@ export default function MedicationManager({
                 </div>
               )}
               <div>
-                <dt className="text-base font-bold text-slate-600">Role</dt>
+                <dt className="text-base font-bold text-slate-600">
+                  Interaction profile (reports)
+                </dt>
                 <dd className="mt-1 font-medium">
-                  {doctorInfoMed.is_inhibitor && "Pathway inhibitor"}
                   {doctorInfoMed.is_inhibitor && doctorInfoMed.is_substrate
-                    ? " · "
-                    : ""}
-                  {doctorInfoMed.is_substrate && "Pathway substrate"}
-                  {!doctorInfoMed.is_inhibitor && !doctorInfoMed.is_substrate
-                    ? "Other / mixed clearance"
-                    : ""}
+                    ? "May affect and depend on shared clearance routes."
+                    : doctorInfoMed.is_inhibitor
+                      ? "May affect clearance of other medications."
+                      : doctorInfoMed.is_substrate
+                        ? "Cleared in part by shared liver routes."
+                        : "Other / mixed clearance"}
                 </dd>
               </div>
               {(doctorInfoMed.has_orthostatic_hypotension ||

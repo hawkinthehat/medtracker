@@ -121,6 +121,19 @@ export default function MinimalHomeDashboard() {
     <div className="space-y-10 pb-10">
       <TiakiHomeWeatherSection />
 
+      <div className="rounded-2xl border-4 border-black bg-gradient-to-r from-sky-600 via-sky-700 to-indigo-800 px-5 py-6 shadow-xl">
+        <p className="text-[11px] font-black uppercase tracking-[0.4em] text-white/90">
+          Tiaki
+        </p>
+        <p className="mt-2 text-3xl font-black tracking-tight text-white sm:text-4xl">
+          Your daily care companion
+        </p>
+        <p className="mt-2 max-w-xl text-base font-semibold leading-snug text-white/95">
+          Built for Jade — medications, routines, and quick logs in one calm,
+          high-contrast screen.
+        </p>
+      </div>
+
       <TiakiFirstTimeMedicationSetup />
 
       <header className="space-y-1 border-b-2 border-slate-900 pb-6">
@@ -190,7 +203,15 @@ export default function MinimalHomeDashboard() {
         </summary>
         <div className="space-y-6 border-t-4 border-slate-200 px-3 pb-6 pt-5 sm:px-4">
           <DueMedicationsChecklist />
-          <MedicationManager embedded onOpenDoseModal={openDoseModal} />
+          <MedicationManager
+            embedded
+            onOpenDoseModal={openDoseModal}
+            onOpenAdvancedMedication={(m) => {
+              setQuickAdjustMed(null);
+              setDoseModalTab("adjust");
+              setDoseModalMed(m);
+            }}
+          />
           <Link
             href="/meds"
             className="flex min-h-[56px] w-full items-center justify-center rounded-2xl border-4 border-black bg-white py-3 text-lg font-bold uppercase tracking-wide text-slate-900 shadow-sm transition hover:bg-slate-50"

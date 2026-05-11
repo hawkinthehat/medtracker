@@ -4,7 +4,6 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Clock, Minus, Plus, SlidersHorizontal, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import {
-  checkMetabolicConflict,
   warnInhibitorDoseEscalation,
   type Medication,
 } from "@/lib/metabolic";
@@ -32,6 +31,7 @@ import {
   upsertMedicationProfileRemote,
   upsertTaperPlanRemote,
 } from "@/lib/supabase/medication-history";
+import { upsertUserMedicationRemote } from "@/lib/supabase/user-medications";
 import { calendarDaysSinceStart } from "@/lib/taper-plan";
 
 const REASON_PRESETS = [
@@ -153,23 +153,9 @@ export default function DoseAdjustmentModal({
       ? toMg(profileForMed.doseValue, profileForMed.doseUnit)
       : undefined;
 
-  const metabolicPreview = useMemo(() => {
-    if (!med) return null;
-    const m: Medication = {
-      name: med.name,
-      pathway: med.pathway,
-      is_inhibitor: med.is_inhibitor,
-      is_substrate: med.is_substrate,
-      has_orthostatic_hypotension: med.has_orthostatic_hypotension,
-      has_dizziness_side_effect: med.has_dizziness_side_effect,
-      pathway_role: med.pathway_role,
-    };
-    return checkMetabolicConflict(m, medications);
-  }, [med, medications]);
-
   const nextMg = useMemo(
     () => toMg(doseValue, doseUnit),
-    [doseValue, doseUnit]
+    [doseValue, doseUnit],
   );
 
   const escalationWarning = useMemo(() => {
@@ -188,7 +174,7 @@ export default function DoseAdjustmentModal({
       med
         ? history.filter((h) => h.medicationId === med.id)
         : [],
-    [history, med]
+    [history, med],
   );
 
   const saveAdjust = useMutation({
@@ -256,6 +242,10 @@ export default function DoseAdjustmentModal({
       );
       qc.invalidateQueries({ queryKey: qk.medicationTimeline });
       qc.invalidateQueries({ queryKey: qk.medicationProfiles });
+      const latest = qc
+        .getQueryData<SavedMedication[]>(qk.medications)
+        ?.find((x) => x.id === med.id);
+      if (latest) void upsertUserMedicationRemote(latest);
       onClose();
     },
   });
@@ -305,6 +295,10 @@ export default function DoseAdjustmentModal({
       }));
       qc.invalidateQueries({ queryKey: qk.medicationTimeline });
       qc.invalidateQueries({ queryKey: qk.medicationProfiles });
+      const latest = qc
+        .getQueryData<SavedMedication[]>(qk.medications)
+        ?.find((x) => x.id === med.id);
+      if (latest) void upsertUserMedicationRemote(latest);
       onClose();
     },
   });
@@ -499,31 +493,14 @@ export default function DoseAdjustmentModal({
                 </p>
               </div>
 
-              <div>
-                <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500">
-                  Safety re-check (checkMetabolicConflict)
-                </p>
-                <div className="mt-2 space-y-2 rounded-xl border border-slate-300 bg-slate-100/70 px-3 py-3 text-sm">
-                  <p
-                    className={
-                      metabolicPreview?.isSafe
-                        ? "text-slate-700"
-                        : "text-red-300"
-                    }
-                  >
-                    {metabolicPreview?.message ?? "—"}
-                  </p>
-                  <p className="text-xs text-slate-500">
-                    Saving writes dose &amp; time to Supabase and refreshes your
-                    planner timeline.
-                  </p>
-                  {escalationWarning && (
-                    <p className="font-semibold text-amber-200" role="alert">
-                      {escalationWarning}
-                    </p>
-                  )}
+              {escalationWarning && (
+                <div
+                  className="rounded-xl border-2 border-amber-600 bg-amber-50 px-3 py-3 text-sm font-semibold text-slate-900"
+                  role="alert"
+                >
+                  {escalationWarning}
                 </div>
-              </div>
+              )}
 
               <div>
                 <label className="text-sm font-medium text-slate-800">

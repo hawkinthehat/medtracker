@@ -2,20 +2,35 @@
 
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { SafetyGateBlockEvent } from "@/lib/types";
-import type { Medication } from "@/lib/metabolic";
+import { checkOHCumulativeRisk } from "@/lib/metabolic";
 import {
-  PRIMARY_PATHWAYS,
-  previewMedicationInteraction,
-  checkOHCumulativeRisk,
-} from "@/lib/metabolic";
+  SAFETY_OVERLAP_NOTE,
+  resolveAuditedMedication,
+  shouldWarnMetabolicOverlap,
+} from "@/lib/metabolic-check";
+import { buildDoseFrequencyDisplayLine } from "@/lib/medication-dose-frequency-save";
+import { defaultDoseMgForMedicationName } from "@/lib/medication-dose-defaults";
 import { qk } from "@/lib/query-keys";
 import { fetchMedicationsQuery } from "@/lib/medications-query";
 import { setMedicationsAndPersist } from "@/lib/medications-persist";
 import { getActiveMedications } from "@/lib/medication-active";
-import type { SavedMedication } from "@/lib/seed-medications";
+import type { FrequencyHint, SavedMedication } from "@/lib/seed-medications";
 import MedicationsSafetyPanel from "@/components/meds/MedicationsSafetyPanel";
+import MedicationEditRemoveModal from "@/components/meds/MedicationEditRemoveModal";
+import DoseAdjustmentModal from "@/components/planner/DoseAdjustmentModal";
 import DailySchedule from "@/components/DailySchedule";
+import { upsertUserMedicationRemote } from "@/lib/supabase/user-medications";
+import {
+  timesForFrequency,
+} from "@/lib/medication-dose-frequency-save";
+import { upsertPublicMedicationRemote } from "@/lib/supabase/medications-timeline";
+
+const FREQUENCY_LABELS: Record<FrequencyHint, string> = {
+  "1x": "1× daily",
+  "2x": "2× daily",
+  "3x": "3× daily",
+  prn: "PRN",
+};
 
 export default function MedsPage() {
   const qc = useQueryClient();
@@ -28,25 +43,14 @@ export default function MedsPage() {
   });
 
   const [name, setName] = useState("");
-  const [pathway, setPathway] = useState<string>(PRIMARY_PATHWAYS[0]);
-  const [isInhibitor, setIsInhibitor] = useState(false);
-  const [isSubstrate, setIsSubstrate] = useState(false);
-  const [orthostaticSideEffect, setOrthostaticSideEffect] = useState(false);
-  const [dizzinessSideEffect, setDizzinessSideEffect] = useState(false);
-  const [alert, setAlert] = useState<ReturnType<
-    typeof previewMedicationInteraction
-  > | null>(null);
+  const [doseMg, setDoseMg] = useState(20);
+  const [frequencyHint, setFrequencyHint] = useState<FrequencyHint>("2x");
+  const [medMenu, setMedMenu] = useState<SavedMedication | null>(null);
+  const [fullDoseMed, setFullDoseMed] = useState<SavedMedication | null>(null);
 
-  const draftMed = useMemo<Medication>(
-    () => ({
-      name: name.trim(),
-      pathway,
-      is_inhibitor: isInhibitor,
-      is_substrate: isSubstrate,
-      has_orthostatic_hypotension: orthostaticSideEffect || undefined,
-      has_dizziness_side_effect: dizzinessSideEffect || undefined,
-    }),
-    [name, pathway, isInhibitor, isSubstrate, orthostaticSideEffect, dizzinessSideEffect]
+  const auditedDraft = useMemo(
+    () => resolveAuditedMedication(name),
+    [name],
   );
 
   const activeMedications = useMemo(
@@ -55,61 +59,50 @@ export default function MedsPage() {
   );
 
   const medsForAdditive = useMemo(() => {
-    const trimmed = draftMed.name.trim();
+    const trimmed = auditedDraft.name.trim();
     if (!trimmed) return activeMedications;
-    return [...activeMedications, { ...draftMed, id: "__draft__" }];
-  }, [activeMedications, draftMed]);
+    return [...activeMedications, { ...auditedDraft, id: "__draft__" }];
+  }, [activeMedications, auditedDraft]);
 
   const cumulativePositionalWarning = useMemo(
     () => checkOHCumulativeRisk(medsForAdditive),
-    [medsForAdditive]
+    [medsForAdditive],
+  );
+
+  const metabolicOverlapWarn = useMemo(
+    () =>
+      auditedDraft.name.trim()
+        ? shouldWarnMetabolicOverlap(auditedDraft, activeMedications)
+        : false,
+    [auditedDraft, activeMedications],
   );
 
   const addMutation = useMutation({
     mutationFn: async (med: SavedMedication) => med,
-    onSuccess: (med) => {
+    onSuccess: async (med) => {
       setMedicationsAndPersist(qc, (prev = []) => [...prev, med]);
+      await upsertUserMedicationRemote(med);
+      const times = timesForFrequency(med.frequencyHint ?? "2x", undefined);
+      void upsertPublicMedicationRemote(med, times);
       setName("");
-      setIsInhibitor(false);
-      setIsSubstrate(false);
-      setOrthostaticSideEffect(false);
-      setDizzinessSideEffect(false);
-      setAlert(null);
+      setDoseMg(20);
+      setFrequencyHint("2x");
     },
   });
 
   function handleAdd(e: React.FormEvent) {
     e.preventDefault();
-    if (!draftMed.name) return;
-    const check = previewMedicationInteraction(draftMed, activeMedications);
-    setAlert(check);
-    if (!check.isSafe) {
-      const conflict = activeMedications.find(
-        (med) =>
-          med.pathway === draftMed.pathway &&
-          draftMed.is_inhibitor &&
-          med.is_substrate
-      );
-      if (conflict) {
-        qc.setQueryData<SafetyGateBlockEvent[]>(
-          qk.safetyGateBlocks,
-          (prev = []) => [
-            {
-              id: crypto.randomUUID(),
-              recordedAt: new Date().toISOString(),
-              pathway: draftMed.pathway,
-              draftInhibitorName: draftMed.name.trim(),
-              blockedSubstrateName: conflict.name,
-            },
-            ...prev,
-          ]
-        );
-      }
-      return;
-    }
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    const audited = resolveAuditedMedication(trimmed);
+    const mg = Math.max(1, Math.round(doseMg));
+    const doseLabel = buildDoseFrequencyDisplayLine(mg, "mg", frequencyHint);
     addMutation.mutate({
-      ...draftMed,
+      ...audited,
+      name: trimmed,
       id: crypto.randomUUID(),
+      doseLabel,
+      frequencyHint,
     });
   }
 
@@ -120,14 +113,34 @@ export default function MedsPage() {
           Medications
         </h1>
         <p className="mt-2 text-sm font-medium leading-relaxed text-slate-900">
-          Safety audit, scrollable journal list, and pathway screen when adding a
-          new drug.
+          Add what you take — amount and how often. Your care team still sees the
+          full clinical picture in reports.
         </p>
       </header>
 
       <DailySchedule />
 
-      <MedicationsSafetyPanel medications={activeMedications} />
+      <MedicationsSafetyPanel
+        medications={activeMedications}
+        onEditRemove={setMedMenu}
+      />
+
+      <MedicationEditRemoveModal
+        med={medMenu}
+        open={!!medMenu}
+        onClose={() => setMedMenu(null)}
+        onOpenAdvanced={(m) => {
+          setMedMenu(null);
+          setFullDoseMed(m);
+        }}
+      />
+
+      <DoseAdjustmentModal
+        med={fullDoseMed}
+        open={!!fullDoseMed}
+        initialTab="adjust"
+        onClose={() => setFullDoseMed(null)}
+      />
 
       <form
         onSubmit={handleAdd}
@@ -152,70 +165,61 @@ export default function MedsPage() {
 
         <div>
           <label
-            htmlFor="pathway"
+            htmlFor="med-dose-mg"
             className="text-sm font-semibold text-slate-900"
           >
-            Primary pathway
+            Dose (mg)
           </label>
-          <select
-            id="pathway"
-            className="mt-1 w-full rounded-xl border border-slate-300 bg-gray-50 px-3 py-3 text-base text-slate-900 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
-            value={pathway}
-            onChange={(e) => setPathway(e.target.value)}
-          >
-            {PRIMARY_PATHWAYS.map((p) => (
-              <option key={p} value={p}>
-                {p}
-              </option>
-            ))}
-          </select>
-          <p className="mt-1 text-xs font-medium text-slate-900">
-            CYP3A4 is listed first — it metabolizes a large share of common
-            medications and is a frequent interaction hotspot.
-          </p>
+          <input
+            id="med-dose-mg"
+            inputMode="numeric"
+            type="number"
+            min={1}
+            max={4000}
+            className="mt-1 w-full rounded-xl border border-slate-300 bg-gray-50 px-3 py-4 text-2xl font-bold tabular-nums text-slate-900 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
+            value={doseMg}
+            onChange={(e) =>
+              setDoseMg(Math.max(1, Number.parseInt(e.target.value, 10) || 1))
+            }
+          />
+          {name.trim() ? (
+            <p className="mt-1 text-xs font-medium text-slate-600">
+              Suggested starting amount for this name:{" "}
+              {defaultDoseMgForMedicationName(name)} mg (you can change it).
+            </p>
+          ) : null}
         </div>
 
-        <fieldset className="flex flex-col gap-3 rounded-xl border border-slate-300 bg-slate-100/80 p-3">
-          <legend className="px-1 text-sm font-semibold text-slate-900">
-            Enzyme relationship
+        <fieldset className="space-y-2">
+          <legend className="text-sm font-semibold text-slate-900">
+            How often per day
           </legend>
-          <label className="flex cursor-pointer items-center gap-3 text-sm font-medium text-slate-900">
-            <input
-              type="checkbox"
-              className="h-5 w-5 rounded border-slate-300 bg-white text-sky-600 focus:ring-sky-500"
-              checked={isInhibitor}
-              onChange={(e) => setIsInhibitor(e.target.checked)}
-            />
-            This medication inhibits this pathway
-          </label>
-          <label className="flex cursor-pointer items-center gap-3 text-sm font-medium text-slate-900">
-            <input
-              type="checkbox"
-              className="h-5 w-5 rounded border-slate-300 bg-white text-sky-600 focus:ring-sky-500"
-              checked={isSubstrate}
-              onChange={(e) => setIsSubstrate(e.target.checked)}
-            />
-            This medication relies on this pathway (substrate)
-          </label>
-          <label className="flex cursor-pointer items-center gap-3 text-sm font-medium text-slate-900">
-            <input
-              type="checkbox"
-              className="h-5 w-5 rounded border-slate-300 bg-white text-sky-600 focus:ring-sky-500"
-              checked={orthostaticSideEffect}
-              onChange={(e) => setOrthostaticSideEffect(e.target.checked)}
-            />
-            Lists orthostatic hypotension as a side effect
-          </label>
-          <label className="flex cursor-pointer items-center gap-3 text-sm font-medium text-slate-900">
-            <input
-              type="checkbox"
-              className="h-5 w-5 rounded border-slate-300 bg-white text-sky-600 focus:ring-sky-500"
-              checked={dizzinessSideEffect}
-              onChange={(e) => setDizzinessSideEffect(e.target.checked)}
-            />
-            Lists dizziness as a side effect
-          </label>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            {(Object.keys(FREQUENCY_LABELS) as FrequencyHint[]).map((fh) => (
+              <button
+                key={fh}
+                type="button"
+                className={`min-h-[52px] rounded-xl border-2 px-2 text-center text-sm font-bold ${
+                  frequencyHint === fh
+                    ? "border-sky-600 bg-sky-600 text-white"
+                    : "border-slate-300 bg-gray-50 text-slate-900"
+                }`}
+                onClick={() => setFrequencyHint(fh)}
+              >
+                {FREQUENCY_LABELS[fh]}
+              </button>
+            ))}
+          </div>
         </fieldset>
+
+        {metabolicOverlapWarn && (
+          <div
+            role="status"
+            className="rounded-xl border-4 border-amber-600 bg-amber-50 px-4 py-5 text-xl font-bold leading-snug text-slate-900"
+          >
+            {SAFETY_OVERLAP_NOTE}
+          </div>
+        )}
 
         {cumulativePositionalWarning && (
           <div
@@ -226,23 +230,10 @@ export default function MedsPage() {
           </div>
         )}
 
-        {alert && (
-          <div
-            role="status"
-            className={`rounded-xl border-4 px-4 py-3 text-base font-semibold leading-relaxed ${
-              alert.severity === "RED_ALERT"
-                ? "border-red-700 bg-red-50 text-slate-900"
-                : "border-slate-300 bg-slate-50 text-slate-900"
-            }`}
-          >
-            {alert.message}
-          </div>
-        )}
-
         <button
           type="submit"
           className="min-h-[56px] w-full rounded-xl border-4 border-black bg-sky-600 py-3 text-lg font-bold text-white hover:bg-sky-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-400 disabled:opacity-50"
-          disabled={!draftMed.name || addMutation.isPending}
+          disabled={!name.trim() || addMutation.isPending}
         >
           Add medication
         </button>

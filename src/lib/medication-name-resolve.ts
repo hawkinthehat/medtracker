@@ -1,4 +1,5 @@
 import type { Medication } from "@/lib/metabolic";
+import { resolveAuditedMedication } from "@/lib/metabolic-check";
 import type { SavedMedication } from "@/lib/seed-medications";
 
 /** Saved meds only — used for Smart Add name matching (no bundled seed list). */
@@ -46,12 +47,7 @@ export function resolveMedicationDraftFromCatalog(
     m.name.toLowerCase().startsWith(lower)
   );
   if (candidates.length === 0) {
-    return {
-      name: q,
-      pathway: "Other / Unknown",
-      is_inhibitor: false,
-      is_substrate: false,
-    };
+    return resolveAuditedMedication(q);
   }
   const exact = candidates.find((m) => m.name.toLowerCase() === lower);
   const picked =

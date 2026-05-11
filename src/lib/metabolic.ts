@@ -204,5 +204,5 @@ export function warnInhibitorDoseEscalation(
   );
   if (!hasRiskSubstrate) return null;
 
-  return "Higher dose detected—this will further slow the clearance of Gleevec/Latuda.";
+  return "This dose is higher than before. Other medications in your routine may be affected — check with your doctor.";
 }

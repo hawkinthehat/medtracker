@@ -330,7 +330,9 @@ export default function MovementTracker() {
         </div>
         <p className="text-base font-medium text-slate-700">
           Tap once when done — stays highlighted for the day. Weather details
-          are saved with each session for humidity / pressure trends.
+          are saved with each session. When signed in, walks and PT are written
+          to your <span className="font-semibold text-slate-900">daily_logs</span>{" "}
+          feed in Supabase (same pipeline as food and other activity).
         </p>
       </div>
 

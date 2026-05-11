@@ -169,7 +169,10 @@ export default function QuickRelief() {
           </h2>
           <p className="mt-1 text-sm font-medium text-slate-600">
             One tap logs the dose from your med list when it matches. Still
-            tappable if your doctor said to override spacing.
+            tappable if your doctor said to override spacing. When you are
+            signed in, each tap is stored in your{" "}
+            <span className="font-semibold text-slate-800">medication_logs</span>{" "}
+            table for your doctor report.
           </p>
         </div>
       </div>
