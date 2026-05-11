@@ -2,13 +2,23 @@
 
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactElement } from "react";
 import { qk } from "@/lib/query-keys";
 import { fetchMedicationsQuery } from "@/lib/medications-query";
 import { getActiveMedications } from "@/lib/medication-active";
 import { isBaselinesComplete } from "@/lib/baselines-storage";
 
 const LS_LOC_ACK = "tiaki-barometer-checklist-ack-v1";
+
+/** Card shell + scroll body + pinned actions (aligned with WelcomeWizard). */
+const SLIDE_SHELL =
+  "flex h-[min(75vh,calc(100dvh-10rem))] max-h-[75vh] w-[min(92vw,380px)] shrink-0 snap-start flex-col overflow-hidden rounded-xl border-2 border-emerald-900 bg-emerald-50 shadow-md";
+
+const SLIDE_SCROLL =
+  "max-h-[75vh] min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pt-3";
+
+const STEP_ACTION_BAR =
+  "sticky bottom-0 z-10 shrink-0 border-t border-slate-200 bg-white p-4 pb-[max(0.75rem,env(safe-area-inset-bottom))]";
 
 function readLocAck(): boolean {
   try {
@@ -26,11 +36,7 @@ function writeLocAck() {
   }
 }
 
-/**
- * Onboarding checklist: water goals, first medication, location for barometer.
- * Hidden once all three are satisfied (location step can be acknowledged).
- */
-export default function NewUserSetupChecklist() {
+function useSetupChecklistState() {
   const { data: medications = [] } = useQuery({
     queryKey: qk.medications,
     queryFn: fetchMedicationsQuery,
@@ -58,6 +64,126 @@ export default function NewUserSetupChecklist() {
 
   const medsDone = activeCount > 0;
   const allDone = baselinesDone && medsDone && locAck;
+
+  return {
+    baselinesDone,
+    medsDone,
+    locAck,
+    setLocAck,
+    allDone,
+  };
+}
+
+/**
+ * Horizontal slides for the home dashboard carousel (one incomplete step per card).
+ */
+export function SetupChecklistCarouselSlides() {
+  const { baselinesDone, medsDone, locAck, setLocAck, allDone } =
+    useSetupChecklistState();
+
+  if (allDone) return null;
+
+  const slides: ReactElement[] = [];
+
+  if (!baselinesDone) {
+    slides.push(
+      <div key="setup-baseline" className={SLIDE_SHELL} role="status">
+        <div className={SLIDE_SCROLL}>
+          <p className="text-[11px] font-black uppercase tracking-widest text-emerald-950">
+            Step 1 of 3
+          </p>
+          <p className="mt-1 text-lg font-black leading-snug text-slate-950">
+            Water &amp; salt goals
+          </p>
+          <p className="mt-2 text-sm font-semibold text-slate-800">
+            Set targets so hydration tracking matches your care plan.
+          </p>
+        </div>
+        <div className={STEP_ACTION_BAR}>
+          <Link
+            href="/profile-setup"
+            className="inline-flex min-h-[48px] w-full items-center justify-center rounded-xl border-2 border-black bg-white px-3 text-sm font-black uppercase tracking-wide text-slate-950 shadow-sm transition hover:bg-slate-50"
+          >
+            Open profile setup
+          </Link>
+        </div>
+      </div>,
+    );
+  }
+
+  if (!medsDone) {
+    slides.push(
+      <div key="setup-meds" className={SLIDE_SHELL} role="status">
+        <div className={SLIDE_SCROLL}>
+          <p className="text-[11px] font-black uppercase tracking-widest text-emerald-950">
+            Step 2 of 3
+          </p>
+          <p className="mt-1 text-lg font-black leading-snug text-slate-950">
+            First medication
+          </p>
+          <p className="mt-2 text-sm font-semibold text-slate-800">
+            Add at least one active medication to unlock reminders and exports.
+          </p>
+        </div>
+        <div className={STEP_ACTION_BAR}>
+          <Link
+            href="/meds"
+            className="inline-flex min-h-[48px] w-full items-center justify-center rounded-xl border-2 border-black bg-white px-3 text-sm font-black uppercase tracking-wide text-slate-950 shadow-sm transition hover:bg-slate-50"
+          >
+            Open medications
+          </Link>
+        </div>
+      </div>,
+    );
+  }
+
+  if (!locAck) {
+    slides.push(
+      <div key="setup-loc" className={SLIDE_SHELL} role="status">
+        <div className={SLIDE_SCROLL}>
+          <p className="text-[11px] font-black uppercase tracking-widest text-emerald-950">
+            Step 3 of 3
+          </p>
+          <p className="mt-1 text-lg font-black leading-snug text-slate-950">
+            Location for barometer
+          </p>
+          <p className="mt-2 text-sm font-semibold text-slate-700">
+            Tiaki uses GPS with OpenWeather for your current area — not a fixed
+            city.
+          </p>
+        </div>
+        <div className={`${STEP_ACTION_BAR} flex flex-col gap-2`}>
+          <a
+            href="#tiaki-barometer"
+            className="inline-flex min-h-[48px] w-full items-center justify-center rounded-xl border-2 border-black bg-sky-600 px-3 text-xs font-black uppercase tracking-wide text-white shadow-sm transition hover:bg-sky-500"
+          >
+            Jump to barometer
+          </a>
+          <button
+            type="button"
+            onClick={() => {
+              writeLocAck();
+              setLocAck(true);
+            }}
+            className="inline-flex min-h-[48px] w-full items-center justify-center rounded-xl border-2 border-black bg-white px-3 text-xs font-black uppercase tracking-wide text-slate-950 shadow-sm transition hover:bg-slate-50"
+          >
+            I enabled location
+          </button>
+        </div>
+      </div>,
+    );
+  }
+
+  return <>{slides}</>;
+}
+
+/**
+ * Onboarding checklist: water goals, first medication, location for barometer.
+ * Hidden once all three are satisfied (location step can be acknowledged).
+ */
+export default function NewUserSetupChecklist() {
+  const { baselinesDone, medsDone, locAck, setLocAck, allDone } =
+    useSetupChecklistState();
 
   if (allDone) return null;
 

@@ -110,6 +110,7 @@ type Props = {
 };
 
 export function GuidedOrthostaticCard({ onSaveSession }: Props) {
+  const [testStarted, setTestStarted] = useState(false);
   const [lying, setLying] = useState({ sys: "", dia: "", hr: "" });
   const [stand1m, setStand1m] = useState({ sys: "", dia: "", hr: "" });
   const [stand10m, setStand10m] = useState({ sys: "", dia: "", hr: "" });
@@ -223,18 +224,47 @@ export function GuidedOrthostaticCard({ onSaveSession }: Props) {
     };
     onSaveSession(session);
     reset();
+    setTestStarted(false);
   }
 
   const canSave = lieRead && s1Read && s10Read;
 
+  if (!testStarted) {
+    return (
+      <section
+        id="guided-active-stand"
+        className="rounded-2xl border-2 border-amber-500/50 bg-black p-4 shadow-xl ring-2 ring-amber-500/20 sm:p-5"
+        aria-labelledby="active-stand-teaser-heading"
+      >
+        <p
+          id="active-stand-teaser-heading"
+          className="text-base font-semibold leading-snug text-white sm:text-lg"
+        >
+          <span className="font-black text-amber-200">Active Stand Test:</span>{" "}
+          Compare lying vs. standing BP.
+        </p>
+        <button
+          type="button"
+          onClick={() => setTestStarted(true)}
+          className="mt-4 min-h-[60px] w-full rounded-xl bg-amber-500 px-4 py-3 text-base font-black uppercase tracking-wide text-black shadow-md transition hover:bg-amber-400 focus-visible:outline focus-visible:ring-4 focus-visible:ring-amber-300"
+        >
+          Start Test
+        </button>
+      </section>
+    );
+  }
+
   return (
-    <section className="rounded-2xl border-2 border-amber-500/50 bg-black p-5 shadow-xl ring-2 ring-amber-500/20">
-      <div className="flex flex-wrap items-start justify-between gap-3">
+    <section
+      id="guided-active-stand"
+      className="rounded-2xl border-2 border-amber-500/50 bg-black p-3 shadow-xl ring-2 ring-amber-500/20 sm:p-5"
+    >
+      <div className="flex flex-wrap items-start justify-between gap-2 sm:gap-3">
         <div className="min-w-0 flex-1">
-          <h2 className="text-2xl font-black tracking-tight text-white sm:text-3xl">
+          <h2 className="text-xl font-black tracking-tight text-white sm:text-3xl">
             Active Stand Test
           </h2>
-          <p className="mt-2 text-sm font-semibold leading-relaxed text-amber-100/95">
+          <p className="mt-2 text-xs font-semibold leading-relaxed text-amber-100/95 sm:text-sm">
             Poor man&apos;s tilt table — supine rest, then standing at 1 and 10
             minutes. Deltas use{" "}
             <span className="font-black text-amber-200">lying → standing (10m)</span>{" "}

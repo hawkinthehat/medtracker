@@ -73,10 +73,14 @@ export function FeatureHelpTrigger({ ariaLabel, title, children }: TriggerProps)
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border-4 border-slate-900 bg-amber-300 text-slate-950 shadow-md transition hover:bg-amber-200 focus-visible:outline focus-visible:ring-4 focus-visible:ring-sky-500"
+        className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border-[3px] border-slate-900 bg-amber-300 text-slate-950 shadow-md transition hover:bg-amber-200 focus-visible:outline focus-visible:ring-4 focus-visible:ring-sky-500 sm:h-12 sm:w-12 sm:rounded-2xl sm:border-4"
         aria-label={ariaLabel}
       >
-        <Info className="h-8 w-8" strokeWidth={2.5} aria-hidden />
+        <Info
+          className="h-6 w-6 sm:h-8 sm:w-8"
+          strokeWidth={2.5}
+          aria-hidden
+        />
       </button>
       <FeatureHelpModal open={open} onClose={() => setOpen(false)} title={title}>
         {children}

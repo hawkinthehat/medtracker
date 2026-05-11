@@ -49,6 +49,8 @@ Tiaki follows a **high contrast / high legibility** framework suited to brain fo
 
 Copy `.env.example` if present, or create `.env.local` with these keys before running `npm install` and `npm run dev`.
 
+For deployments on **Vercel**, add the same variables under **Project → Settings → Environment Variables**, scoped to **Production** and **Preview** as needed (see [Vercel Environment Variables](https://vercel.com/docs/environment-variables)).
+
 ---
 
 ### 5. PRIVACY & LICENSE

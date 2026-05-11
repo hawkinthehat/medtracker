@@ -33,7 +33,7 @@ export default function BottomNav() {
 
   return (
     <nav
-      className="fixed bottom-0 left-0 right-0 z-50 border-t-2 border-slate-300 bg-white/95 backdrop-blur-md pb-[max(env(safe-area-inset-bottom),0.5rem)] pt-2 shadow-[0_-4px_20px_rgba(15,23,42,0.06)]"
+      className="pointer-events-auto fixed bottom-0 left-0 right-0 z-[120] border-t border-slate-300 bg-white/95 backdrop-blur-md pb-[max(env(safe-area-inset-bottom),0.35rem)] pt-1 shadow-[0_-3px_14px_rgba(15,23,42,0.05)]"
       aria-label="Primary"
     >
       <ul className="mx-auto flex max-w-5xl items-stretch justify-around px-1 sm:px-2">
@@ -46,14 +46,14 @@ export default function BottomNav() {
             <li key={href} className="flex-1">
               <Link
                 href={href}
-                className={`flex min-h-[60px] flex-col items-center justify-center gap-1 rounded-xl border-2 border-transparent px-1 py-2 text-[11px] font-semibold leading-tight tracking-wide transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600 sm:px-2 sm:text-xs ${
+                className={`flex min-h-[48px] flex-col items-center justify-center gap-0.5 rounded-lg border-2 border-transparent px-1 py-1 text-[10px] font-semibold leading-tight tracking-wide transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600 sm:min-h-[52px] sm:px-1.5 sm:text-[11px] ${
                   active
                     ? "border-sky-200 bg-sky-50 text-sky-800"
                     : "text-slate-700 hover:border-slate-200 hover:bg-slate-50 hover:text-slate-900"
                 }`}
               >
                 <Icon
-                  className={`h-7 w-7 sm:h-8 sm:w-8 ${active ? "text-sky-600" : "text-slate-600"}`}
+                  className={`h-6 w-6 sm:h-7 sm:w-7 ${active ? "text-sky-600" : "text-slate-600"}`}
                   strokeWidth={active ? 2.25 : 2}
                   aria-hidden
                 />

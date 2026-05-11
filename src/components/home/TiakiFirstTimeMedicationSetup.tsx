@@ -19,6 +19,15 @@ const CLIMATE_OPTIONS = [
   "Other or prefer not to say",
 ] as const;
 
+const CAROUSEL_SHELL =
+  "flex h-[min(75vh,calc(100dvh-10rem))] max-h-[75vh] w-[min(92vw,380px)] shrink-0 snap-start flex-col overflow-hidden rounded-xl border-2 border-sky-800 bg-sky-50 shadow-md";
+
+const CAROUSEL_SCROLL =
+  "max-h-[75vh] min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pt-3";
+
+const FIRST_TIME_ACTION_BAR =
+  "sticky bottom-0 z-10 shrink-0 border-t border-slate-200 bg-white p-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] flex flex-col gap-2";
+
 function readOnboardingDone(): boolean {
   try {
     return window.localStorage.getItem(ONBOARDING_LS) === "1";
@@ -35,7 +44,7 @@ function writeOnboardingDone() {
   }
 }
 
-export default function TiakiFirstTimeMedicationSetup() {
+function useTiakiFirstTimeSetup() {
   const { data: meds = [] } = useQuery({
     queryKey: qk.medications,
     queryFn: fetchMedicationsQuery,
@@ -75,9 +84,98 @@ export default function TiakiFirstTimeMedicationSetup() {
     onSuccess: () => setOnboardingDone(true),
   });
 
-  if (onboardingDone === null) return null;
-  if (onboardingDone) return null;
-  if (meds.length > 0) return null;
+  const visible =
+    onboardingDone !== null && !onboardingDone && meds.length === 0;
+
+  return {
+    visible,
+    climate,
+    setClimate,
+    displayName,
+    setDisplayName,
+    finish,
+  };
+}
+
+/** Compact welcome slide for the home dashboard horizontal carousel. */
+export function TiakiFirstTimeCarouselSlide() {
+  const { visible, climate, setClimate, displayName, setDisplayName, finish } =
+    useTiakiFirstTimeSetup();
+
+  if (!visible) return null;
+
+  return (
+    <section
+      aria-labelledby="first-setup-carousel-heading"
+      className={CAROUSEL_SHELL}
+    >
+      <div className={CAROUSEL_SCROLL}>
+        <p className="text-[11px] font-black uppercase tracking-widest text-sky-950">
+          Welcome
+        </p>
+        <h2
+          id="first-setup-carousel-heading"
+          className="mt-1 text-lg font-black leading-tight text-slate-900"
+        >
+          Set up Tiaki
+        </h2>
+        <p className="mt-2 text-xs font-medium leading-snug text-slate-800">
+          Region helps interpret weather patterns (device-only).
+        </p>
+
+        <label className="mt-2 block text-xs font-bold text-slate-900">
+          Region / climate
+          <select
+            className="mt-1 min-h-[44px] w-full rounded-lg border-2 border-black bg-white px-2 text-sm font-semibold text-slate-900"
+            value={climate}
+            onChange={(e) => setClimate(e.target.value)}
+          >
+            {CLIMATE_OPTIONS.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="mt-2 block text-xs font-bold text-slate-900">
+          What should we call you?{" "}
+          <span className="font-normal text-slate-600">(optional)</span>
+          <input
+            className="mt-1 min-h-[44px] w-full rounded-lg border-2 border-black bg-white px-2 text-sm font-semibold text-slate-900"
+            value={displayName}
+            onChange={(e) => setDisplayName(e.target.value)}
+            placeholder="First name or nickname"
+            autoComplete="nickname"
+          />
+        </label>
+      </div>
+
+      <div className={FIRST_TIME_ACTION_BAR}>
+        <button
+          type="button"
+          disabled={finish.isPending}
+          onClick={() => finish.mutate()}
+          className="min-h-[48px] w-full rounded-xl border-2 border-black bg-sky-600 px-3 text-sm font-black uppercase tracking-wide text-white shadow hover:bg-sky-700 disabled:opacity-50"
+        >
+          Save &amp; continue
+        </button>
+        <Link
+          href="/meds"
+          className="flex min-h-[48px] w-full items-center justify-center rounded-xl border-2 border-black bg-white px-3 text-sm font-black uppercase tracking-wide text-slate-900 shadow hover:bg-slate-50"
+        >
+          Open medications
+        </Link>
+      </div>
+    </section>
+  );
+}
+
+export default function TiakiFirstTimeMedicationSetup() {
+  const { visible, climate, setClimate, displayName, setDisplayName, finish } =
+    useTiakiFirstTimeSetup();
+
+  if (!visible) return null;
 
   return (
     <section

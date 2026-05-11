@@ -13,9 +13,8 @@ import MovementTracker from "@/components/planner/MovementTracker";
 import DueMedicationsChecklist from "@/components/planner/DueMedicationsChecklist";
 import MedicationManager from "@/components/planner/MedicationManager";
 import SymptomCanvas from "@/components/journal/SymptomCanvas";
-import TiakiFirstTimeMedicationSetup from "@/components/home/TiakiFirstTimeMedicationSetup";
-import NewUserSetupChecklist from "@/components/home/NewUserSetupChecklist";
-import TiakiHomeWeatherSection from "@/components/home/TiakiHomeWeatherSection";
+import HomeDashboardTopZone from "@/components/home/HomeDashboardTopZone";
+import HomeDailyActionGrid from "@/components/home/HomeDailyActionGrid";
 import QuickRelief from "@/components/home/QuickRelief";
 import WelcomeWizard from "@/components/WelcomeWizard";
 import DoseAdjustmentModal, {
@@ -60,7 +59,14 @@ function formatLongDate(d = new Date()) {
   });
 }
 
-export default function MinimalHomeDashboard() {
+type MinimalHomeDashboardProps = {
+  /** TEMP: skip barometer advisory card if it interferes with taps */
+  bypassBarometerAdvisory?: boolean;
+};
+
+export default function MinimalHomeDashboard({
+  bypassBarometerAdvisory = false,
+}: MinimalHomeDashboardProps) {
   const qc = useQueryClient();
   const [displayFirstName, setDisplayFirstName] = useState("");
   const [episodeSketchOpen, setEpisodeSketchOpen] = useState(false);
@@ -158,31 +164,29 @@ export default function MinimalHomeDashboard() {
   });
 
   return (
-    <div className="space-y-10 pb-10">
+    <div className="space-y-6 pb-10">
       {welcomeOpen === true && (
         <WelcomeWizard onComplete={() => setWelcomeOpen(false)} />
       )}
 
-      <TiakiHomeWeatherSection />
+      <HomeDashboardTopZone bypassBarometerAdvisory={bypassBarometerAdvisory} />
 
-      <NewUserSetupChecklist />
+      <HomeDailyActionGrid />
 
-      <div className="rounded-2xl border-4 border-black bg-gradient-to-r from-sky-600 via-sky-700 to-indigo-800 px-5 py-6 shadow-xl">
-        <p className="text-[11px] font-black uppercase tracking-[0.4em] text-white/90">
+      <div className="rounded-2xl border-2 border-black bg-gradient-to-r from-sky-600 via-sky-700 to-indigo-800 px-4 py-4 shadow-lg">
+        <p className="text-[10px] font-black uppercase tracking-[0.35em] text-white/90">
           Tiaki
         </p>
-        <p className="mt-2 text-3xl font-black tracking-tight text-white sm:text-4xl">
+        <p className="mt-1 text-xl font-black tracking-tight text-white sm:text-2xl">
           Your daily care companion
         </p>
-        <p className="mt-2 max-w-xl text-base font-semibold leading-snug text-white/95">
+        <p className="mt-1 max-w-xl text-sm font-semibold leading-snug text-white/95">
           Medications, routines, vitals, and quick logs in one calm,
           high-contrast screen.
         </p>
       </div>
 
-      <TiakiFirstTimeMedicationSetup />
-
-      <header className="space-y-1 border-b-2 border-slate-900 pb-6">
+      <header className="space-y-1 border-b-2 border-slate-900 pb-4">
         <h1 className="text-3xl font-bold tracking-tight text-slate-900">
           {displayFirstName
             ? `${greeting()}, ${displayFirstName}`
@@ -203,11 +207,13 @@ export default function MinimalHomeDashboard() {
           Daily pulse
         </h2>
         <PulseStrip />
-        <HydrationTracker
-          compact
-          waterGoalOz={baselines.targetWaterOz}
-          sodiumGoalMg={baselines.targetSodiumMg}
-        />
+        <div id="home-hydration" className="scroll-mt-28">
+          <HydrationTracker
+            compact
+            waterGoalOz={baselines.targetWaterOz}
+            sodiumGoalMg={baselines.targetSodiumMg}
+          />
+        </div>
         <Link
           href="/vault#side-effect-tracker"
           className="flex min-h-[56px] w-full items-center justify-center rounded-2xl border-4 border-violet-800 bg-violet-600 px-5 py-4 text-lg font-black uppercase tracking-wide text-white shadow-md transition hover:bg-violet-700"

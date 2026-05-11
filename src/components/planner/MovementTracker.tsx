@@ -273,8 +273,9 @@ export default function MovementTracker() {
 
   return (
     <section
+      id="home-movement"
       aria-labelledby="movement-tracker-heading"
-      className="rounded-2xl border-4 border-black bg-white p-5 shadow-md"
+      className="scroll-mt-28 rounded-2xl border-4 border-black bg-white p-5 shadow-md"
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
@@ -334,6 +335,7 @@ export default function MovementTracker() {
         </div>
       )}
 
+      <div id="home-movement-walk">
       <button
         type="button"
         disabled={busy}
@@ -345,6 +347,7 @@ export default function MovementTracker() {
           {walkButtonDisplay}
         </span>
       </button>
+      </div>
 
       {walkSuccessMessage && (
         <p
@@ -398,7 +401,7 @@ export default function MovementTracker() {
         </div>
       )}
 
-      <div className="mt-8 space-y-4">
+      <div id="home-pt" className="scroll-mt-28 mt-8 space-y-4">
         <p className="text-xl font-black text-slate-900">PT sessions</p>
         <div className="flex flex-col gap-4 sm:flex-row sm:flex-wrap">
           {PT_SLOTS.map(({ slot, label }) => (
