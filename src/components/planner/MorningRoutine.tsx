@@ -1,8 +1,9 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { Activity, Check, Heart, Scale, UtensilsCrossed } from "lucide-react";
+import { Activity, Heart, Loader2, Scale, UtensilsCrossed } from "lucide-react";
 import { qk } from "@/lib/query-keys";
 import type { DailyLogEntry, VitalRow } from "@/lib/types";
 import { persistDailyLogToSupabase } from "@/lib/supabase/daily-logs";
@@ -12,7 +13,7 @@ import { fetchAndLogWeather } from "@/lib/weather";
 import { dailyLogsQueryFn } from "@/lib/daily-logs-query-fn";
 import {
   findMorningMedsLogToday,
-  MORNING_MEDS_TAKEN_LABEL,
+  MORNING_MEDS_ENTRY_TYPE,
 } from "@/lib/morning-meds-log";
 import { TOAST_MORNING_ROUTINE } from "@/lib/educational-toasts";
 import MorningOrthostaticVitalCheck from "@/components/planner/MorningOrthostaticVitalCheck";
@@ -50,6 +51,7 @@ function isMorningLocal(d = new Date()) {
 }
 
 export default function MorningRoutine() {
+  const router = useRouter();
   const qc = useQueryClient();
   const morning = isMorningLocal();
 
@@ -99,13 +101,23 @@ export default function MorningRoutine() {
 
   const logMorningMedsTaken = useMutation({
     mutationFn: async () => {
+      const sb = getSupabaseBrowserClient();
+      let userId: string | undefined;
+      if (sb) {
+        const {
+          data: { user },
+        } = await sb.auth.getUser();
+        userId = user?.id;
+      }
       const recordedAt = new Date().toISOString();
       const row: DailyLogEntry = {
         id: crypto.randomUUID(),
         recordedAt,
         category: "other",
-        label: MORNING_MEDS_TAKEN_LABEL,
+        label: "Morning meds",
         notes: recordedAt,
+        entryType: MORNING_MEDS_ENTRY_TYPE,
+        userId,
       };
       if (supabaseConfigured) {
         const ok = await persistDailyLogToSupabase(row);
@@ -120,6 +132,8 @@ export default function MorningRoutine() {
         row,
         ...prev,
       ]);
+      void qc.invalidateQueries({ queryKey: qk.dailyLogs });
+      router.refresh();
       setToast("Morning meds logged to daily_logs.");
       window.setTimeout(() => setToast(null), 3200);
     },
@@ -269,11 +283,12 @@ export default function MorningRoutine() {
         throw new Error("Some rows did not sync. Check Supabase.");
       }
 
-      void qc.invalidateQueries({ queryKey: qk.dailyLogs });
-      void qc.invalidateQueries({ queryKey: qk.vitals });
       return true;
     },
     onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: qk.dailyLogs });
+      void qc.invalidateQueries({ queryKey: qk.vitals });
+      router.refresh();
       setIsLoggedToday(true);
       try {
         window.localStorage.setItem(MORNING_DONE_LS, calendarDayStamp());
@@ -315,8 +330,8 @@ export default function MorningRoutine() {
         )}
       </div>
       <p className="mt-2 text-lg font-medium text-slate-700">
-        Log morning meds with one tap; weight, BP, heart rate, and breakfast in
-        one save below.
+        Turn on <span className="font-semibold text-slate-900">Morning Meds Taken</span>{" "}
+        when you have taken them; save weight, BP, heart rate, and breakfast below.
       </p>
 
       {isLoggedToday ? (
@@ -343,61 +358,79 @@ export default function MorningRoutine() {
         <>
           <MorningOrthostaticVitalCheck />
 
-          <div className="mt-6">
-            {morningMedsLogged ? (
-              <div className="flex min-h-[72px] items-center gap-4 rounded-2xl border-4 border-emerald-700 bg-emerald-50 px-5 py-4">
-                <Check
-                  className="h-12 w-12 shrink-0 text-emerald-800"
-                  strokeWidth={2.5}
-                  aria-hidden
-                />
-                <div className="min-w-0">
-                  <p className="text-xl font-black leading-tight text-emerald-950">
-                    ☀️ Morning meds taken
-                  </p>
-                  <p className="mt-1 text-sm font-semibold text-emerald-900">
-                    Logged{" "}
-                    {new Date(morningMedsLogged.recordedAt).toLocaleString()}
-                  </p>
-                </div>
-              </div>
-            ) : (
-              <button
-                type="button"
-                disabled={logMorningMedsTaken.isPending}
-                onClick={() => {
-                  if (!supabaseConfigured) {
-                    const recordedAt = new Date().toISOString();
-                    const row: DailyLogEntry = {
-                      id: crypto.randomUUID(),
-                      recordedAt,
-                      category: "other",
-                      label: MORNING_MEDS_TAKEN_LABEL,
-                      notes: recordedAt,
-                    };
-                    qc.setQueryData<DailyLogEntry[]>(qk.dailyLogs, (prev = []) => [
-                      row,
-                      ...prev,
-                    ]);
-                    setToast("Morning meds saved on this device only.");
-                    window.setTimeout(() => setToast(null), 3200);
-                    return;
-                  }
-                  logMorningMedsTaken.mutate();
-                }}
-                className="flex min-h-[72px] w-full items-center justify-center gap-3 rounded-2xl border-4 border-amber-600 bg-amber-100 px-5 py-4 text-left shadow-md transition hover:bg-amber-200 disabled:opacity-60"
-              >
-                <span
-                  className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl border-4 border-black bg-white text-3xl"
-                  aria-hidden
-                >
+          <div className="mt-6 rounded-2xl border-4 border-slate-900 bg-slate-50 p-4 sm:p-5">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div className="flex min-w-0 flex-1 items-start gap-3">
+                <span className="text-4xl leading-none" aria-hidden>
                   ☀️
                 </span>
-                <span className="text-2xl font-black leading-tight text-slate-950">
-                  Morning Meds Taken
-                </span>
-              </button>
-            )}
+                <div className="min-w-0">
+                  <p className="text-xl font-black leading-tight text-slate-950 sm:text-2xl">
+                    Morning Meds Taken
+                  </p>
+                  {morningMedsLogged ? (
+                    <p className="mt-1 text-sm font-semibold text-emerald-800">
+                      Logged{" "}
+                      {new Date(morningMedsLogged.recordedAt).toLocaleString()}
+                    </p>
+                  ) : (
+                    <p className="mt-1 text-sm font-medium text-slate-600">
+                      Turn on after you take them. Syncs to your chart when signed in.
+                    </p>
+                  )}
+                </div>
+              </div>
+              <div className="flex shrink-0 items-center gap-3">
+                {logMorningMedsTaken.isPending && (
+                  <Loader2
+                    className="h-9 w-9 animate-spin text-sky-700"
+                    aria-hidden
+                  />
+                )}
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={Boolean(morningMedsLogged)}
+                  aria-label="Morning meds taken"
+                  disabled={
+                    Boolean(morningMedsLogged) || logMorningMedsTaken.isPending
+                  }
+                  onClick={() => {
+                    if (morningMedsLogged || logMorningMedsTaken.isPending)
+                      return;
+                    if (!supabaseConfigured) {
+                      const recordedAt = new Date().toISOString();
+                      const row: DailyLogEntry = {
+                        id: crypto.randomUUID(),
+                        recordedAt,
+                        category: "other",
+                        label: "Morning meds",
+                        notes: recordedAt,
+                        entryType: MORNING_MEDS_ENTRY_TYPE,
+                      };
+                      qc.setQueryData<DailyLogEntry[]>(
+                        qk.dailyLogs,
+                        (prev = []) => [row, ...prev],
+                      );
+                      router.refresh();
+                      setToast("Morning meds saved on this device only.");
+                      window.setTimeout(() => setToast(null), 3200);
+                      return;
+                    }
+                    logMorningMedsTaken.mutate();
+                  }}
+                  className={`relative h-14 w-[5.75rem] shrink-0 rounded-full border-4 border-black transition-colors focus-visible:outline focus-visible:outline-4 focus-visible:outline-offset-2 focus-visible:outline-sky-500 ${
+                    morningMedsLogged ? "bg-emerald-600" : "bg-slate-300"
+                  }`}
+                >
+                  <span
+                    className={`absolute top-1.5 h-9 w-9 rounded-full border-2 border-black bg-white shadow transition-transform duration-200 ease-out ${
+                      morningMedsLogged ? "translate-x-[2.85rem]" : "translate-x-1.5"
+                    }`}
+                  />
+                </button>
+              </div>
+            </div>
           </div>
 
           <div className="mt-6 space-y-6">

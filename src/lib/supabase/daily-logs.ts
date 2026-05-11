@@ -1,5 +1,6 @@
 import type { DailyLogEntry } from "@/lib/types";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser-client";
+import { resolveDailyLogEntryType } from "@/lib/daily-log-entry-type";
 
 type DailyLogRow = {
   id: string;
@@ -10,6 +11,8 @@ type DailyLogRow = {
   sketch_png_base64?: string | null;
   sketch_side?: string | null;
   sketch_brush_preset?: string | null;
+  user_id?: string | null;
+  entry_type?: string | null;
 };
 
 function rowToEntry(row: DailyLogRow): DailyLogEntry {
@@ -25,6 +28,8 @@ function rowToEntry(row: DailyLogRow): DailyLogEntry {
     sketchSide:
       side === "front" || side === "back" ? side : undefined,
     sketchBrushPreset: brush ?? undefined,
+    userId: row.user_id ?? undefined,
+    entryType: row.entry_type ?? undefined,
   };
 }
 
@@ -34,7 +39,7 @@ export async function fetchDailyLogsFromSupabase(): Promise<DailyLogEntry[]> {
   const { data, error } = await sb
     .from("daily_logs")
     .select(
-      "id,recorded_at,category,label,notes,sketch_png_base64,sketch_side,sketch_brush_preset",
+      "id,recorded_at,category,label,notes,sketch_png_base64,sketch_side,sketch_brush_preset,user_id,entry_type",
     )
     .order("recorded_at", { ascending: false })
     .limit(800);
@@ -50,7 +55,14 @@ export async function persistDailyLogToSupabase(
 ): Promise<boolean> {
   const sb = getSupabaseBrowserClient();
   if (!sb) return false;
-  const { error } = await sb.from("daily_logs").insert({
+
+  const {
+    data: { user },
+  } = await sb.auth.getUser();
+
+  const resolvedUserId = entry.userId ?? user?.id;
+
+  const payload: Record<string, unknown> = {
     id: entry.id,
     recorded_at: entry.recordedAt,
     category: entry.category,
@@ -59,7 +71,14 @@ export async function persistDailyLogToSupabase(
     sketch_png_base64: entry.sketchPngBase64 ?? null,
     sketch_side: entry.sketchSide ?? null,
     sketch_brush_preset: entry.sketchBrushPreset ?? null,
-  });
+    entry_type: resolveDailyLogEntryType(entry),
+  };
+
+  if (resolvedUserId) {
+    payload.user_id = resolvedUserId;
+  }
+
+  const { error } = await sb.from("daily_logs").insert(payload);
   if (error) {
     console.warn("daily_logs insert:", error.message, error.code ?? "");
     return false;

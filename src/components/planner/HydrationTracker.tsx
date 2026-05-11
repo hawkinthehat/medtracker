@@ -1,6 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { qk } from "@/lib/query-keys";
 import type { DailyLogEntry } from "@/lib/types";
@@ -19,9 +20,10 @@ import {
   sumThermotabsSodiumMgToday,
   sumWaterOzToday,
 } from "@/lib/hydration-summary";
-import { Droplets, Pill } from "lucide-react";
+import { Check, Droplets, Pill } from "lucide-react";
 import { FeatureHelpTrigger } from "@/components/FeatureHelpModal";
 import { toastWaterLogged } from "@/lib/educational-toasts";
+import { ENTRY_TYPE_WATER } from "@/lib/daily-log-entry-type";
 
 type HydrationTrackerProps = {
   /** Daily fluid goal in fluid ounces (default 100). */
@@ -37,6 +39,7 @@ export default function HydrationTracker({
   sodiumGoalMg = DEFAULT_SODIUM_GOAL_MG,
   compact = false,
 }: HydrationTrackerProps) {
+  const router = useRouter();
   const qc = useQueryClient();
   const supabaseConfigured = Boolean(getSupabaseBrowserClient());
   const [toast, setToast] = useState<string | null>(null);
@@ -58,26 +61,42 @@ export default function HydrationTracker({
     refetchOnWindowFocus: true,
   });
 
-  const ozToday = useMemo(
+  const computedOz = useMemo(
     () => sumWaterOzToday(dailyLogs),
     [dailyLogs],
   );
+  /** Pending oz not yet reflected in React Query cache after tap (optimistic UI). */
+  const [optimisticOz, setOptimisticOz] = useState(0);
+  /** Which +oz button just fired — brief checkmark flash. */
+  const [flashOz, setFlashOz] = useState<number | null>(null);
+  const currentWaterIntake = computedOz + optimisticOz;
+
   const sodiumMgToday = useMemo(
     () => sumThermotabsSodiumMgToday(medicationLogs as MedicationLogRow[]),
     [medicationLogs],
   );
 
-  const waterProgress = Math.min(1, ozToday / waterGoalOz);
+  const waterProgress = Math.min(1, currentWaterIntake / waterGoalOz);
   const sodiumProgress = Math.min(1, sodiumMgToday / sodiumGoalMg);
 
   const addOzMutation = useMutation({
     mutationFn: async (amountOz: number) => {
+      const sb = getSupabaseBrowserClient();
+      let userId: string | undefined;
+      if (sb) {
+        const {
+          data: { user },
+        } = await sb.auth.getUser();
+        userId = user?.id;
+      }
       const row: DailyLogEntry = {
         id: crypto.randomUUID(),
         recordedAt: new Date().toISOString(),
         category: "hydration",
         label: WATER_OZ_LABEL,
         notes: String(amountOz),
+        entryType: ENTRY_TYPE_WATER,
+        userId,
       };
       const ok = await persistDailyLogToSupabase(row);
       if (supabaseConfigured && !ok) {
@@ -90,16 +109,24 @@ export default function HydrationTracker({
         row,
         ...prev,
       ]);
+      setOptimisticOz((o) => Math.max(0, o - amountOz));
+      void qc.invalidateQueries({ queryKey: qk.dailyLogs });
+      router.refresh();
       setToast(toastWaterLogged(amountOz));
       window.setTimeout(() => setToast(null), 4500);
     },
-    onError: (err: Error) => {
+    onError: (err: Error, amountOz) => {
+      setOptimisticOz((o) => Math.max(0, o - amountOz));
       setToast(err.message);
       window.setTimeout(() => setToast(null), 3200);
     },
   });
 
   function quickAddOz(amount: number) {
+    setOptimisticOz((o) => o + amount);
+    setFlashOz(amount);
+    window.setTimeout(() => setFlashOz(null), 700);
+    setToast("Logged ✓");
     if (!supabaseConfigured) {
       const row: DailyLogEntry = {
         id: crypto.randomUUID(),
@@ -107,13 +134,18 @@ export default function HydrationTracker({
         category: "hydration",
         label: WATER_OZ_LABEL,
         notes: String(amount),
+        entryType: ENTRY_TYPE_WATER,
       };
       qc.setQueryData<DailyLogEntry[]>(qk.dailyLogs, (prev = []) => [
         row,
         ...prev,
       ]);
-      setToast(toastWaterLogged(amount, { localOnly: true }));
-      window.setTimeout(() => setToast(null), 4500);
+      setOptimisticOz((o) => Math.max(0, o - amount));
+      window.setTimeout(() => {
+        setToast(toastWaterLogged(amount, { localOnly: true }));
+        window.setTimeout(() => setToast(null), 4500);
+      }, 150);
+      router.refresh();
       return;
     }
     addOzMutation.mutate(amount);
@@ -208,7 +240,7 @@ export default function HydrationTracker({
 
       <div className={compact ? "mt-1" : "mt-5"}>
         <p className="text-center font-mono text-4xl font-black tabular-nums text-slate-900">
-          {ozToday}
+          {currentWaterIntake}
           <span className="text-2xl font-bold text-slate-600"> oz</span>
         </p>
         <div className="mt-4 flex flex-wrap justify-center gap-3">
@@ -218,9 +250,20 @@ export default function HydrationTracker({
               type="button"
               disabled={addOzMutation.isPending && supabaseConfigured}
               onClick={() => quickAddOz(oz)}
-              className="min-h-[56px] min-w-[5.5rem] rounded-2xl border-4 border-black bg-sky-600 px-4 text-xl font-black text-white shadow-md transition hover:bg-sky-700 disabled:opacity-50"
+              className={`relative flex min-h-[56px] min-w-[5.5rem] flex-col items-center justify-center rounded-2xl border-4 border-black px-4 text-xl font-black text-white shadow-md transition hover:bg-sky-700 disabled:opacity-50 ${
+                flashOz === oz ? "bg-emerald-600 ring-2 ring-emerald-300" : "bg-sky-600"
+              }`}
             >
-              +{oz} oz
+              {flashOz === oz ? (
+                <>
+                  <Check className="h-7 w-7" strokeWidth={3} aria-hidden />
+                  <span className="mt-0.5 text-xs font-black uppercase tracking-wide">
+                    Logged
+                  </span>
+                </>
+              ) : (
+                <>+{oz} oz</>
+              )}
             </button>
           ))}
         </div>
@@ -230,7 +273,7 @@ export default function HydrationTracker({
         <div className="mb-1 flex items-center justify-between text-xs font-semibold uppercase tracking-wide text-slate-600">
           <span>Water goal</span>
           <span className="tabular-nums text-slate-900">
-            {ozToday} / {waterGoalOz} oz
+            {currentWaterIntake} / {waterGoalOz} oz
           </span>
         </div>
         <div
@@ -241,7 +284,11 @@ export default function HydrationTracker({
           aria-valuemax={100}
         >
           <div
-            className="h-full rounded-full bg-sky-600 transition-[width] duration-300 ease-out"
+            className={
+              optimisticOz > 0
+                ? "h-full rounded-full bg-sky-600 transition-none"
+                : "h-full rounded-full bg-sky-600 transition-[width] duration-300 ease-out"
+            }
             style={{ width: `${waterProgress * 100}%` }}
           />
         </div>

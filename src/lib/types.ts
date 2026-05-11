@@ -81,6 +81,10 @@ export type DailyLogEntry = {
   /** Short label, e.g. meal or activity name */
   label: string;
   notes?: string;
+  /** Optional semantic tag (matches Supabase `entry_type`). */
+  entryType?: string;
+  /** Owner when row was inserted authenticated (matches Supabase `user_id`). */
+  userId?: string;
   /** Body symptom sketch (PNG base64, no data URL prefix) when saved from SymptomCanvas */
   sketchPngBase64?: string;
   sketchSide?: "front" | "back";

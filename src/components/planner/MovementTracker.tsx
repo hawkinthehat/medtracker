@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Dog, Check, Settings2 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Check, Dog, Loader2, Settings2 } from "lucide-react";
 import { qk } from "@/lib/query-keys";
 import type { DailyLogEntry } from "@/lib/types";
 import { persistDailyLogToSupabase } from "@/lib/supabase/daily-logs";
@@ -30,6 +31,7 @@ import {
 } from "@/lib/movement-tracking";
 import { FeatureHelpTrigger } from "@/components/FeatureHelpModal";
 import { TOAST_ACTIVITY, toastPtLogged } from "@/lib/educational-toasts";
+import { fireMiniConfetti } from "@/lib/confetti-lite";
 
 const PT_SLOTS: { slot: PtSlot; label: string }[] = [
   { slot: "morning", label: "Morning PT" },
@@ -65,6 +67,7 @@ function savePtLatched(day: string, state: Record<PtSlot, boolean>) {
 }
 
 export default function MovementTracker() {
+  const router = useRouter();
   const qc = useQueryClient();
   const today = calendarDayLocal();
 
@@ -134,6 +137,7 @@ export default function MovementTracker() {
         entry,
         ...prev,
       ]);
+      void qc.invalidateQueries({ queryKey: qk.dailyLogs });
     },
   });
 
@@ -157,6 +161,9 @@ export default function MovementTracker() {
   );
   const [walkAckFlash, setWalkAckFlash] = useState(false);
   const [ptAckFlash, setPtAckFlash] = useState<PtSlot | null>(null);
+  const [loggedBanner, setLoggedBanner] = useState<string | null>(null);
+  const [pendingWalk, setPendingWalk] = useState(false);
+  const [pendingPtSlot, setPendingPtSlot] = useState<PtSlot | null>(null);
 
   function triggerWalkHaptic() {
     try {
@@ -202,71 +209,93 @@ export default function MovementTracker() {
     setShowHrNudge(false);
     setWalkSuccessMessage(null);
 
-    await fetchAndLogWeather().catch(() => {});
+    setPendingWalk(true);
+    try {
+      await fetchAndLogWeather().catch(() => {});
 
-    const recordedAt = new Date().toISOString();
-    const label = getWalkButtonLabel();
-    const base =
-      `${getWalkNotesDefault().trim()}\n${DOG_WALK_MARKER}`.trim();
-    const notes = await appendWeatherNotes(base, { skipWeatherFetch: true });
+      const recordedAt = new Date().toISOString();
+      const label = getWalkButtonLabel();
+      const base =
+        `${getWalkNotesDefault().trim()}\n${DOG_WALK_MARKER}`.trim();
+      const notes = await appendWeatherNotes(base, { skipWeatherFetch: true });
 
-    const row: DailyLogEntry = {
-      id: crypto.randomUUID(),
-      recordedAt,
-      category: "activity",
-      label,
-      notes,
-    };
+      const row: DailyLogEntry = {
+        id: crypto.randomUUID(),
+        recordedAt,
+        category: "activity",
+        label,
+        notes,
+      };
 
-    await logMovementEntry.mutateAsync(row).catch((e) => {
+      await logMovementEntry.mutateAsync(row);
+
+      await insertActivityLogRow({
+        activity_type: "active_movement",
+        notes: getWalkNotesDefault().trim() || DEFAULT_WALK_NOTES,
+        recorded_at: recordedAt,
+      });
+
+      void qc.invalidateQueries({ queryKey: qk.dailyLogs });
+      router.refresh();
+
+      triggerWalkHaptic();
+      setWalkAckFlash(true);
+      fireMiniConfetti();
+      setLoggedBanner("Logged!");
+      window.setTimeout(() => setLoggedBanner(null), 2400);
+      setWalkSuccessMessage(TOAST_ACTIVITY);
+      window.setTimeout(() => setWalkSuccessMessage(null), 4500);
+    } catch (e) {
       console.error("[handleDogWalk] Failed to save movement / daily_logs:", e);
       throw e;
-    });
-
-    void insertActivityLogRow({
-      activity_type: "active_movement",
-      notes: getWalkNotesDefault().trim() || DEFAULT_WALK_NOTES,
-      recorded_at: recordedAt,
-    });
-
-    triggerWalkHaptic();
-    setWalkAckFlash(true);
-    setWalkSuccessMessage(TOAST_ACTIVITY);
-    window.setTimeout(() => setWalkSuccessMessage(null), 4500);
+    } finally {
+      setPendingWalk(false);
+    }
   }
 
   async function handlePt(slot: PtSlot, humanLabel: string) {
     if (ptLatched[slot]) return;
 
-    const base = `${humanLabel} session${ptMarker(slot)}`;
-    const notes = await appendWeatherNotes(base);
+    setPendingPtSlot(slot);
+    try {
+      const base = `${humanLabel} session${ptMarker(slot)}`;
+      const notes = await appendWeatherNotes(base);
 
-    const row: DailyLogEntry = {
-      id: crypto.randomUUID(),
-      recordedAt: new Date().toISOString(),
-      category: "activity",
-      label: humanLabel,
-      notes,
-    };
+      const row: DailyLogEntry = {
+        id: crypto.randomUUID(),
+        recordedAt: new Date().toISOString(),
+        category: "activity",
+        label: humanLabel,
+        notes,
+      };
 
-    await logMovementEntry.mutateAsync(row);
+      await logMovementEntry.mutateAsync(row);
 
-    void insertActivityLogRow({
-      activity_type: "pt_session",
-      notes: `${humanLabel} · ${slot}`,
-      recorded_at: row.recordedAt,
-    });
+      await insertActivityLogRow({
+        activity_type: "pt_session",
+        notes: `${humanLabel} · ${slot}`,
+        recorded_at: row.recordedAt,
+      });
 
-    setPtAckFlash(slot);
-    triggerWalkHaptic();
-    setPtSuccessMessage(toastPtLogged(humanLabel));
-    window.setTimeout(() => setPtSuccessMessage(null), 4500);
+      void qc.invalidateQueries({ queryKey: qk.dailyLogs });
+      router.refresh();
 
-    setPtLatched((prev) => {
-      const next = { ...prev, [slot]: true };
-      savePtLatched(today, next);
-      return next;
-    });
+      setPtAckFlash(slot);
+      triggerWalkHaptic();
+      fireMiniConfetti();
+      setLoggedBanner("Logged!");
+      window.setTimeout(() => setLoggedBanner(null), 2400);
+      setPtSuccessMessage(toastPtLogged(humanLabel));
+      window.setTimeout(() => setPtSuccessMessage(null), 4500);
+
+      setPtLatched((prev) => {
+        const next = { ...prev, [slot]: true };
+        savePtLatched(today, next);
+        return next;
+      });
+    } finally {
+      setPendingPtSlot(null);
+    }
   }
 
   function saveMovementSettings() {
@@ -276,7 +305,8 @@ export default function MovementTracker() {
     setSettingsOpen(false);
   }
 
-  const busy = logMovementEntry.isPending;
+  const movementBusy =
+    pendingWalk || pendingPtSlot !== null || logMovementEntry.isPending;
 
   return (
     <section
@@ -345,7 +375,7 @@ export default function MovementTracker() {
       <div id="home-movement-walk">
       <button
         type="button"
-        disabled={busy}
+        disabled={movementBusy}
         onClick={() => void handleDogWalk()}
         className={`mt-5 flex min-h-[80px] w-full items-center justify-center gap-4 rounded-2xl border-4 px-5 py-6 text-2xl font-black leading-snug shadow-sm transition hover:bg-slate-50 disabled:opacity-50 ${
           walkAckFlash
@@ -353,18 +383,34 @@ export default function MovementTracker() {
             : "border-black bg-white text-slate-900"
         }`}
       >
-        {walkAckFlash ? (
-          <Check
-            className="h-12 w-12 shrink-0 text-emerald-800"
-            strokeWidth={3}
-            aria-hidden
-          />
+        {pendingWalk ? (
+          <>
+            <Loader2
+              className="h-12 w-12 shrink-0 animate-spin text-sky-700"
+              strokeWidth={2.5}
+              aria-hidden
+            />
+            <span className="text-center leading-tight">Logging…</span>
+          </>
+        ) : walkAckFlash ? (
+          <>
+            <Check
+              className="h-12 w-12 shrink-0 text-emerald-800"
+              strokeWidth={3}
+              aria-hidden
+            />
+            <span className="text-center leading-tight text-emerald-950">
+              Logged!
+            </span>
+          </>
         ) : (
-          <Dog className="h-12 w-12 shrink-0 text-slate-900" strokeWidth={2.5} aria-hidden />
+          <>
+            <Dog className="h-12 w-12 shrink-0 text-slate-900" strokeWidth={2.5} aria-hidden />
+            <span className="text-center leading-tight">
+              {walkButtonDisplay}
+            </span>
+          </>
         )}
-        <span className="text-center leading-tight">
-          {walkButtonDisplay}
-        </span>
       </button>
       </div>
 
@@ -410,7 +456,7 @@ export default function MovementTracker() {
             </button>
             <button
               type="button"
-              disabled={busy}
+              disabled={movementBusy}
               onClick={() => void handleDogWalk(true)}
               className="min-h-[52px] rounded-xl border-4 border-black bg-sky-600 px-6 text-lg font-black uppercase tracking-wide text-white"
             >
@@ -427,7 +473,7 @@ export default function MovementTracker() {
             <button
               key={slot}
               type="button"
-              disabled={ptLatched[slot] || busy}
+              disabled={ptLatched[slot] || movementBusy}
               onClick={() => void handlePt(slot, label)}
               className={`min-h-[68px] flex-1 rounded-2xl border-4 px-5 py-4 text-xl font-black transition sm:min-w-[11rem] ${
                 ptAckFlash === slot
@@ -438,8 +484,29 @@ export default function MovementTracker() {
               } disabled:cursor-default`}
               aria-pressed={ptLatched[slot]}
             >
-              {label}
-              {ptLatched[slot] ? " ✓" : ""}
+              {pendingPtSlot === slot ? (
+                <span className="flex items-center justify-center gap-2">
+                  <Loader2
+                    className="h-7 w-7 shrink-0 animate-spin text-sky-800"
+                    aria-hidden
+                  />
+                  Logging…
+                </span>
+              ) : ptAckFlash === slot ? (
+                <span className="flex items-center justify-center gap-2">
+                  <Check
+                    className="h-7 w-7 shrink-0 text-emerald-800"
+                    strokeWidth={3}
+                    aria-hidden
+                  />
+                  Logged!
+                </span>
+              ) : (
+                <>
+                  {label}
+                  {ptLatched[slot] ? " ✓" : ""}
+                </>
+              )}
             </button>
           ))}
         </div>
@@ -464,6 +531,16 @@ export default function MovementTracker() {
             ? logMovementEntry.error.message
             : "Could not save entry."}
         </p>
+      )}
+
+      {loggedBanner && (
+        <div
+          className="pointer-events-none fixed bottom-[calc(5.75rem+env(safe-area-inset-bottom))] left-1/2 z-[125] max-w-[min(92vw,20rem)] -translate-x-1/2 rounded-2xl border-4 border-emerald-800 bg-emerald-100 px-6 py-4 text-center text-xl font-black text-emerald-950 shadow-xl"
+          role="status"
+          aria-live="polite"
+        >
+          {loggedBanner}
+        </div>
       )}
     </section>
   );
