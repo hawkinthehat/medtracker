@@ -15,6 +15,7 @@ export function findMorningMedsLogToday(
     (e) =>
       isSameLocalCalendarDay(e.recordedAt, ref) &&
       (e.entryType === MORNING_MEDS_ENTRY_TYPE ||
-        e.label === MORNING_MEDS_TAKEN_LABEL),
+        e.label === MORNING_MEDS_TAKEN_LABEL ||
+        e.label === "Morning meds"),
   );
 }

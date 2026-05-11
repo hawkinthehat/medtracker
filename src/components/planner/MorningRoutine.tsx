@@ -81,6 +81,11 @@ export default function MorningRoutine() {
     [dailyLogs],
   );
 
+  const [morningMedsOptimistic, setMorningMedsOptimistic] = useState(false);
+
+  const morningMedsToggleOn =
+    Boolean(morningMedsLogged) || morningMedsOptimistic;
+
   useEffect(() => {
     const fav = loadFavoriteBreakfast();
     setSavedFavorite(fav);
@@ -101,6 +106,12 @@ export default function MorningRoutine() {
   const supabaseConfigured = Boolean(getSupabaseBrowserClient());
 
   const logMorningMedsTaken = useMutation({
+    onMutate: () => {
+      setMorningMedsOptimistic(true);
+    },
+    onSettled: () => {
+      setMorningMedsOptimistic(false);
+    },
     mutationFn: async () => {
       const recordedAt = new Date().toISOString();
       const row: DailyLogEntry = {
@@ -112,10 +123,6 @@ export default function MorningRoutine() {
         entryType: MORNING_MEDS_ENTRY_TYPE,
       };
       if (supabaseConfigured) {
-        const ok = await persistDailyLogToSupabase(row);
-        if (!ok) {
-          throw new Error("Could not save morning meds — check Supabase.");
-        }
         const medOk = await insertMorningRoutineMedicationLog();
         if (!medOk.ok) {
           throw new Error(
@@ -123,6 +130,10 @@ export default function MorningRoutine() {
               ? "Sign in to save morning meds."
               : medOk.error ?? "Could not save medication log.",
           );
+        }
+        const ok = await persistDailyLogToSupabase(row);
+        if (!ok) {
+          throw new Error("Could not save morning meds — check Supabase.");
         }
       }
       return row;
@@ -134,6 +145,7 @@ export default function MorningRoutine() {
       ]);
       void qc.invalidateQueries({ queryKey: qk.dailyLogs });
       void qc.invalidateQueries({ queryKey: qk.medicationLogs });
+      void qc.invalidateQueries({ queryKey: qk.activityToday });
       router.refresh();
       setToast("Morning meds logged to medication_logs & daily_logs.");
       window.setTimeout(() => setToast(null), 3200);
@@ -374,6 +386,10 @@ export default function MorningRoutine() {
                       Logged{" "}
                       {new Date(morningMedsLogged.recordedAt).toLocaleString()}
                     </p>
+                  ) : morningMedsOptimistic ? (
+                    <p className="mt-1 text-sm font-semibold text-sky-800">
+                      Saving…
+                    </p>
                   ) : (
                     <p className="mt-1 text-sm font-medium text-slate-600">
                       Turn on after you take them. Syncs to your chart when signed in.
@@ -391,7 +407,7 @@ export default function MorningRoutine() {
                 <button
                   type="button"
                   role="switch"
-                  aria-checked={Boolean(morningMedsLogged)}
+                  aria-checked={morningMedsToggleOn}
                   aria-label="Morning meds taken"
                   disabled={
                     Boolean(morningMedsLogged) || logMorningMedsTaken.isPending
@@ -421,12 +437,12 @@ export default function MorningRoutine() {
                     logMorningMedsTaken.mutate();
                   }}
                   className={`relative h-14 w-[5.75rem] shrink-0 rounded-full border-4 border-black transition-colors focus-visible:outline focus-visible:outline-4 focus-visible:outline-offset-2 focus-visible:outline-sky-500 ${
-                    morningMedsLogged ? "bg-emerald-600" : "bg-slate-300"
+                    morningMedsToggleOn ? "bg-emerald-600" : "bg-slate-300"
                   }`}
                 >
                   <span
                     className={`absolute top-1.5 h-9 w-9 rounded-full border-2 border-black bg-white shadow transition-transform duration-200 ease-out ${
-                      morningMedsLogged ? "translate-x-[2.85rem]" : "translate-x-1.5"
+                      morningMedsToggleOn ? "translate-x-[2.85rem]" : "translate-x-1.5"
                     }`}
                   />
                 </button>

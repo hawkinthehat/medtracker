@@ -33,6 +33,7 @@ export default function SupabaseAuthListener() {
         void qc.invalidateQueries({ queryKey: qk.medicationLogs });
         void qc.invalidateQueries({ queryKey: qk.medications });
         void qc.invalidateQueries({ queryKey: qk.symptomLogs });
+        void qc.invalidateQueries({ queryKey: qk.activityToday });
         router.refresh();
       }
     });

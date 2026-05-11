@@ -109,6 +109,23 @@ export async function fetchTodayWaterValueSumForCurrentUser(): Promise<{
 }
 
 /**
+ * After inserting water, Supabase reads can briefly lag. Poll until today's sum is at
+ * least what the UI already displayed, so optimistic clears don't snap the bar backward.
+ */
+export async function fetchTodayWaterValueSumUntilAtLeast(
+  minOz: number,
+): Promise<number> {
+  const maxAttempts = 10;
+  for (let i = 0; i < maxAttempts; i++) {
+    const { oz } = await fetchTodayWaterValueSumForCurrentUser();
+    if (oz >= minOz - 0.01) return oz;
+    await new Promise((r) => setTimeout(r, 80 + i * 60));
+  }
+  const { oz } = await fetchTodayWaterValueSumForCurrentUser();
+  return Math.max(minOz, oz);
+}
+
+/**
  * @deprecated Prefer {@link fetchTodayWaterValueSumForCurrentUser} for cloud baseline.
  */
 export async function fetchTodayWaterOzSumForCurrentUser(): Promise<{
@@ -158,7 +175,13 @@ export async function persistDailyLogToSupabase(
 
   const { error } = await sb.from("daily_logs").insert(payload);
   if (error) {
-    console.warn("daily_logs insert:", error.message, error.code ?? "");
+    console.error("[daily_logs] insert failed:", {
+      message: error.message,
+      code: error.code,
+      details: error.details,
+      hint: error.hint,
+      entry_type: payload.entry_type,
+    });
     return false;
   }
   return true;

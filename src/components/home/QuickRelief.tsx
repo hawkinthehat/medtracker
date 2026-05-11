@@ -91,6 +91,11 @@ export default function QuickRelief() {
 
   const logMutation = useMutation({
     mutationFn: async (def: QuickReliefDef) => {
+      if (!getSupabaseBrowserClient()) {
+        throw new Error(
+          "Connect Supabase in your environment to save PRN logs to your chart.",
+        );
+      }
       const meds =
         qc.getQueryData<SavedMedication[]>(qk.medications) ?? medications;
       const profs =
@@ -209,7 +214,7 @@ export default function QuickRelief() {
             <button
               key={def.displayName}
               type="button"
-              disabled={logMutation.isPending || !supabaseOk}
+              disabled={logMutation.isPending}
               onClick={() => logMutation.mutate(def)}
               className={`flex min-h-[120px] w-[min(46vw,11rem)] shrink-0 snap-start flex-col justify-between rounded-2xl border-4 border-black px-3 py-3 text-left shadow-md transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 ${
                 waitStyle

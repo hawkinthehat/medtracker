@@ -164,6 +164,13 @@ export default function MovementTracker() {
   const [loggedBanner, setLoggedBanner] = useState<string | null>(null);
   const [pendingWalk, setPendingWalk] = useState(false);
   const [pendingPtSlot, setPendingPtSlot] = useState<PtSlot | null>(null);
+  /** Instant walk count before React Query catches up */
+  const [optimisticWalkBump, setOptimisticWalkBump] = useState(0);
+
+  const walksTodayDisplay = useMemo(
+    () => walksToday + optimisticWalkBump,
+    [walksToday, optimisticWalkBump],
+  );
 
   function triggerWalkHaptic() {
     try {
@@ -209,6 +216,7 @@ export default function MovementTracker() {
     setShowHrNudge(false);
     setWalkSuccessMessage(null);
 
+    setOptimisticWalkBump((b) => b + 1);
     setPendingWalk(true);
     try {
       await fetchAndLogWeather().catch(() => {});
@@ -239,7 +247,10 @@ export default function MovementTracker() {
       }
 
       void qc.invalidateQueries({ queryKey: qk.dailyLogs });
+      void qc.invalidateQueries({ queryKey: qk.activityToday });
       router.refresh();
+
+      setOptimisticWalkBump((b) => Math.max(0, b - 1));
 
       triggerWalkHaptic();
       setWalkAckFlash(true);
@@ -249,6 +260,7 @@ export default function MovementTracker() {
       setWalkSuccessMessage(TOAST_ACTIVITY);
       window.setTimeout(() => setWalkSuccessMessage(null), 4500);
     } catch (e) {
+      setOptimisticWalkBump((b) => Math.max(0, b - 1));
       console.error("[handleDogWalk] Failed to save movement / daily_logs:", e);
       throw e;
     } finally {
@@ -258,6 +270,13 @@ export default function MovementTracker() {
 
   async function handlePt(slot: PtSlot, humanLabel: string) {
     if (ptLatched[slot]) return;
+
+    const rollback = { ...ptLatched };
+    setPtLatched((p) => {
+      const next = { ...p, [slot]: true };
+      savePtLatched(today, next);
+      return next;
+    });
 
     setPendingPtSlot(slot);
     try {
@@ -284,6 +303,7 @@ export default function MovementTracker() {
       }
 
       void qc.invalidateQueries({ queryKey: qk.dailyLogs });
+      void qc.invalidateQueries({ queryKey: qk.activityToday });
       router.refresh();
 
       setPtAckFlash(slot);
@@ -293,12 +313,11 @@ export default function MovementTracker() {
       window.setTimeout(() => setLoggedBanner(null), 2400);
       setPtSuccessMessage(toastPtLogged(humanLabel));
       window.setTimeout(() => setPtSuccessMessage(null), 4500);
-
-      setPtLatched((prev) => {
-        const next = { ...prev, [slot]: true };
-        savePtLatched(today, next);
-        return next;
-      });
+    } catch (e) {
+      setPtLatched(rollback);
+      savePtLatched(today, rollback);
+      console.error("[handlePt] Failed to save PT / activity_logs:", e);
+      throw e;
     } finally {
       setPendingPtSlot(null);
     }
@@ -442,7 +461,7 @@ export default function MovementTracker() {
 
       <p className="mt-4 text-center text-xl font-black text-slate-900">
         Daily walks today:{" "}
-        <span className="tabular-nums">{walksToday}</span>
+        <span className="tabular-nums">{walksTodayDisplay}</span>
       </p>
 
       {showHrNudge && (

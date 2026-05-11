@@ -3,13 +3,14 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import { qk } from "@/lib/query-keys";
 import type { DailyLogEntry } from "@/lib/types";
 import { dailyLogsQueryFn } from "@/lib/daily-logs-query-fn";
 import {
-  fetchTodayWaterOzSumForCurrentUser,
+  fetchTodayWaterValueSumForCurrentUser,
+  fetchTodayWaterValueSumUntilAtLeast,
   persistDailyLogToSupabase,
 } from "@/lib/supabase/daily-logs";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser-client";
@@ -92,7 +93,7 @@ export default function HydrationTracker({
         return;
       }
       setWaterBaselineLoaded(false);
-      const { oz } = await fetchTodayWaterOzSumForCurrentUser();
+      const { oz } = await fetchTodayWaterValueSumForCurrentUser();
       if (!cancelled) {
         setStoredWaterOz(oz);
         setWaterBaselineLoaded(true);
@@ -136,6 +137,14 @@ export default function HydrationTracker({
 
   /** Pending oz not yet confirmed after tap (optimistic UI). */
   const [optimisticOz, setOptimisticOz] = useState(0);
+  const storedWaterOzRef = useRef(0);
+  const optimisticOzRef = useRef(0);
+  useEffect(() => {
+    storedWaterOzRef.current = storedWaterOz;
+  }, [storedWaterOz]);
+  useEffect(() => {
+    optimisticOzRef.current = optimisticOz;
+  }, [optimisticOz]);
   /** Which +oz button just fired — brief checkmark flash. */
   const [flashOz, setFlashOz] = useState<number | null>(null);
 
@@ -170,18 +179,23 @@ export default function HydrationTracker({
       }
       return row;
     },
-    onSuccess: (row, amountOz) => {
+    onSuccess: async (row, amountOz) => {
       qc.setQueryData<DailyLogEntry[]>(qk.dailyLogs, (prev = []) => [
         row,
         ...prev,
       ]);
-      setStoredWaterOz((s) => s + amountOz);
+      void qc.invalidateQueries({ queryKey: qk.dailyLogs });
+      const minExpected =
+        storedWaterOzRef.current + optimisticOzRef.current;
+      const oz = await fetchTodayWaterValueSumUntilAtLeast(minExpected);
+      setStoredWaterOz(oz);
       setOptimisticOz((o) => Math.max(0, o - amountOz));
       router.refresh();
       setToast(toastWaterLogged(amountOz));
       window.setTimeout(() => setToast(null), 4500);
     },
     onError: (err: Error, amountOz) => {
+      console.error("[hydration] Water log failed:", err);
       setOptimisticOz((o) => Math.max(0, o - amountOz));
       setToast(err.message);
       window.setTimeout(() => setToast(null), 3200);

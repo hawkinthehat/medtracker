@@ -2,9 +2,7 @@
 
 import Link from "next/link";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import type { User } from "@supabase/supabase-js";
 import { ChevronDown, ClipboardList } from "lucide-react";
 import PulseStrip from "@/components/planner/PulseStrip";
 import MorningRoutine from "@/components/planner/MorningRoutine";
@@ -20,6 +18,7 @@ import HomeDailyActionGrid from "@/components/home/HomeDailyActionGrid";
 import QuickRelief from "@/components/home/QuickRelief";
 import SymptomMatrix from "@/components/home/SymptomMatrix";
 import DashboardTodayCounters from "@/components/home/DashboardTodayCounters";
+import { useDashboardSession } from "@/components/home/use-dashboard-session";
 import WelcomeWizard from "@/components/WelcomeWizard";
 import DoseAdjustmentModal, {
   type DoseModalTab,
@@ -71,37 +70,8 @@ type MinimalHomeDashboardProps = {
 export default function MinimalHomeDashboard({
   bypassBarometerAdvisory = false,
 }: MinimalHomeDashboardProps) {
-  const router = useRouter();
   const qc = useQueryClient();
-  const supabaseConfigured = Boolean(getSupabaseBrowserClient());
-  const [sessionUser, setSessionUser] = useState<User | null>(null);
-  const [sessionResolved, setSessionResolved] = useState(false);
-
-  useEffect(() => {
-    const sb = getSupabaseBrowserClient();
-    if (!sb) {
-      setSessionUser(null);
-      setSessionResolved(true);
-      return;
-    }
-    void sb.auth.getSession().then(({ data: { session } }) => {
-      setSessionUser(session?.user ?? null);
-      setSessionResolved(true);
-    });
-    const {
-      data: { subscription },
-    } = sb.auth.onAuthStateChange((event, session) => {
-      setSessionUser(session?.user ?? null);
-      setSessionResolved(true);
-      if (event === "SIGNED_IN") {
-        router.refresh();
-        void qc.invalidateQueries({ queryKey: qk.dailyLogs });
-        void qc.invalidateQueries({ queryKey: qk.medicationLogs });
-        void qc.invalidateQueries({ queryKey: qk.activityToday });
-      }
-    });
-    return () => subscription.unsubscribe();
-  }, [qc, router]);
+  const { showAuthGate, countersEnabled } = useDashboardSession();
   const [displayFirstName, setDisplayFirstName] = useState("");
   const [episodeSketchOpen, setEpisodeSketchOpen] = useState(false);
   const [episodeFabOpen, setEpisodeFabOpen] = useState(false);
@@ -197,6 +167,31 @@ export default function MinimalHomeDashboard({
     },
   });
 
+  if (showAuthGate) {
+    return (
+      <div className="flex min-h-[75vh] flex-col items-center justify-center gap-6 px-4 pb-16 pt-8">
+        <div className="max-w-md space-y-5 text-center">
+          <p className="text-[10px] font-black uppercase tracking-[0.35em] text-slate-500">
+            Tiaki
+          </p>
+          <h1 className="text-2xl font-black tracking-tight text-slate-900 sm:text-3xl">
+            Sign in to continue
+          </h1>
+          <p className="text-base font-medium leading-relaxed text-slate-600">
+            Your water totals, medications, movement logs, and symptom matrix sync
+            to your account after you sign in.
+          </p>
+          <Link
+            href="/auth?next=/"
+            className="inline-flex min-h-[56px] min-w-[12rem] items-center justify-center rounded-2xl border-4 border-black bg-black px-8 text-lg font-black text-white shadow-md transition hover:bg-neutral-900"
+          >
+            Sign in
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6 pb-10">
       {welcomeOpen === true && (
@@ -228,6 +223,8 @@ export default function MinimalHomeDashboard({
         </h1>
         <p className="text-lg font-medium text-slate-700">{formatLongDate()}</p>
       </header>
+
+      <DashboardTodayCounters enabled={countersEnabled} />
 
       <QuickRelief />
 

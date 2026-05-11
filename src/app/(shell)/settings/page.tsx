@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { type FormEvent, useEffect, useState } from "react";
 import {
   DEFAULT_WALK_BUTTON_LABEL,
   DEFAULT_WALK_NOTES,
@@ -85,7 +85,7 @@ export default function SettingsPage() {
     router.push("/auth");
   }
 
-  function save(e: React.FormEvent) {
+  function save(e: FormEvent) {
     e.preventDefault();
     setWalkButtonLabel(walkLabel);
     setWalkNotesDefault(walkNotes);

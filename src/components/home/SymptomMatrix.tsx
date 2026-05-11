@@ -196,7 +196,7 @@ export default function SymptomMatrix() {
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <button
           type="button"
-          disabled={!supabaseOk || pendingKey === tapKey("dysautonomia", BLURRY_VISION_LABEL)}
+          disabled={pendingKey === tapKey("dysautonomia", BLURRY_VISION_LABEL)}
           onClick={() => logTap(BLURRY_VISION_LABEL, "dysautonomia")}
           className={`${BTN_MIN} border-amber-700 bg-amber-100 text-amber-950 hover:bg-amber-200 ${
             flashKey === tapKey("dysautonomia", BLURRY_VISION_LABEL)
@@ -209,7 +209,7 @@ export default function SymptomMatrix() {
         </button>
         <button
           type="button"
-          disabled={!supabaseOk || pendingKey === tapKey(GENERAL_CATEGORY_ID, GENERAL_FATIGUE_LABEL)}
+          disabled={pendingKey === tapKey(GENERAL_CATEGORY_ID, GENERAL_FATIGUE_LABEL)}
           onClick={() => logTap(GENERAL_FATIGUE_LABEL, GENERAL_CATEGORY_ID)}
           className={`${BTN_MIN} border-slate-800 bg-slate-100 text-slate-950 hover:bg-slate-200 ${
             flashKey === tapKey(GENERAL_CATEGORY_ID, GENERAL_FATIGUE_LABEL)
@@ -262,7 +262,7 @@ export default function SymptomMatrix() {
               <button
                 key={label}
                 type="button"
-                disabled={!supabaseOk || pendingKey === key}
+                disabled={pendingKey === key}
                 onClick={() => logTap(label, activeCategory)}
                 className={`${BTN_MIN} ${
                   fog

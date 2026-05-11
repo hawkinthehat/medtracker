@@ -142,6 +142,26 @@ export async function insertMorningRoutineMedicationLog(): Promise<{
     return { ok: false, error: "not_signed_in" };
   }
 
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+  const end = new Date(start);
+  end.setDate(end.getDate() + 1);
+
+  const { data: existing, error: existingErr } = await sb
+    .from("medication_logs")
+    .select("id")
+    .eq("user_id", uid)
+    .eq("medication_name", MORNING_ROUTINE_MEDICATION_NAME)
+    .gte("recorded_at", start.toISOString())
+    .lt("recorded_at", end.toISOString())
+    .limit(1);
+
+  if (existingErr) {
+    console.error("[medication_logs] Morning Routine dedupe check:", existingErr.message);
+  } else if (existing && existing.length > 0) {
+    return { ok: true };
+  }
+
   const id = crypto.randomUUID();
   const recordedAt = new Date().toISOString();
 
@@ -161,7 +181,12 @@ export async function insertMorningRoutineMedicationLog(): Promise<{
   });
 
   if (error) {
-    console.warn("[medication_logs] Morning Routine insert:", error.message);
+    console.error("[medication_logs] Morning Routine insert failed:", {
+      message: error.message,
+      code: error.code,
+      details: error.details,
+      hint: error.hint,
+    });
     return { ok: false, error: error.message };
   }
   return { ok: true };

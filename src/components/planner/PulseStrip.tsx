@@ -42,6 +42,7 @@ const MOOD_ICONS = [Sparkles, Smile, Cloud, CloudRain, AlertTriangle] as const;
 export default function PulseStrip() {
   const qc = useQueryClient();
   const [toast, setToast] = useState<string | null>(null);
+  const [errorToast, setErrorToast] = useState<string | null>(null);
   const [sideEffectPrompt, setSideEffectPrompt] =
     useState<RecentDoseContext | null>(null);
 
@@ -86,7 +87,12 @@ export default function PulseStrip() {
         const line = atmosphericPressureFooter(snap.pressureHpa);
         if (line) row.note = line;
       }
-      await persistMoodToSupabase(row);
+      const ok = await persistMoodToSupabase(row);
+      if (!ok) {
+        throw new Error(
+          "Connect Supabase to save mood — tap again after configuring.",
+        );
+      }
       return row;
     },
     onSuccess: (row) => {
@@ -120,6 +126,10 @@ export default function PulseStrip() {
         }
       }
     },
+    onError: (e: unknown) => {
+      setErrorToast(e instanceof Error ? e.message : "Could not save mood.");
+      window.setTimeout(() => setErrorToast(null), 4200);
+    },
   });
 
   const linkSideEffect = useMutation({
@@ -139,7 +149,12 @@ export default function PulseStrip() {
         medicationName,
         symptoms: ["Crisis mood", "Suspected reaction"],
       };
-      await persistSideEffectLogToSupabase(log);
+      const ok = await persistSideEffectLogToSupabase(log);
+      if (!ok) {
+        throw new Error(
+          "Could not save side-effect link — check Supabase and try again.",
+        );
+      }
       return log;
     },
     onSuccess: (log) => {
@@ -150,6 +165,12 @@ export default function PulseStrip() {
       setSideEffectPrompt(null);
       setToast(toastLinkedMedication(log.medicationName));
       window.setTimeout(() => setToast(null), 4000);
+    },
+    onError: (e: unknown) => {
+      setErrorToast(
+        e instanceof Error ? e.message : "Could not save side-effect link.",
+      );
+      window.setTimeout(() => setErrorToast(null), 4200);
     },
   });
 
@@ -172,7 +193,7 @@ export default function PulseStrip() {
             <button
               key={value}
               type="button"
-              disabled={saveMood.isPending}
+              disabled={saveMood.isPending || linkSideEffect.isPending}
               onClick={() => saveMood.mutate(value)}
               title={label}
               aria-label={`Log mood: ${label}`}
@@ -203,6 +224,15 @@ export default function PulseStrip() {
           role="status"
         >
           {toast}
+        </p>
+      )}
+
+      {errorToast && (
+        <p
+          className="mt-4 rounded-lg border-2 border-red-800 bg-red-50 px-3 py-3 text-center text-base font-bold leading-snug text-red-950"
+          role="alert"
+        >
+          {errorToast}
         </p>
       )}
     </div>
