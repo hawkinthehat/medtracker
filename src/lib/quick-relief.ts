@@ -65,6 +65,20 @@ function norm(s: string) {
   return s.trim().toLowerCase();
 }
 
+/** If `medicationName` matches a quick-relief definition, return its display label for reporting. */
+export function quickReliefDisplayNameForLoggedMedication(
+  medicationName: string,
+): string | null {
+  const n = norm(medicationName);
+  for (const def of QUICK_RELIEF_DEFS) {
+    if (norm(def.displayName) === n) return def.displayName;
+    if (def.matchNames.some((m) => n === norm(m) || n.includes(norm(m)))) {
+      return def.displayName;
+    }
+  }
+  return null;
+}
+
 export function findSavedMedForQuickRelief(
   def: QuickReliefDef,
   medications: SavedMedication[],

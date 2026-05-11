@@ -1,6 +1,5 @@
 import {
   DEFAULT_DOSE_DURATION_MIN,
-  buildFallbackScheduleFromSeed,
   fetchScheduledDosesFromSupabase,
   normalizeMedName,
   type ScheduledDose,
@@ -73,7 +72,7 @@ export async function fetchMergedMedicationDoses(
     {};
 
   const remote = await fetchScheduledDosesFromSupabase();
-  const base =
-    remote.length > 0 ? remote : buildFallbackScheduleFromSeed(meds);
+  /** Timeline dose windows come from Supabase `medications` only — no bundled seed. */
+  const base = remote.length > 0 ? remote : [];
   return mergeProfilesIntoDoses(base, meds, profiles);
 }

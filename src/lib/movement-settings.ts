@@ -3,8 +3,8 @@
 const LS_WALK_LABEL = "tiaki-movement-walk-button-label";
 const LS_WALK_NOTES = "tiaki-movement-walk-notes-default";
 
-export const DEFAULT_WALK_BUTTON_LABEL = "Log Activity";
-export const DEFAULT_WALK_NOTES = "Physical activity session";
+export const DEFAULT_WALK_BUTTON_LABEL = "Walk Dogs";
+export const DEFAULT_WALK_NOTES = "Dog walk";
 
 export function getWalkButtonLabel(): string {
   if (typeof window === "undefined") return DEFAULT_WALK_BUTTON_LABEL;

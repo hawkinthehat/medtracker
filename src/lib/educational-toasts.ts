@@ -60,3 +60,6 @@ export const TOAST_DAILY_LOG =
 
 export const TOAST_SYMPTOM_MAP =
   "Body map saved! Visual symptom location helps clinicians compare visits.";
+
+export const TOAST_VITALS_PAIR =
+  "Lying and standing readings saved! Both are stored in your synced vitals history with compression noted.";

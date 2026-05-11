@@ -8,6 +8,7 @@ export default function ShellLayout({
 }) {
   return (
     <div className="flex min-h-dvh flex-col bg-background text-slate-900">
+      {/* Silent Scientist: nightly clinical correlation + metabolic pathway context */}
       <ClinicalCorrelationScheduler />
       <main className="mx-auto w-full max-w-5xl flex-1 bg-[#ffffff] px-4 pb-40 pt-6 sm:px-5">
         {children}

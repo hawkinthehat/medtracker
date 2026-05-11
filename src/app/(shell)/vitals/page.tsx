@@ -5,6 +5,7 @@ import GuidedOrthostaticCard from "@/components/GuidedOrthostaticCard";
 import OrthostaticTracker from "@/components/OrthostaticTracker";
 import PositionalDeltaChart from "@/components/vitals/PositionalDeltaChart";
 import VitalsChart from "@/components/vitals/VitalsChart";
+import VitalsLyingStandingQuickPair from "@/components/vitals/VitalsLyingStandingQuickPair";
 import { standing3mReading } from "@/lib/orthostatic-utils";
 import { qk } from "@/lib/query-keys";
 import type { OrthostaticSession, SwellingCheckEntry, VitalRow } from "@/lib/types";
@@ -15,10 +16,12 @@ import {
 } from "@/lib/edema-level-type";
 import {
   TOAST_ACTIVE_STAND,
-  TOAST_SPOT_VITAL,
   TOAST_SWELLING,
+  TOAST_VITALS_PAIR,
 } from "@/lib/educational-toasts";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { getSupabaseBrowserClient } from "@/lib/supabase/browser-client";
+import { persistVitalToSupabase } from "@/lib/supabase/vitals";
 
 export default function VitalsPage() {
   const qc = useQueryClient();
@@ -53,11 +56,33 @@ export default function VitalsPage() {
     refetchOnWindowFocus: false,
   });
 
-  const addVital = useMutation({
-    mutationFn: async (v: VitalRow) => v,
-    onSuccess: (row) => {
-      qc.setQueryData<VitalRow[]>(qk.vitals, (prev = []) => [row, ...prev]);
-      setVitalsToast(TOAST_SPOT_VITAL);
+  const saveLyingStandingPair = useMutation({
+    mutationFn: async (pair: { lying: VitalRow; standing: VitalRow }) => {
+      const sb = getSupabaseBrowserClient();
+      if (sb) {
+        const okL = await persistVitalToSupabase(pair.lying);
+        const okS = await persistVitalToSupabase(pair.standing);
+        if (!okL || !okS) {
+          throw new Error("Could not save vitals — check Supabase.");
+        }
+      }
+      return pair;
+    },
+    onSuccess: ({ lying, standing }) => {
+      qc.setQueryData<VitalRow[]>(qk.vitals, (prev = []) => [
+        standing,
+        lying,
+        ...prev,
+      ]);
+      setVitalsToast(TOAST_VITALS_PAIR);
+      setLieSys("");
+      setLieDia("");
+      setLieHr("");
+      setStandSys("");
+      setStandDia("");
+      setStandHr("");
+      setPairNotes("");
+      setCompressionGear(false);
     },
   });
 
@@ -86,29 +111,93 @@ export default function VitalsPage() {
   const [edemaLevel, setEdemaLevel] = useState<EdemaLevelType>("none");
   const [swellingNotes, setSwellingNotes] = useState("");
 
-  const [sys, setSys] = useState("");
-  const [dia, setDia] = useState("");
-  const [hr, setHr] = useState("");
-  const [notes, setNotes] = useState("");
+  const [lieSys, setLieSys] = useState("");
+  const [lieDia, setLieDia] = useState("");
+  const [lieHr, setLieHr] = useState("");
+  const [standSys, setStandSys] = useState("");
+  const [standDia, setStandDia] = useState("");
+  const [standHr, setStandHr] = useState("");
+  const [compressionGear, setCompressionGear] = useState(false);
+  const [pairNotes, setPairNotes] = useState("");
 
-  function submitSpot(e: React.FormEvent) {
+  const lyingParsed = useMemo(() => {
+    const s = Number(lieSys);
+    const d = Number(lieDia);
+    if (Number.isNaN(s) || Number.isNaN(d)) return null;
+    const hRaw = lieHr.trim();
+    const h = hRaw === "" ? undefined : Number(hRaw);
+    if (h !== undefined && Number.isNaN(h)) return null;
+    return { systolic: s, diastolic: d, heartRate: h };
+  }, [lieSys, lieDia, lieHr]);
+
+  const standingParsed = useMemo(() => {
+    const s = Number(standSys);
+    const d = Number(standDia);
+    if (Number.isNaN(s) || Number.isNaN(d)) return null;
+    const hRaw = standHr.trim();
+    const h = hRaw === "" ? undefined : Number(hRaw);
+    if (h !== undefined && Number.isNaN(h)) return null;
+    return { systolic: s, diastolic: d, heartRate: h };
+  }, [standSys, standDia, standHr]);
+
+  const deltaSummary = useMemo(() => {
+    if (!lyingParsed || !standingParsed) return null;
+    const dSys = lyingParsed.systolic - standingParsed.systolic;
+    const dDia = lyingParsed.diastolic - standingParsed.diastolic;
+    let hrLine: string | null = null;
+    if (
+      lyingParsed.heartRate != null &&
+      standingParsed.heartRate != null
+    ) {
+      const dHr = standingParsed.heartRate - lyingParsed.heartRate;
+      const sign = dHr > 0 ? "+" : "";
+      hrLine = `Δ HR (standing − lying): ${sign}${dHr} BPM`;
+    }
+    const sysSign = dSys > 0 ? "+" : "";
+    const diaSign = dDia > 0 ? "+" : "";
+    return {
+      dSys,
+      dDia,
+      sysLine: `Δ Systolic (lying − standing): ${sysSign}${dSys} mmHg`,
+      diaLine: `Δ Diastolic (lying − standing): ${diaSign}${dDia} mmHg`,
+      hrLine,
+    };
+  }, [lyingParsed, standingParsed]);
+
+  function submitLyingStanding(e: React.FormEvent) {
     e.preventDefault();
-    const s = Number(sys);
-    const d = Number(dia);
-    const h = hr.trim() === "" ? undefined : Number(hr);
-    if (Number.isNaN(s) || Number.isNaN(d)) return;
-    addVital.mutate({
+    if (!lyingParsed || !standingParsed) return;
+    const recordedAt = new Date().toISOString();
+    const pairId = crypto.randomUUID();
+    const baseUser = pairNotes.trim();
+    const line = (posture: "lying" | "standing") =>
+      [
+        baseUser || undefined,
+        `Paired orthostatic quick check · ${posture}`,
+        `pair_id:${pairId}`,
+      ]
+        .filter(Boolean)
+        .join("\n");
+
+    const lying: VitalRow = {
       id: crypto.randomUUID(),
-      recordedAt: new Date().toISOString(),
-      systolic: s,
-      diastolic: d,
-      heartRate: h !== undefined && !Number.isNaN(h) ? h : undefined,
-      notes: notes.trim() || undefined,
-    });
-    setSys("");
-    setDia("");
-    setHr("");
-    setNotes("");
+      recordedAt,
+      systolic: lyingParsed.systolic,
+      diastolic: lyingParsed.diastolic,
+      heartRate: lyingParsed.heartRate,
+      notes: line("lying"),
+      compressionGarment: compressionGear,
+    };
+    const standing: VitalRow = {
+      id: crypto.randomUUID(),
+      recordedAt,
+      systolic: standingParsed.systolic,
+      diastolic: standingParsed.diastolic,
+      heartRate: standingParsed.heartRate,
+      notes: line("standing"),
+      compressionGarment: compressionGear,
+    };
+    saveLyingStandingPair.mutate({ lying, standing });
   }
 
   function submitSwelling(e: React.FormEvent) {
@@ -138,16 +227,46 @@ export default function VitalsPage() {
         <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
           Vitals
         </h1>
-        <p className="mt-2 text-sm leading-relaxed text-slate-400">
-          Active stand test (gold-standard style orthostatic screen), optional
-          timed orthostatic flow, spot readings, and swelling checks.
+        <p className="mt-2 text-sm leading-relaxed text-slate-600">
+          <strong className="text-slate-900">Default:</strong> guided lying →
+          standing check first, then the quick pair if you want two linked rows in{" "}
+          <code className="rounded bg-slate-200 px-1 py-0.5 text-xs">vitals_readings</code>
+          . Optional extended timed stand lives in the collapsible section under your
+          charts.
         </p>
       </header>
 
+      <section className="rounded-2xl border-2 border-sky-900 bg-sky-50 p-4 text-sm font-semibold leading-snug text-slate-900 ring-1 ring-sky-200">
+        <strong className="text-base text-slate-950">Dysautonomia-first layout:</strong>{" "}
+        Tiaki surfaces the guided orthostatic card and quick lying/standing pair
+        before swelling and history so the screen matches how many clinics run a
+        visit.
+      </section>
+
       <GuidedOrthostaticCard onSaveSession={(session) => addOrtho.mutate(session)} />
 
-      <OrthostaticTracker
-        onComplete={(session) => addOrtho.mutate(session)}
+      <VitalsLyingStandingQuickPair
+        lieSys={lieSys}
+        setLieSys={setLieSys}
+        lieDia={lieDia}
+        setLieDia={setLieDia}
+        lieHr={lieHr}
+        setLieHr={setLieHr}
+        standSys={standSys}
+        setStandSys={setStandSys}
+        standDia={standDia}
+        setStandDia={setStandDia}
+        standHr={standHr}
+        setStandHr={setStandHr}
+        compressionGear={compressionGear}
+        setCompressionGear={setCompressionGear}
+        pairNotes={pairNotes}
+        setPairNotes={setPairNotes}
+        deltaSummary={deltaSummary}
+        lyingParsed={lyingParsed}
+        standingParsed={standingParsed}
+        saveLyingStandingPair={saveLyingStandingPair}
+        onSubmit={submitLyingStanding}
       />
 
       {orthostatic.length > 0 && standing3mReading(orthostatic[0]) && (
@@ -175,6 +294,17 @@ export default function VitalsPage() {
           </div>
         </section>
       )}
+
+      <details className="group rounded-2xl border border-slate-300 bg-white/98 ring-1 ring-slate-200/60 open:shadow-sm">
+        <summary className="cursor-pointer list-none px-4 py-4 text-lg font-semibold text-slate-900 [&::-webkit-details-marker]:hidden">
+          Optional: timed active stand / extended orthostatic flow
+        </summary>
+        <div className="border-t border-slate-200 px-4 pb-4 pt-2">
+          <OrthostaticTracker
+            onComplete={(session) => addOrtho.mutate(session)}
+          />
+        </div>
+      </details>
 
       <section className="rounded-2xl border border-slate-300 bg-white/98 p-4 ring-1 ring-slate-200/60">
         <h2 className="text-lg font-semibold text-slate-900">Swelling check</h2>
@@ -251,54 +381,6 @@ export default function VitalsPage() {
         )}
       </section>
 
-      <section className="rounded-2xl border border-slate-300 bg-white/98 p-4 ring-1 ring-slate-200/60">
-        <h2 className="text-lg font-semibold text-slate-900">Spot BP check</h2>
-        <form onSubmit={submitSpot} className="mt-4 space-y-3">
-          <div className="flex flex-wrap gap-3">
-            <label className="flex flex-col gap-1 text-sm text-slate-700">
-              Systolic
-              <input
-                inputMode="numeric"
-                className="w-28 rounded-lg border border-slate-300 bg-gray-50 px-3 py-2 text-slate-900"
-                value={sys}
-                onChange={(e) => setSys(e.target.value)}
-              />
-            </label>
-            <label className="flex flex-col gap-1 text-sm text-slate-700">
-              Diastolic
-              <input
-                inputMode="numeric"
-                className="w-28 rounded-lg border border-slate-300 bg-gray-50 px-3 py-2 text-slate-900"
-                value={dia}
-                onChange={(e) => setDia(e.target.value)}
-              />
-            </label>
-            <label className="flex flex-col gap-1 text-sm text-slate-700">
-              HR (optional)
-              <input
-                inputMode="numeric"
-                className="w-28 rounded-lg border border-slate-300 bg-gray-50 px-3 py-2 text-slate-900"
-                value={hr}
-                onChange={(e) => setHr(e.target.value)}
-              />
-            </label>
-          </div>
-          <label className="flex flex-col gap-1 text-sm text-slate-700">
-            Notes
-            <input
-              className="rounded-lg border border-slate-300 bg-gray-50 px-3 py-2 text-slate-900"
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-            />
-          </label>
-          <button
-            type="submit"
-            className="w-full rounded-xl bg-slate-700 py-3 text-sm font-semibold text-white hover:bg-slate-600"
-          >
-            Save reading
-          </button>
-        </form>
-      </section>
 
       <section>
         <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-500">

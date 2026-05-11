@@ -191,6 +191,9 @@ export default function HydrationTracker({
               </p>
             </FeatureHelpTrigger>
           </div>
+          <span className="shrink-0 rounded-lg border border-amber-700 bg-amber-100 px-2 py-1 text-xs font-black tabular-nums text-amber-950">
+            Salt {sodiumMgToday} mg
+          </span>
         </div>
       )}
 

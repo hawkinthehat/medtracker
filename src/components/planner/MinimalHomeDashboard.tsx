@@ -14,6 +14,7 @@ import DueMedicationsChecklist from "@/components/planner/DueMedicationsChecklis
 import MedicationManager from "@/components/planner/MedicationManager";
 import SymptomCanvas from "@/components/journal/SymptomCanvas";
 import TiakiFirstTimeMedicationSetup from "@/components/home/TiakiFirstTimeMedicationSetup";
+import NewUserSetupChecklist from "@/components/home/NewUserSetupChecklist";
 import TiakiHomeWeatherSection from "@/components/home/TiakiHomeWeatherSection";
 import QuickRelief from "@/components/home/QuickRelief";
 import WelcomeWizard from "@/components/WelcomeWizard";
@@ -38,7 +39,6 @@ import {
 } from "@/lib/weather";
 import type { SavedMedication } from "@/lib/seed-medications";
 import {
-  isBaselinesComplete,
   isWelcomeWizardComplete,
   loadBaselines,
   type BaselinesProfile,
@@ -73,7 +73,6 @@ export default function MinimalHomeDashboard() {
   );
   const [doseModalTab, setDoseModalTab] = useState<DoseModalTab>("adjust");
   const [baselines, setBaselines] = useState<BaselinesProfile>(loadBaselines);
-  const [baselinesPromptVisible, setBaselinesPromptVisible] = useState(false);
   const [welcomeOpen, setWelcomeOpen] = useState<boolean | null>(null);
 
   useEffect(() => {
@@ -88,10 +87,8 @@ export default function MinimalHomeDashboard() {
 
   useEffect(() => {
     setBaselines(loadBaselines());
-    setBaselinesPromptVisible(!isBaselinesComplete());
     const onBaselines = () => {
       setBaselines(loadBaselines());
-      setBaselinesPromptVisible(!isBaselinesComplete());
     };
     window.addEventListener("tiaki-baselines-updated", onBaselines);
     return () =>
@@ -168,26 +165,7 @@ export default function MinimalHomeDashboard() {
 
       <TiakiHomeWeatherSection />
 
-      {baselinesPromptVisible && (
-        <aside
-          role="status"
-          className="rounded-2xl border-4 border-violet-800 bg-violet-100 px-5 py-5 shadow-md"
-        >
-          <p className="text-xl font-black leading-snug text-slate-950">
-            Personalize your daily goals
-          </p>
-          <p className="mt-2 text-base font-semibold text-slate-800">
-            Set target water, salt, and typical symptoms so your home progress
-            bars match your care plan.
-          </p>
-          <Link
-            href="/profile-setup"
-            className="mt-4 inline-flex min-h-[56px] items-center justify-center rounded-2xl border-4 border-black bg-white px-6 text-lg font-black uppercase tracking-wide text-slate-950 shadow-sm transition hover:bg-slate-50"
-          >
-            Open profile setup
-          </Link>
-        </aside>
-      )}
+      <NewUserSetupChecklist />
 
       <div className="rounded-2xl border-4 border-black bg-gradient-to-r from-sky-600 via-sky-700 to-indigo-800 px-5 py-6 shadow-xl">
         <p className="text-[11px] font-black uppercase tracking-[0.4em] text-white/90">

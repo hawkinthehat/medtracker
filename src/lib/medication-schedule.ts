@@ -147,18 +147,24 @@ export async function fetchScheduledDosesFromSupabase(): Promise<
   return [];
 }
 
-/** Demo timeline when Supabase is unset or returns no rows — staggers seed meds across the day. */
-export function buildFallbackScheduleFromSeed(
+/**
+ * Optional staggered dose windows derived from the user's medication list (local
+ * preview / “Quick schedule” helper). Does not write to Supabase by itself.
+ */
+export function buildQuickSuggestedScheduleFromMedications(
   meds: SavedMedication[] = [],
 ): ScheduledDose[] {
   return meds.map((m, i) => ({
-    id: `fallback-${m.id}`,
+    id: `suggested-${m.id}`,
     medicationName: m.name,
     startMinute:
       (8 * 60 + i * 77 + (m.name.length % 13) * 5) % (14 * 60) + 6 * 60,
     durationMinutes: DEFAULT_DOSE_DURATION_MIN,
   }));
 }
+
+/** @deprecated Use {@link buildQuickSuggestedScheduleFromMedications}. */
+export const buildFallbackScheduleFromSeed = buildQuickSuggestedScheduleFromMedications;
 
 export type RedZoneInterval = { start: number; end: number };
 

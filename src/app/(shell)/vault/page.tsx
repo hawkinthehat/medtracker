@@ -7,6 +7,7 @@ import {
   rollingAverageMood7d,
 } from "@/lib/clinical-summary-stats";
 import { generateTransitionClinicalPdf } from "@/lib/transition-summary-pdf";
+import { openSpecialistReportHtmlWindow } from "@/lib/specialist-report-html";
 import { qk } from "@/lib/query-keys";
 import { fetchMedicationsQuery } from "@/lib/medications-query";
 import { getCompletedTemporaryMedications } from "@/lib/medication-active";
@@ -17,12 +18,18 @@ import type {
   OrthostaticSession,
   SafetyGateBlockEvent,
 } from "@/lib/types";
+import { fetchMedicationLogsFromSupabase } from "@/lib/supabase/medication-logs";
+import { fetchWeatherLogsFromSupabase } from "@/lib/supabase/weather-logs";
 import {
   HISTAMINE_TRIGGER_WINDOW_MS,
   findSuspectedHistamineTriggerFoodIds,
 } from "@/lib/trigger-finder";
 import { useMemo } from "react";
-import { AlertTriangle, FileDown } from "lucide-react";
+import {
+  AlertTriangle,
+  FileDown,
+  Stethoscope,
+} from "lucide-react";
 import ClinicalSummaryCard from "@/components/ClinicalSummaryCard";
 import SideEffectTracker from "@/components/SideEffectTracker";
 import TaperSensitivitySection from "@/components/TaperSensitivitySection";
@@ -83,6 +90,22 @@ export default function VaultPage() {
     refetchOnWindowFocus: false,
   });
 
+  const { data: medicationLogs = [] } = useQuery({
+    queryKey: qk.medicationLogs,
+    queryFn: () => fetchMedicationLogsFromSupabase(300),
+    staleTime: 30_000,
+    gcTime: 1000 * 60 * 60 * 24 * 7,
+    refetchOnWindowFocus: true,
+  });
+
+  const { data: weatherLogs = [] } = useQuery({
+    queryKey: qk.weatherLogs,
+    queryFn: () => fetchWeatherLogsFromSupabase(400),
+    staleTime: 60_000,
+    gcTime: 1000 * 60 * 60 * 24 * 7,
+    refetchOnWindowFocus: true,
+  });
+
   const { data: safetyGateBlocks = [] } = useQuery({
     queryKey: qk.safetyGateBlocks,
     queryFn: async (): Promise<SafetyGateBlockEvent[]> => [],
@@ -139,6 +162,20 @@ export default function VaultPage() {
     },
   });
 
+  const specialistReport = useMutation({
+    mutationFn: async () => {
+      const ok = openSpecialistReportHtmlWindow({
+        orthostatic,
+        medicationLogs,
+        dailyLogs,
+        weatherLogs,
+      });
+      if (!ok) {
+        throw new Error("Popup blocked — allow popups for Tiaki to view the report.");
+      }
+    },
+  });
+
   return (
     <div className="space-y-8">
       <header>
@@ -156,6 +193,40 @@ export default function VaultPage() {
           your allergist-led diet planning.
         </p>
       </header>
+
+      <section className="rounded-2xl border border-slate-300 bg-white/98 p-4 ring-1 ring-slate-200/60">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-2">
+              <Stethoscope className="h-5 w-5 text-slate-600" aria-hidden />
+              <h2 className="text-lg font-semibold text-slate-900">
+                Medical Vault — specialist report
+              </h2>
+            </div>
+            <p className="mt-1 max-w-prose text-sm leading-relaxed text-slate-600">
+              Seven-day orthostatic BP/HR deltas, total water and Thermotabs sodium,
+              and episode notes correlated with logged barometric swings — opens a
+              high-contrast printable HTML view (use your browser print dialog).
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => specialistReport.mutate()}
+            disabled={specialistReport.isPending}
+            className="inline-flex items-center gap-2 rounded-xl border border-slate-800 bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50"
+          >
+            <FileDown className="h-4 w-4" aria-hidden />
+            {specialistReport.isPending ? "Opening…" : "Generate Specialist Report"}
+          </button>
+        </div>
+        {specialistReport.isError && (
+          <p className="mt-4 text-sm text-red-600" role="alert">
+            {specialistReport.error instanceof Error
+              ? specialistReport.error.message
+              : "Could not open report. Try again."}
+          </p>
+        )}
+      </section>
 
       <section className="rounded-2xl border border-slate-300 bg-white/98 p-4 ring-1 ring-slate-200/60">
         <h2 className="text-lg font-semibold text-slate-900">

@@ -12,6 +12,7 @@ import {
   Share2,
   FileText,
   UtensilsCrossed,
+  Settings2,
 } from "lucide-react";
 
 const links = [
@@ -22,6 +23,7 @@ const links = [
   { href: "/journal", label: "Journal", Icon: BookOpen },
   { href: "/vault", label: "Vault", Icon: Archive },
   { href: "/clinical", label: "Clinical", Icon: LineChart },
+  { href: "/settings", label: "Settings", Icon: Settings2 },
   { href: "/doctor-report", label: "Doctor Report", Icon: FileText },
   { href: "/transfer", label: "Transfer", Icon: Share2 },
 ] as const;

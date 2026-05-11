@@ -1,5 +1,5 @@
 export const qk = {
-  /** `v3`: positional-risk flags (OH + dizziness) on seed drugs. */
+  /** `v3`: positional-risk flags (OH + dizziness) on catalog medications. */
   medications: ["medications", "v3"] as const,
   vitals: ["vitals"] as const,
   swellingChecks: ["swellingChecks"] as const,
@@ -28,6 +28,8 @@ export const qk = {
   medicationTimeline: ["medicationTimeline"] as const,
   /** OpenWeather 12h pressure-drop advisory (Tiaki) */
   weatherPressureAdvisory: ["weather", "pressureAdvisory", "v1"] as const,
+  /** Supabase `weather_logs` barometric samples */
+  weatherLogs: ["weatherLogs", "v1"] as const,
   /** PRN quick-relief logs (`medication_logs`) */
   medicationLogs: ["medicationLogs", "v1"] as const,
   /** Symptom map rows per body region (`pain_map`) */

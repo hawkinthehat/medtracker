@@ -1,20 +1,19 @@
 "use client";
 
 import { useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { qk } from "@/lib/query-keys";
 import {
   assignDoseLanes,
-  buildFallbackScheduleFromSeed,
   computeBloodPressureClusterZones,
   computeFluconazoleWindows,
-  fetchScheduledDosesFromSupabase,
   isBloodPressureLoweringName,
   isFluconazoleName,
   isGleevecOrLatudaName,
   substrateDosesWithInhibitorGlow,
   type ScheduledDose,
 } from "@/lib/medication-schedule";
+import { fetchMergedMedicationDoses } from "@/lib/merge-medication-doses";
 
 function minuteToPct(m: number): number {
   return (m / (24 * 60)) * 100;
@@ -27,13 +26,10 @@ function formatHourTick(h: number): string {
 }
 
 export default function DailySchedule() {
+  const qc = useQueryClient();
   const { data: doses = [], isFetching } = useQuery({
     queryKey: qk.medicationTimeline,
-    queryFn: async (): Promise<ScheduledDose[]> => {
-      const remote = await fetchScheduledDosesFromSupabase();
-      if (remote.length > 0) return remote;
-      return buildFallbackScheduleFromSeed();
-    },
+    queryFn: (): Promise<ScheduledDose[]> => fetchMergedMedicationDoses(qc),
     staleTime: 1000 * 60 * 5,
     gcTime: 1000 * 60 * 60 * 24 * 7,
   });
@@ -71,14 +67,17 @@ export default function DailySchedule() {
             Daily schedule (24h)
           </h2>
           <p className="mt-1 max-w-prose text-sm font-medium text-slate-900">
-            Pulled from Supabase when{" "}
+            Dose windows come from your Supabase{" "}
             <code className="rounded border border-slate-300 bg-slate-100 px-1 py-0.5 text-xs font-semibold text-slate-900">
-              NEXT_PUBLIC_SUPABASE_URL
+              medications
             </code>{" "}
-            is set; otherwise demo times from your med list. Yellow bands: two
-            different BP-lowering meds within 2h. Violet wash + red glow: Gleevec
-            / Latuda during modeled strong CYP3A4 inhibition windows when those
-            drugs appear on your timeline.
+            table (and per-med scheduled times you set in Tiaki). If the chart is
+            empty, add meds on the Meds page and use{" "}
+            <strong className="font-semibold">Quick sync to timeline</strong> when
+            you are ready to publish suggested times. Yellow bands: two different
+            BP-lowering meds within 2h. Violet wash + red glow: Gleevec / Latuda
+            during modeled strong CYP3A4 inhibition windows when those drugs appear
+            on your timeline.
           </p>
         </div>
         {isFetching && (
@@ -87,6 +86,15 @@ export default function DailySchedule() {
       </div>
 
       <div className="relative mt-6">
+        {doses.length === 0 && !isFetching ? (
+          <p className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-center text-sm font-medium text-slate-700">
+            No dose windows yet. Add medications, then use{" "}
+            <strong className="text-slate-900">Quick sync to timeline</strong> on
+            the Meds page to write suggested times to Supabase, or set times in
+            dose adjustment.
+          </p>
+        ) : (
+        <>
         <div
           className="relative overflow-hidden rounded-xl border border-slate-200 bg-slate-100/90"
           style={{ height: `${96 + laneCount * 40}px` }}
@@ -182,6 +190,8 @@ export default function DailySchedule() {
           <span>6 PM</span>
           <span>12 AM</span>
         </div>
+        </>
+        )}
       </div>
 
       <ul className="mt-4 space-y-2 text-xs font-medium text-slate-900">

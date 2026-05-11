@@ -24,6 +24,8 @@ import {
   timesForFrequency,
 } from "@/lib/medication-dose-frequency-save";
 import { upsertPublicMedicationRemote } from "@/lib/supabase/medications-timeline";
+import { getSupabaseBrowserClient } from "@/lib/supabase/browser-client";
+import { syncPublicMedicationTimelineFromUserList } from "@/lib/medication-timeline-quick-sync";
 
 const FREQUENCY_LABELS: Record<FrequencyHint, string> = {
   "1x": "1× daily",
@@ -90,6 +92,12 @@ export default function MedsPage() {
     },
   });
 
+  const quickTimelineSync = useMutation({
+    mutationFn: () => syncPublicMedicationTimelineFromUserList(qc),
+  });
+
+  const supabaseReady = Boolean(getSupabaseBrowserClient());
+
   function handleAdd(e: React.FormEvent) {
     e.preventDefault();
     const trimmed = name.trim();
@@ -131,7 +139,71 @@ export default function MedsPage() {
         </p>
       </header>
 
+      {activeMedications.length === 0 ? (
+        <section
+          aria-labelledby="meds-welcome-heading"
+          className="rounded-2xl border border-sky-200 bg-sky-50/90 p-6 ring-1 ring-sky-100"
+        >
+          <h2
+            id="meds-welcome-heading"
+            className="text-lg font-semibold text-slate-900"
+          >
+            Welcome — add your first medication
+          </h2>
+          <p className="mt-2 text-sm leading-relaxed text-slate-700">
+            Tiaki starts with an empty list so nothing is assumed on shared
+            devices. Use the form below to enter a drug name, dose, and how
+            often you take it. You can add more anytime.
+          </p>
+        </section>
+      ) : null}
+
       <DailySchedule />
+
+      {activeMedications.length > 0 ? (
+        <section className="rounded-2xl border border-slate-300 bg-white/98 p-4 ring-1 ring-slate-200/60">
+          <h2 className="text-lg font-semibold text-slate-900">
+            Quick sync to timeline
+          </h2>
+          <p className="mt-1 max-w-prose text-sm text-slate-600">
+            When you are ready, write suggested dose clock times from each
+            medication&apos;s frequency hint into the Supabase{" "}
+            <code className="rounded border border-slate-300 bg-slate-100 px-1 text-xs font-semibold">
+              medications
+            </code>{" "}
+            table so the 24h chart and &quot;Due now&quot; windows populate. This
+            only runs when you tap the button — nothing is auto-seeded.
+          </p>
+          <button
+            type="button"
+            disabled={!supabaseReady || quickTimelineSync.isPending}
+            onClick={() => quickTimelineSync.mutate()}
+            className="mt-4 min-h-[52px] rounded-xl border border-sky-700 bg-sky-600 px-5 py-3 text-sm font-semibold text-white hover:bg-sky-500 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {quickTimelineSync.isPending
+              ? "Syncing…"
+              : "Write suggested times to Supabase"}
+          </button>
+          {!supabaseReady ? (
+            <p className="mt-3 text-xs font-medium text-amber-800">
+              Connect Supabase in your environment to enable timeline sync.
+            </p>
+          ) : null}
+          {quickTimelineSync.isSuccess ? (
+            <p className="mt-3 text-sm font-medium text-emerald-800" role="status">
+              Wrote {quickTimelineSync.data.ok} medication row(s).
+              {quickTimelineSync.data.fail > 0
+                ? ` ${quickTimelineSync.data.fail} could not be saved (check RLS or network).`
+                : ""}
+            </p>
+          ) : null}
+          {quickTimelineSync.isError ? (
+            <p className="mt-3 text-sm text-red-600" role="alert">
+              Sync failed. Try again.
+            </p>
+          ) : null}
+        </section>
+      ) : null}
 
       <MedicationsSafetyPanel
         medications={activeMedications}

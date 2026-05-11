@@ -2,8 +2,13 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { X } from "lucide-react";
 import { FeatureHelpTrigger } from "@/components/FeatureHelpModal";
 import { qk } from "@/lib/query-keys";
+import {
+  isPressureAdvisorySuppressed,
+  suppressPressureAdvisory4h,
+} from "@/lib/pressure-advisory-snooze";
 import { checkPressureDrop } from "@/lib/weather";
 
 const LS_ALERTS = "tiaki-weather-alerts-enabled";
@@ -58,6 +63,7 @@ export default function TiakiHomeWeatherSection() {
   });
 
   const [alertsOn, setAlertsOn] = useState(false);
+  const [advisoryTick, setAdvisoryTick] = useState(0);
 
   useEffect(() => {
     try {
@@ -65,6 +71,12 @@ export default function TiakiHomeWeatherSection() {
     } catch {
       setAlertsOn(false);
     }
+  }, []);
+
+  /** Re-check snooze expiry without full page reload (~1 min). */
+  useEffect(() => {
+    const id = window.setInterval(() => setAdvisoryTick((n) => n + 1), 60_000);
+    return () => window.clearInterval(id);
   }, []);
 
   const pushCoordsToCaches = useCallback(async (enabled: boolean) => {
@@ -190,9 +202,17 @@ export default function TiakiHomeWeatherSection() {
   }
 
   const showBanner = advisory?.weatherWarning === true;
+  void advisoryTick;
+  const advisorySuppressed = isPressureAdvisorySuppressed();
+  const showAdvisoryCard = showBanner && !advisorySuppressed;
+
+  function dismissAdvisory() {
+    suppressPressureAdvisory4h();
+    setAdvisoryTick((n) => n + 1);
+  }
 
   return (
-    <div className="space-y-4">
+    <div id="tiaki-barometer" className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border-4 border-slate-900 bg-white px-4 py-4 shadow-sm">
         <h2 className="text-lg font-black tracking-tight text-slate-900 sm:text-xl">
           Barometric pressure
@@ -221,13 +241,22 @@ export default function TiakiHomeWeatherSection() {
         </FeatureHelpTrigger>
       </div>
 
-      {showBanner && (
+      {showAdvisoryCard && (
         <section
           role="alert"
           aria-live="polite"
-          className="rounded-2xl border-4 border-amber-700 bg-amber-300 p-5 shadow-lg ring-4 ring-amber-500/80"
+          className="relative z-40 rounded-2xl border-4 border-amber-700 bg-amber-300 p-5 pb-6 shadow-lg ring-4 ring-amber-500/80"
         >
-          <p className="text-center text-xl font-black leading-snug text-slate-950 sm:text-2xl">
+          <button
+            type="button"
+            onClick={dismissAdvisory}
+            className="absolute right-3 top-3 inline-flex h-12 w-12 items-center justify-center rounded-xl border-4 border-black bg-white text-slate-900 shadow-md transition hover:bg-slate-100 focus-visible:outline focus-visible:ring-4 focus-visible:ring-sky-500"
+            aria-label="Close advisory"
+          >
+            <span className="sr-only">Close</span>
+            <X className="h-7 w-7" strokeWidth={2.5} aria-hidden />
+          </button>
+          <p className="pr-16 text-center text-xl font-black leading-snug text-slate-950 sm:text-2xl">
             Atmospheric pressure shift detected. Maintain hydration and salt
             protocols per your care plan.
           </p>
@@ -238,6 +267,17 @@ export default function TiakiHomeWeatherSection() {
               → min {Math.round(advisory.minPressureHpa)} hPa).
             </p>
           )}
+          <button
+            type="button"
+            onClick={dismissAdvisory}
+            className="mt-6 min-h-[64px] w-full rounded-2xl border-4 border-black bg-white px-6 py-5 text-xl font-black uppercase tracking-wide text-slate-950 shadow-md transition hover:bg-slate-100 focus-visible:outline focus-visible:ring-4 focus-visible:ring-sky-500"
+          >
+            Dismiss for 4 hours
+          </button>
+          <p className="mt-3 text-center text-sm font-semibold text-slate-800">
+            This card stays below the navigation bar (z-index) so bottom tabs stay
+            tappable. Snooze uses local device storage.
+          </p>
         </section>
       )}
 
