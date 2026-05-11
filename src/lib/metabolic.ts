@@ -124,6 +124,48 @@ export const checkMetabolicConflict = (
   };
 };
 
+/** Adding a substrate when an inhibitor on the same pathway is already on the list. */
+export function checkSubstrateAgainstExistingInhibitors(
+  newMed: Medication,
+  currentMeds: Medication[],
+): InteractionCheck {
+  if (
+    !newMed.is_substrate ||
+    !newMed.pathway ||
+    newMed.pathway === "Other / Unknown"
+  ) {
+    return { isSafe: true, severity: "NONE", message: "—" };
+  }
+  const inhibitor = currentMeds.find(
+    (m) =>
+      m.is_inhibitor &&
+      m.pathway === newMed.pathway &&
+      m.pathway !== "Other / Unknown",
+  );
+  if (inhibitor) {
+    return {
+      isSafe: false,
+      severity: "RED_ALERT",
+      message: `CRITICAL: ${inhibitor.name} already inhibits the ${newMed.pathway} pathway. Adding ${newMed.name.trim() || "this medication"} as a substrate may elevate blood levels — consult your clinician before combining.`,
+    };
+  }
+  return {
+    isSafe: true,
+    severity: "NONE",
+    message: "No inhibitor overlap for this substrate.",
+  };
+}
+
+/** Full preview for Smart Add: new inhibitor vs substrates, or new substrate vs inhibitors. */
+export function previewMedicationInteraction(
+  draft: Medication,
+  currentMeds: Medication[],
+): InteractionCheck {
+  const asInhibitor = checkMetabolicConflict(draft, currentMeds);
+  if (!asInhibitor.isSafe) return asInhibitor;
+  return checkSubstrateAgainstExistingInhibitors(draft, currentMeds);
+}
+
 /** Live Smart Add preview: CYP3A4 inhibitor vs substrates already on the list. */
 export function getCyp3a4BottleneckHint(
   newMed: Medication,

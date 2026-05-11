@@ -1,4 +1,10 @@
 import type { MedicationHistoryEntry } from "@/lib/medication-profile-types";
+import type { MedicationLogRow } from "@/lib/supabase/medication-logs";
+import {
+  calendarDayKeyLocal,
+  getActiveMedications,
+  getRecentlyCompletedTemporaryMedications,
+} from "@/lib/medication-active";
 import type { SavedMedication } from "@/lib/seed-medications";
 import type {
   ClinicalCorrelationSnapshot,
@@ -399,6 +405,7 @@ export type DoctorReportInput = {
   dailyLogs: DailyLogEntry[];
   safetyGateBlocks: SafetyGateBlockEvent[];
   sideEffectLogs: SideEffectLog[];
+  medicationLogs: MedicationLogRow[];
 };
 
 export function compileDoctorReportBundle(
@@ -424,6 +431,16 @@ export async function generateDoctorSpecialistPdf(
 
   const bundle = compileDoctorReportBundle(input);
   const doc = new jsPDF({ unit: "mm", format: "letter" });
+  const todayKey = calendarDayKeyLocal();
+  const activeMedicationRows = getActiveMedications(
+    bundle.medications,
+    todayKey,
+  );
+  const recentlyCompletedTemps = getRecentlyCompletedTemporaryMedications(
+    bundle.medications,
+    todayKey,
+    90,
+  );
   const pageW = doc.internal.pageSize.getWidth();
   let y = 14;
 
@@ -454,7 +471,7 @@ export async function generateDoctorSpecialistPdf(
   autoTable(doc, {
     startY: y,
     head: [["Medication", "Class / notes (seed)"]],
-    body: bundle.medications.map((m) => [
+    body: activeMedicationRows.map((m) => [
       m.name,
       m.pathway_role ?? m.pathway,
     ]),
@@ -470,7 +487,32 @@ export async function generateDoctorSpecialistPdf(
 
   let nextY = (doc as PdfWithAutoTable).lastAutoTable.finalY;
 
+  if (recentlyCompletedTemps.length > 0) {
+    doc.setFontSize(12);
+    doc.setTextColor(15, 23, 42);
+    doc.text("Recently completed medications (temporary courses, last 90 days)", 14, nextY + 12);
+    autoTable(doc, {
+      startY: nextY + 16,
+      head: [["Medication", "Start", "End", "Last dose line"]],
+      body: recentlyCompletedTemps.map((m) => [
+        m.name,
+        m.tempStartDate ?? "—",
+        m.tempEndDate ?? "—",
+        m.doseLabel ?? "—",
+      ]),
+      styles: { fontSize: 8, cellPadding: 1.8, textColor: [15, 23, 42] },
+      headStyles: {
+        fillColor: [226, 232, 240],
+        textColor: [15, 23, 42],
+        fontStyle: "bold",
+      },
+      theme: "plain",
+    });
+    nextY = (doc as PdfWithAutoTable).lastAutoTable.finalY;
+  }
+
   doc.setFontSize(12);
+  doc.setTextColor(15, 23, 42);
   doc.text("Medication & schedule change history", 14, nextY + 12);
   autoTable(doc, {
     startY: nextY + 16,
@@ -492,6 +534,44 @@ export async function generateDoctorSpecialistPdf(
   });
 
   nextY = (doc as PdfWithAutoTable).lastAutoTable.finalY;
+
+  if (bundle.medicationLogs.length > 0) {
+    doc.setFontSize(12);
+    doc.setTextColor(15, 23, 42);
+    doc.text(
+      "Quick relief (PRN) logs — symptom-map correlation",
+      14,
+      nextY + 12,
+    );
+    doc.setFontSize(9);
+    doc.setTextColor(71, 85, 105);
+    doc.text(
+      "When a flare was marked on the body map within 30 minutes, Tiaki links the dose to that region for efficacy review.",
+      14,
+      nextY + 17,
+      { maxWidth: 180 },
+    );
+    autoTable(doc, {
+      startY: nextY + 22,
+      head: [["Time", "Medication", "Dose", "AM/PM", "Symptom-map link"]],
+      body: bundle.medicationLogs.slice(0, 60).map((l) => [
+        new Date(l.recordedAt).toLocaleString(),
+        l.medicationName,
+        l.dosageLabel,
+        l.period,
+        l.linkSummary ?? "—",
+      ]),
+      styles: { fontSize: 7, cellPadding: 1.6, textColor: [15, 23, 42] },
+      headStyles: {
+        fillColor: [224, 231, 255],
+        textColor: [15, 23, 42],
+        fontStyle: "bold",
+      },
+      columnStyles: { 4: { cellWidth: 62 } },
+      theme: "plain",
+    });
+    nextY = (doc as PdfWithAutoTable).lastAutoTable.finalY;
+  }
 
   doc.setFontSize(12);
   doc.setTextColor(127, 29, 29);

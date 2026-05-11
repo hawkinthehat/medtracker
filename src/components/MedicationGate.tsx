@@ -1,26 +1,40 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import type { Medication } from "@/lib/metabolic";
 import {
   PRIMARY_PATHWAYS,
   checkMetabolicConflict,
   checkOrthostaticHypotensionAdditive,
 } from "@/lib/metabolic";
-import {
-  SEED_SAVED_MEDICATIONS,
-  type SavedMedication,
-} from "@/lib/seed-medications";
+import { qk } from "@/lib/query-keys";
+import { fetchMedicationsQuery } from "@/lib/medications-query";
+import { getActiveMedications } from "@/lib/medication-active";
+import type { SavedMedication } from "@/lib/seed-medications";
 
-const MOCK_CURRENT_MEDS: Medication[] = SEED_SAVED_MEDICATIONS.map(
-  (row: SavedMedication) => {
+function toMedicationRows(rows: SavedMedication[]): Medication[] {
+  return rows.map((row) => {
     const { id: _, ...med } = row;
     void _;
     return med;
-  }
-);
+  });
+}
 
 export default function MedicationGate() {
+  const { data: saved = [] } = useQuery({
+    queryKey: qk.medications,
+    queryFn: fetchMedicationsQuery,
+    staleTime: Infinity,
+    gcTime: 1000 * 60 * 60 * 24 * 30,
+    refetchOnWindowFocus: false,
+  });
+
+  const currentMeds = useMemo(
+    () => toMedicationRows(getActiveMedications(saved)),
+    [saved],
+  );
+
   const [name, setName] = useState("");
   const [pathway, setPathway] = useState<string>(PRIMARY_PATHWAYS[0]);
   const [isInhibitor, setIsInhibitor] = useState(false);
@@ -39,14 +53,14 @@ export default function MedicationGate() {
   );
 
   const check = useMemo(
-    () => checkMetabolicConflict(draftMed, MOCK_CURRENT_MEDS),
-    [draftMed]
+    () => checkMetabolicConflict(draftMed, currentMeds),
+    [draftMed, currentMeds],
   );
 
   const additiveOrthostatic = useMemo(
     () =>
-      checkOrthostaticHypotensionAdditive([...MOCK_CURRENT_MEDS, draftMed]),
-    [draftMed]
+      checkOrthostaticHypotensionAdditive([...currentMeds, draftMed]),
+    [draftMed, currentMeds],
   );
 
   const unsafe = !check.isSafe;
@@ -74,7 +88,9 @@ export default function MedicationGate() {
         }`}
       >
         Checking against current list:{" "}
-        {MOCK_CURRENT_MEDS.map((m) => m.name).join(", ")}.
+        {currentMeds.length
+          ? currentMeds.map((m) => m.name).join(", ")
+          : "(none saved yet)"}.
       </p>
 
       <div className="mt-4 space-y-3">

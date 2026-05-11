@@ -49,7 +49,7 @@ export default function DueMedicationsChecklist() {
       className="rounded-2xl border-2 border-slate-900 bg-white p-4 shadow-sm"
     >
       <div className="flex items-center gap-2">
-        <Pill className="h-5 w-5 text-slate-900" aria-hidden />
+        <Pill className="h-9 w-9 text-slate-900" aria-hidden />
         <h2
           id="due-meds-heading"
           className="text-base font-bold tracking-tight text-slate-900"

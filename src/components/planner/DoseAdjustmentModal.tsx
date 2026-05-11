@@ -22,10 +22,8 @@ import {
 } from "@/lib/medication-profile-types";
 import { defaultDoseMgForMedicationName } from "@/lib/medication-dose-defaults";
 import { qk } from "@/lib/query-keys";
-import {
-  SEED_SAVED_MEDICATIONS,
-  type SavedMedication,
-} from "@/lib/seed-medications";
+import { fetchMedicationsQuery } from "@/lib/medications-query";
+import type { SavedMedication } from "@/lib/seed-medications";
 import {
   fetchMedicationHistoryFromSupabase,
   fetchMedicationProfilesFromSupabase,
@@ -64,7 +62,7 @@ export default function DoseAdjustmentModal({
 
   const { data: medications = [] } = useQuery({
     queryKey: qk.medications,
-    queryFn: async (): Promise<SavedMedication[]> => SEED_SAVED_MEDICATIONS,
+    queryFn: fetchMedicationsQuery,
     staleTime: Infinity,
     gcTime: 1000 * 60 * 60 * 24 * 30,
     refetchOnWindowFocus: false,

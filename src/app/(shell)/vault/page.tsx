@@ -8,10 +8,8 @@ import {
 } from "@/lib/clinical-summary-stats";
 import { generateTransitionClinicalPdf } from "@/lib/transition-summary-pdf";
 import { qk } from "@/lib/query-keys";
-import {
-  SEED_SAVED_MEDICATIONS,
-  type SavedMedication,
-} from "@/lib/seed-medications";
+import { fetchMedicationsQuery } from "@/lib/medications-query";
+import { getCompletedTemporaryMedications } from "@/lib/medication-active";
 import type {
   BrainFogEntry,
   JournalEntry,
@@ -55,7 +53,7 @@ export default function VaultPage() {
 
   const { data: medications = [] } = useQuery({
     queryKey: qk.medications,
-    queryFn: async (): Promise<SavedMedication[]> => SEED_SAVED_MEDICATIONS,
+    queryFn: fetchMedicationsQuery,
     staleTime: Infinity,
     gcTime: 1000 * 60 * 60 * 24 * 30,
     refetchOnWindowFocus: false,
@@ -92,6 +90,14 @@ export default function VaultPage() {
     gcTime: 1000 * 60 * 60 * 24 * 30,
     refetchOnWindowFocus: false,
   });
+
+  const completedTemporaryMeds = useMemo(
+    () =>
+      getCompletedTemporaryMedications(medications).sort((a, b) =>
+        (b.tempEndDate ?? "").localeCompare(a.tempEndDate ?? ""),
+      ),
+    [medications],
+  );
 
   const suspectFoodIds = useMemo(
     () => findSuspectedHistamineTriggerFoodIds(dailyLogs, journal),
@@ -150,6 +156,42 @@ export default function VaultPage() {
           your allergist-led diet planning.
         </p>
       </header>
+
+      <section className="rounded-2xl border border-slate-300 bg-white/98 p-4 ring-1 ring-slate-200/60">
+        <h2 className="text-lg font-semibold text-slate-900">
+          Completed medications
+        </h2>
+        <p className="mt-1 max-w-prose text-sm leading-relaxed text-slate-600">
+          Temporary prescriptions that have reached their end date are hidden
+          from daily lists but kept here and in{" "}
+          <span className="font-medium text-slate-800">medication_history</span>{" "}
+          for your care team.
+        </p>
+        {completedTemporaryMeds.length === 0 ? (
+          <p className="mt-4 text-sm text-slate-500">
+            No completed temporary courses yet.
+          </p>
+        ) : (
+          <ul className="mt-4 space-y-3">
+            {completedTemporaryMeds.map((m) => (
+              <li
+                key={m.id}
+                className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3"
+              >
+                <div className="flex flex-wrap items-baseline justify-between gap-2">
+                  <span className="font-semibold text-slate-900">{m.name}</span>
+                  <span className="text-xs font-medium text-slate-500">
+                    {m.tempStartDate ?? "—"} → {m.tempEndDate ?? "—"}
+                  </span>
+                </div>
+                {m.doseLabel ? (
+                  <p className="mt-1 text-sm text-slate-700">{m.doseLabel}</p>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
 
       <section className="rounded-2xl border border-slate-300 bg-white/98 p-4 ring-1 ring-slate-200/60">
         <div className="flex flex-wrap items-start justify-between gap-4">

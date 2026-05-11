@@ -10,6 +10,7 @@ export type PainMapRow = {
   category: PainMapSymptomCategory;
   intensity?: number | null;
   created_at?: string;
+  updated_at?: string;
 };
 
 /** Body regions that have at least one row in `pain_map` (for SVG hints). */
@@ -38,7 +39,7 @@ export async function fetchPainMapForBodyPart(
   if (!supabase) return [];
   const { data, error } = await supabase
     .from("pain_map")
-    .select("id,body_part_id,category,intensity,created_at")
+    .select("id,body_part_id,category,intensity,created_at,updated_at")
     .eq("body_part_id", bodyPartId);
   if (error) {
     console.warn("pain_map select:", error.message);
@@ -59,6 +60,7 @@ export async function upsertPainMapRow(
   const payload: Record<string, unknown> = {
     body_part_id: bodyPartId,
     category,
+    updated_at: new Date().toISOString(),
   };
   if (intensity !== undefined) {
     payload.intensity = intensity;
@@ -93,4 +95,21 @@ export async function deletePainMapRow(
     .eq("category", category);
   if (error) return { ok: false, error: error.message };
   return { ok: true };
+}
+
+/** Most recently touched `pain_map` row at or after `isoSince` (for PRN ↔ flare linking). */
+export async function fetchMostRecentPainMapTouchSince(
+  isoSince: string,
+): Promise<PainMapRow | null> {
+  const supabase = getSupabaseBrowserClient();
+  if (!supabase) return null;
+  const { data, error } = await supabase
+    .from("pain_map")
+    .select("id,body_part_id,category,intensity,created_at,updated_at")
+    .gte("updated_at", isoSince)
+    .order("updated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error || !data) return null;
+  return data as PainMapRow;
 }

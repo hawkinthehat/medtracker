@@ -53,12 +53,8 @@ export default function DailySchedule() {
     [doses, inhibitorWindows]
   );
 
-  const hasFluconazole = useMemo(
-    () => doses.some((d) => isFluconazoleName(d.medicationName)),
-    [doses]
-  );
-
   const lanes = useMemo(() => assignDoseLanes(doses), [doses]);
+
   const laneCount = useMemo(() => {
     let m = 0;
     lanes.forEach((v) => {
@@ -68,20 +64,21 @@ export default function DailySchedule() {
   }, [lanes]);
 
   return (
-    <section className="rounded-2xl border border-slate-300 bg-white/98 p-4 ring-1 ring-slate-200/60">
+    <section className="rounded-2xl border-4 border-slate-200 bg-white p-4 shadow-sm">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="text-lg font-semibold text-slate-900">
             Daily schedule (24h)
           </h2>
-          <p className="mt-1 max-w-prose text-sm text-slate-400">
+          <p className="mt-1 max-w-prose text-sm text-slate-600">
             Pulled from Supabase when{" "}
-            <code className="rounded bg-slate-800 px-1 py-0.5 text-xs text-sky-200">
+            <code className="rounded border border-slate-300 bg-slate-100 px-1 py-0.5 text-xs text-slate-800">
               NEXT_PUBLIC_SUPABASE_URL
             </code>{" "}
             is set; otherwise demo times from your med list. Yellow bands: two
-            different BP-lowering meds within 2h. Red glow: Gleevec / Latuda
-            during modeled Fluconazole inhibition.
+            different BP-lowering meds within 2h. Violet wash + red glow: Gleevec
+            / Latuda during modeled strong CYP3A4 inhibition windows when those
+            drugs appear on your timeline.
           </p>
         </div>
         {isFetching && (
@@ -117,7 +114,7 @@ export default function DailySchedule() {
             />
           ))}
 
-          {/* Fluconazole inhibitor wash (subtle) */}
+          {/* Modeled strong CYP3A4 inhibitor wash */}
           {inhibitorWindows.map((w, i) => (
             <div
               key={`inh-${i}`}
@@ -187,16 +184,16 @@ export default function DailySchedule() {
         </div>
       </div>
 
-      <ul className="mt-4 space-y-2 text-xs text-slate-400">
+      <ul className="mt-4 space-y-2 text-xs text-slate-600">
         <li>
-          <span className="font-medium text-yellow-200/90">Yellow band: </span>
+          <span className="font-semibold text-amber-800">Yellow band: </span>
           two or more of Duloxetine, Trazodone, Lorazepam scheduled within 2
           hours (distinct meds).
         </li>
         <li>
-          <span className="font-medium text-red-300">Red glow: </span>
-          Gleevec or Latuda during Fluconazole inhibition windows
-          {hasFluconazole ? "" : " (add Fluconazole to see this interaction)"}.
+          <span className="font-semibold text-red-700">Red glow: </span>
+          Gleevec or Latuda during overlapping modeled CYP3A4 inhibition periods
+          (when an azole-class inhibitor or similar appears on your schedule).
         </li>
       </ul>
     </section>

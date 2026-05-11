@@ -1,8 +1,5 @@
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser-client";
-import {
-  SEED_SAVED_MEDICATIONS,
-  type SavedMedication,
-} from "@/lib/seed-medications";
+import type { SavedMedication } from "@/lib/seed-medications";
 
 export const DEFAULT_DOSE_DURATION_MIN = 60;
 /** Fluconazole modeled as CYP3A4 inhibition lasting this long after a dose for timeline overlap. */
@@ -152,39 +149,13 @@ export async function fetchScheduledDosesFromSupabase(): Promise<
 
 /** Demo timeline when Supabase is unset or returns no rows — staggers seed meds across the day. */
 export function buildFallbackScheduleFromSeed(
-  meds: SavedMedication[] = SEED_SAVED_MEDICATIONS
+  meds: SavedMedication[] = [],
 ): ScheduledDose[] {
-  const extra: SavedMedication[] = [
-    {
-      id: "demo-fluconazole",
-      name: "Fluconazole",
-      pathway: "CYP3A4",
-      is_inhibitor: true,
-      is_substrate: false,
-      pathway_role: "Strong CYP3A4 inhibitor",
-    },
-    {
-      id: "demo-gleevec",
-      name: "Gleevec",
-      pathway: "CYP3A4",
-      is_inhibitor: false,
-      is_substrate: true,
-      pathway_role: "Substrate (spikes)",
-    },
-    {
-      id: "demo-latuda",
-      name: "Latuda",
-      pathway: "CYP3A4",
-      is_inhibitor: false,
-      is_substrate: true,
-      pathway_role: "Substrate (spikes)",
-    },
-  ];
-  const all = [...meds, ...extra];
-  return all.map((m, i) => ({
+  return meds.map((m, i) => ({
     id: `fallback-${m.id}`,
     medicationName: m.name,
-    startMinute: (8 * 60 + i * 77 + (m.name.length % 13) * 5) % (14 * 60) + 6 * 60,
+    startMinute:
+      (8 * 60 + i * 77 + (m.name.length % 13) * 5) % (14 * 60) + 6 * 60,
     durationMinutes: DEFAULT_DOSE_DURATION_MIN,
   }));
 }

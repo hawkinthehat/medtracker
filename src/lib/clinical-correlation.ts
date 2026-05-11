@@ -6,6 +6,11 @@ import type {
   OrthostaticSession,
   VitalRow,
 } from "@/lib/types";
+import {
+  DOG_WALK_MARKER,
+  PT_MARKER_PREFIX,
+  extractAmbientFromMovementNotes,
+} from "@/lib/movement-tracking";
 
 const ACTIVITY_LOOKBACK_MS = 6 * 60 * 60 * 1000;
 const MEAL_SYMPTOM_WINDOW_MS = 4 * 60 * 60 * 1000;
@@ -126,6 +131,55 @@ export function computeSpotBpDropAfterActivityNarrative(
   return `Among spot BP checks today, systolic fell by ${maxDrop} mmHg between consecutive readings; log activities before readings to sharpen “after [X]” wording.`;
 }
 
+/** Summarize movement logs that carry ambient temp / pressure for Missouri humidity correlations. */
+export function computeMovementWeatherNarrative(
+  dailyLogs: DailyLogEntry[],
+  dateKey: string,
+): string | null {
+  const day = dailyLogs.filter(
+    (e) =>
+      localDateKeyFromIso(e.recordedAt) === dateKey &&
+      e.category === "activity" &&
+      Boolean(
+        e.notes?.includes(DOG_WALK_MARKER) ||
+          e.notes?.includes(PT_MARKER_PREFIX),
+      ),
+  );
+  if (day.length === 0) return null;
+
+  const temps: number[] = [];
+  const pressures: number[] = [];
+  for (const e of day) {
+    const a = extractAmbientFromMovementNotes(e.notes);
+    if (a.tempC != null) temps.push(a.tempC);
+    if (a.pressureHpa != null) pressures.push(a.pressureHpa);
+  }
+
+  if (temps.length === 0 && pressures.length === 0) {
+    return `${day.length} movement session(s) logged today — ambient lines will appear after weather is fetched when logging walks or PT.`;
+  }
+
+  const bits: string[] = [];
+  if (temps.length === 1) bits.push(`ambient ${temps[0].toFixed(1)}°C`);
+  else if (temps.length > 1) {
+    bits.push(
+      `ambient temp ${Math.min(...temps).toFixed(1)}–${Math.max(...temps).toFixed(1)}°C`,
+    );
+  }
+  if (pressures.length === 1) {
+    bits.push(`pressure ~${Math.round(pressures[0])} hPa`);
+  } else if (pressures.length > 1) {
+    bits.push(
+      `pressure ${Math.round(Math.min(...pressures))}–${Math.round(Math.max(...pressures))} hPa`,
+    );
+  }
+
+  let line = `Movement / PT today (${day.length} session(s)): ${bits.join("; ")}`;
+  line +=
+    " — compare walk counts vs sticky humid days as summer progresses.";
+  return line;
+}
+
 const SYMPTOM_SPIKE =
   /\b(worse|flare|spike|mast|reaction|dizzy|dizziness|nausea|tachy|tachycardia|pain|headache|presyncope|syncope|hr\b|heart rate)\b/i;
 
@@ -224,9 +278,12 @@ export function buildClinicalCorrelationSnapshot(input: {
   if (mealSym) narratives.push(mealSym);
   else {
     narratives.push(
-      "No same-day meal and symptom journal pair was found within four hours for a timed correlation."
+      "No same-day meal and symptom journal pair was found within four hours for a timed correlation.",
     );
   }
+
+  const moveWx = computeMovementWeatherNarrative(dailyLogs, dateKey);
+  if (moveWx) narratives.push(moveWx);
 
   return {
     dateKey,

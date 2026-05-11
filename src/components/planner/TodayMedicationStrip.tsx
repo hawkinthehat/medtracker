@@ -4,12 +4,11 @@ import { useQuery } from "@tanstack/react-query";
 import { Pill } from "lucide-react";
 import { useMemo } from "react";
 import { formatDoseLabel } from "@/lib/medication-profile-types";
+import { getActiveMedications } from "@/lib/medication-active";
 import { defaultDoseMgForMedicationName } from "@/lib/medication-dose-defaults";
 import { qk } from "@/lib/query-keys";
-import {
-  SEED_SAVED_MEDICATIONS,
-  type SavedMedication,
-} from "@/lib/seed-medications";
+import { fetchMedicationsQuery } from "@/lib/medications-query";
+import type { SavedMedication } from "@/lib/seed-medications";
 import {
   getEffectiveTaperDoseMg,
   isDuringTaperSchedule,
@@ -28,7 +27,7 @@ export default function TodayMedicationStrip({
 }: Props) {
   const { data: medications = [] } = useQuery({
     queryKey: qk.medications,
-    queryFn: async (): Promise<SavedMedication[]> => SEED_SAVED_MEDICATIONS,
+    queryFn: fetchMedicationsQuery,
     staleTime: Infinity,
     gcTime: 1000 * 60 * 60 * 24 * 30,
     refetchOnWindowFocus: false,
@@ -52,7 +51,8 @@ export default function TodayMedicationStrip({
 
   const rows = useMemo(() => {
     const today = new Date();
-    return medications.map((m) => {
+    const active = getActiveMedications(medications);
+    return active.map((m) => {
       const p = profiles[m.id];
       const baseMg = p?.doseValue ?? defaultDoseMgForMedicationName(m.name);
       const unit = p?.doseUnit ?? "mg";
@@ -69,6 +69,9 @@ export default function TodayMedicationStrip({
         }
       } else if (p) {
         label = formatDoseLabel(p.doseValue, p.doseUnit);
+      } else if (m.doseLabel) {
+        label = m.doseLabel;
+        sub = null;
       } else {
         label = `${baseMg} ${unit}`;
         sub = "Default — tap medication below to customize";
@@ -108,7 +111,7 @@ export default function TodayMedicationStrip({
                 )}
               </div>
               <div className="text-right">
-                <span className="font-mono tabular-nums text-emerald-200">
+                <span className="text-lg font-bold tabular-nums text-slate-900">
                   {label}
                 </span>
                 <p className="mt-0.5 font-mono text-xs text-slate-500">{time}</p>

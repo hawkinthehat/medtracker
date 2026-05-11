@@ -8,10 +8,7 @@ import {
   EMERGENCY_CONTACTS,
   EMERGENCY_LEGAL_NAME,
 } from "@/lib/emergency-identity";
-import {
-  SEED_SAVED_MEDICATIONS,
-  type SavedMedication,
-} from "@/lib/seed-medications";
+import { fetchMedicationsQuery } from "@/lib/medications-query";
 
 const CORE_DIAGNOSES = [
   "Orthostatic Hypotension",
@@ -23,7 +20,7 @@ const CORE_DIAGNOSES = [
 export default function EmergencyMedicalIdPage() {
   const { data: medications = [] } = useQuery({
     queryKey: qk.medications,
-    queryFn: async (): Promise<SavedMedication[]> => SEED_SAVED_MEDICATIONS,
+    queryFn: fetchMedicationsQuery,
     staleTime: Infinity,
     gcTime: 1000 * 60 * 60 * 24 * 30,
     refetchOnWindowFocus: false,

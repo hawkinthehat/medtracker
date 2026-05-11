@@ -8,6 +8,7 @@ export async function persistMoodToSupabase(entry: MoodEntry): Promise<boolean> 
     id: entry.id,
     recorded_at: entry.recordedAt,
     mood: entry.mood,
+    notes: entry.note ?? null,
   });
   return !error;
 }
@@ -21,6 +22,7 @@ export async function persistBrainFogToSupabase(
     id: entry.id,
     recorded_at: entry.recordedAt,
     score: entry.score,
+    notes: entry.note ?? null,
   });
   return !error;
 }

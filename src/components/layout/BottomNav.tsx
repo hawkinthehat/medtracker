@@ -11,11 +11,13 @@ import {
   LineChart,
   Share2,
   FileText,
+  UtensilsCrossed,
 } from "lucide-react";
 
 const links = [
   { href: "/", label: "Planner", Icon: LayoutGrid },
   { href: "/meds", label: "Meds", Icon: Pill },
+  { href: "/food", label: "Food", Icon: UtensilsCrossed },
   { href: "/vitals", label: "Vitals", Icon: Activity },
   { href: "/journal", label: "Journal", Icon: BookOpen },
   { href: "/vault", label: "Vault", Icon: Archive },
@@ -42,18 +44,18 @@ export default function BottomNav() {
             <li key={href} className="flex-1">
               <Link
                 href={href}
-                className={`flex flex-col items-center gap-0.5 rounded-lg px-1.5 py-1.5 text-[10px] font-medium leading-tight tracking-wide transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600 sm:gap-1 sm:px-2.5 sm:py-2 sm:text-xs ${
+                className={`flex min-h-[60px] flex-col items-center justify-center gap-1 rounded-xl border-2 border-transparent px-1 py-2 text-[11px] font-semibold leading-tight tracking-wide transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600 sm:px-2 sm:text-xs ${
                   active
-                    ? "text-sky-700"
-                    : "text-slate-600 hover:text-slate-900"
+                    ? "border-sky-200 bg-sky-50 text-sky-800"
+                    : "text-slate-700 hover:border-slate-200 hover:bg-slate-50 hover:text-slate-900"
                 }`}
               >
                 <Icon
-                  className={`h-5 w-5 sm:h-6 sm:w-6 ${active ? "text-sky-600" : ""}`}
+                  className={`h-7 w-7 sm:h-8 sm:w-8 ${active ? "text-sky-600" : "text-slate-600"}`}
                   strokeWidth={active ? 2.25 : 2}
                   aria-hidden
                 />
-                <span>{label}</span>
+                <span className="max-w-[4.5rem] text-center">{label}</span>
               </Link>
             </li>
           );

@@ -47,7 +47,7 @@ function GlassIcon({
         filled ? `Glass ${index + 1}, filled` : `Glass ${index + 1}, empty`
       }
       aria-pressed={filled}
-      className="flex h-[52px] w-[42px] shrink-0 touch-manipulation items-end justify-center rounded-xl border-2 border-slate-400 bg-white p-1 shadow-sm transition hover:border-sky-500 hover:shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600 active:scale-[0.97] sm:h-[60px] sm:w-[48px]"
+      className="flex h-[60px] w-[52px] shrink-0 touch-manipulation items-end justify-center rounded-xl border-4 border-slate-900 bg-white p-1 shadow-sm transition hover:border-sky-600 hover:shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600 active:scale-[0.97]"
     >
       <svg
         viewBox="0 0 48 64"

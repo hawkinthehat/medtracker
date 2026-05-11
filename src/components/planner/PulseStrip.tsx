@@ -20,10 +20,8 @@ import {
 import type { ScheduledDose } from "@/lib/medication-schedule";
 import { fetchMergedMedicationDoses } from "@/lib/merge-medication-doses";
 import { qk } from "@/lib/query-keys";
-import {
-  SEED_SAVED_MEDICATIONS,
-  type SavedMedication,
-} from "@/lib/seed-medications";
+import { fetchMedicationsQuery } from "@/lib/medications-query";
+import { getActiveMedications } from "@/lib/medication-active";
 import {
   findRecentDoseContext,
   type RecentDoseContext,
@@ -37,6 +35,11 @@ import { loadTaperPlansMap } from "@/lib/supabase/medication-history";
 import type { BrainFogEntry, MoodEntry, SideEffectLog } from "@/lib/types";
 import ContextualSideEffect from "./ContextualSideEffect";
 import { useState } from "react";
+import {
+  atmosphericPressureFooter,
+  fetchAndLogWeather,
+} from "@/lib/weather";
+import { getEnvironmentSnapshot } from "@/lib/environment-snapshot";
 
 const MOOD_SCALE: { value: MoodEntry["mood"]; label: string }[] = [
   { value: 5, label: "Great" },
@@ -72,7 +75,7 @@ export default function PulseStrip() {
 
   const { data: medications = [] } = useQuery({
     queryKey: qk.medications,
-    queryFn: async (): Promise<SavedMedication[]> => SEED_SAVED_MEDICATIONS,
+    queryFn: fetchMedicationsQuery,
     staleTime: Infinity,
     gcTime: 1000 * 60 * 60 * 24 * 30,
     refetchOnWindowFocus: false,
@@ -96,11 +99,21 @@ export default function PulseStrip() {
 
   const saveMood = useMutation({
     mutationFn: async (mood: MoodEntry["mood"]) => {
+      let snap = null;
+      if (mood === 1) {
+        snap =
+          (await fetchAndLogWeather().catch(() => null)) ??
+          getEnvironmentSnapshot();
+      }
       const row: MoodEntry = {
         id: crypto.randomUUID(),
         recordedAt: new Date().toISOString(),
         mood,
       };
+      if (mood === 1 && snap) {
+        const line = atmosphericPressureFooter(snap.pressureHpa);
+        if (line) row.note = line;
+      }
       await persistMoodToSupabase(row);
       return row;
     },
@@ -126,7 +139,10 @@ export default function PulseStrip() {
             (prev = []) => [ev, ...prev]
           );
         }
-        const candidate = findRecentDoseContext(doses, medications);
+        const candidate = findRecentDoseContext(
+          doses,
+          getActiveMedications(medications),
+        );
         if (candidate) {
           setSideEffectPrompt({ candidate, trigger: "mood_crisis" });
         }
@@ -136,11 +152,21 @@ export default function PulseStrip() {
 
   const saveBrainFog = useMutation({
     mutationFn: async (score: BrainFogEntry["score"]) => {
+      let snap = null;
+      if (score >= 8) {
+        snap =
+          (await fetchAndLogWeather().catch(() => null)) ??
+          getEnvironmentSnapshot();
+      }
       const row: BrainFogEntry = {
         id: crypto.randomUUID(),
         recordedAt: new Date().toISOString(),
         score,
       };
+      if (score >= 8 && snap) {
+        const line = atmosphericPressureFooter(snap.pressureHpa);
+        if (line) row.note = line;
+      }
       await persistBrainFogToSupabase(row);
       return row;
     },
@@ -169,7 +195,10 @@ export default function PulseStrip() {
             (prev = []) => [ev, ...prev]
           );
         }
-        const candidate = findRecentDoseContext(doses, medications);
+        const candidate = findRecentDoseContext(
+          doses,
+          getActiveMedications(medications),
+        );
         if (candidate) {
           setSideEffectPrompt({ candidate, trigger: "brain_fog_total" });
         }

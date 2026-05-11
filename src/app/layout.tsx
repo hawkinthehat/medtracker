@@ -18,7 +18,6 @@ export const metadata: Metadata = {
   title: "MedTracker",
   description:
     "Mobile-first health dashboard — medications, vitals, journal, and specialist transfer notes.",
-  manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,
     title: "MedTracker",

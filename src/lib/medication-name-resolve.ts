@@ -1,21 +1,13 @@
 import type { Medication } from "@/lib/metabolic";
-import {
-  SEED_SAVED_MEDICATIONS,
-  type SavedMedication,
-} from "@/lib/seed-medications";
+import type { SavedMedication } from "@/lib/seed-medications";
 
-/** Seed profiles plus any user-saved meds not present in seed — used for Smart Add name matching. */
+/** Saved meds only — used for Smart Add name matching (no bundled seed list). */
 export function buildMedicationLookupCatalog(
-  currentMeds: SavedMedication[]
+  currentMeds: SavedMedication[],
 ): SavedMedication[] {
   const map = new Map<string, SavedMedication>();
-  for (const m of SEED_SAVED_MEDICATIONS) {
-    map.set(m.name.toLowerCase(), m);
-  }
   for (const m of currentMeds) {
-    if (!map.has(m.name.toLowerCase())) {
-      map.set(m.name.toLowerCase(), m);
-    }
+    map.set(m.name.toLowerCase(), m);
   }
   return Array.from(map.values());
 }

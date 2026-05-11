@@ -6,6 +6,9 @@ import { QueryClient } from "@tanstack/react-query";
 import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
 import { createSyncStoragePersister } from "@tanstack/query-sync-storage-persister";
 import { useState } from "react";
+import WeatherHourlyLogger from "@/components/providers/WeatherHourlyLogger";
+import MedicationsHydrator from "@/components/providers/MedicationsHydrator";
+import MedicationExpiryWatcher from "@/components/providers/MedicationExpiryWatcher";
 
 export default function AppProviders({
   children,
@@ -40,6 +43,9 @@ export default function AppProviders({
         maxAge: 1000 * 60 * 60 * 24 * 30,
       }}
     >
+      <MedicationsHydrator />
+      <MedicationExpiryWatcher />
+      <WeatherHourlyLogger />
       {children}
     </PersistQueryClientProvider>
   );

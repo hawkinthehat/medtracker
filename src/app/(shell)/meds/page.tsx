@@ -6,14 +6,14 @@ import type { SafetyGateBlockEvent } from "@/lib/types";
 import type { Medication } from "@/lib/metabolic";
 import {
   PRIMARY_PATHWAYS,
-  checkMetabolicConflict,
+  previewMedicationInteraction,
   checkOHCumulativeRisk,
 } from "@/lib/metabolic";
 import { qk } from "@/lib/query-keys";
-import {
-  SEED_SAVED_MEDICATIONS,
-  type SavedMedication,
-} from "@/lib/seed-medications";
+import { fetchMedicationsQuery } from "@/lib/medications-query";
+import { setMedicationsAndPersist } from "@/lib/medications-persist";
+import { getActiveMedications } from "@/lib/medication-active";
+import type { SavedMedication } from "@/lib/seed-medications";
 import MedicationsSafetyPanel from "@/components/meds/MedicationsSafetyPanel";
 import DailySchedule from "@/components/DailySchedule";
 
@@ -21,7 +21,7 @@ export default function MedsPage() {
   const qc = useQueryClient();
   const { data: medications = [] } = useQuery({
     queryKey: qk.medications,
-    queryFn: async (): Promise<SavedMedication[]> => SEED_SAVED_MEDICATIONS,
+    queryFn: fetchMedicationsQuery,
     staleTime: Infinity,
     gcTime: 1000 * 60 * 60 * 24 * 30,
     refetchOnWindowFocus: false,
@@ -34,7 +34,7 @@ export default function MedsPage() {
   const [orthostaticSideEffect, setOrthostaticSideEffect] = useState(false);
   const [dizzinessSideEffect, setDizzinessSideEffect] = useState(false);
   const [alert, setAlert] = useState<ReturnType<
-    typeof checkMetabolicConflict
+    typeof previewMedicationInteraction
   > | null>(null);
 
   const draftMed = useMemo<Medication>(
@@ -49,11 +49,16 @@ export default function MedsPage() {
     [name, pathway, isInhibitor, isSubstrate, orthostaticSideEffect, dizzinessSideEffect]
   );
 
+  const activeMedications = useMemo(
+    () => getActiveMedications(medications),
+    [medications],
+  );
+
   const medsForAdditive = useMemo(() => {
     const trimmed = draftMed.name.trim();
-    if (!trimmed) return medications;
-    return [...medications, { ...draftMed, id: "__draft__" }];
-  }, [medications, draftMed]);
+    if (!trimmed) return activeMedications;
+    return [...activeMedications, { ...draftMed, id: "__draft__" }];
+  }, [activeMedications, draftMed]);
 
   const cumulativePositionalWarning = useMemo(
     () => checkOHCumulativeRisk(medsForAdditive),
@@ -63,10 +68,7 @@ export default function MedsPage() {
   const addMutation = useMutation({
     mutationFn: async (med: SavedMedication) => med,
     onSuccess: (med) => {
-      qc.setQueryData<SavedMedication[]>(qk.medications, (prev = []) => [
-        ...prev,
-        med,
-      ]);
+      setMedicationsAndPersist(qc, (prev = []) => [...prev, med]);
       setName("");
       setIsInhibitor(false);
       setIsSubstrate(false);
@@ -79,10 +81,10 @@ export default function MedsPage() {
   function handleAdd(e: React.FormEvent) {
     e.preventDefault();
     if (!draftMed.name) return;
-    const check = checkMetabolicConflict(draftMed, medications);
+    const check = previewMedicationInteraction(draftMed, activeMedications);
     setAlert(check);
     if (!check.isSafe) {
-      const conflict = medications.find(
+      const conflict = activeMedications.find(
         (med) =>
           med.pathway === draftMed.pathway &&
           draftMed.is_inhibitor &&
@@ -117,7 +119,7 @@ export default function MedsPage() {
         <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
           Medications
         </h1>
-        <p className="mt-2 text-sm leading-relaxed text-slate-400">
+        <p className="mt-2 text-sm leading-relaxed text-slate-600">
           Safety audit, scrollable journal list, and pathway screen when adding a
           new drug.
         </p>
@@ -125,7 +127,7 @@ export default function MedsPage() {
 
       <DailySchedule />
 
-      <MedicationsSafetyPanel medications={medications} />
+      <MedicationsSafetyPanel medications={activeMedications} />
 
       <form
         onSubmit={handleAdd}
@@ -218,7 +220,7 @@ export default function MedsPage() {
         {cumulativePositionalWarning && (
           <div
             role="status"
-            className="rounded-xl border border-amber-500/50 bg-amber-950/35 px-3 py-3 text-sm font-medium leading-relaxed text-amber-50"
+            className="rounded-xl border-4 border-amber-600 bg-amber-50 px-4 py-3 text-base font-semibold leading-relaxed text-amber-950"
           >
             {cumulativePositionalWarning}
           </div>
@@ -227,10 +229,10 @@ export default function MedsPage() {
         {alert && (
           <div
             role="status"
-            className={`rounded-xl border px-3 py-3 text-sm leading-relaxed ${
+            className={`rounded-xl border-4 px-4 py-3 text-base leading-relaxed ${
               alert.severity === "RED_ALERT"
-                ? "border-red-500/60 bg-red-950/50 text-red-200"
-                : "border-slate-300 bg-slate-100/90 text-slate-700"
+                ? "border-red-700 bg-red-50 text-red-950"
+                : "border-slate-300 bg-slate-50 text-slate-800"
             }`}
           >
             {alert.message}
@@ -239,7 +241,7 @@ export default function MedsPage() {
 
         <button
           type="submit"
-          className="w-full rounded-xl bg-sky-600 py-3 text-sm font-semibold text-white hover:bg-sky-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-400 disabled:opacity-50"
+          className="min-h-[56px] w-full rounded-xl border-4 border-black bg-sky-600 py-3 text-lg font-bold text-white hover:bg-sky-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-400 disabled:opacity-50"
           disabled={!draftMed.name || addMutation.isPending}
         >
           Add medication

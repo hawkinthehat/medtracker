@@ -20,6 +20,7 @@ import { useMemo, useState, type ReactNode } from "react";
 import DoseAdjustmentModal, {
   type DoseModalTab,
 } from "./DoseAdjustmentModal";
+import QuickDoseEditModal from "./QuickDoseEditModal";
 import type { SavedMedication } from "@/lib/seed-medications";
 
 /** Charts, pain map, timelines, and full med manager — kept in Vault off the minimal home screen. */
@@ -31,12 +32,21 @@ export default function VaultPlannerSections() {
   const [doseModalMed, setDoseModalMed] = useState<SavedMedication | null>(
     null
   );
+  const [quickAdjustMed, setQuickAdjustMed] = useState<SavedMedication | null>(
+    null,
+  );
   const [doseModalTab, setDoseModalTab] = useState<DoseModalTab>("adjust");
   const [medManagerExpanded, setMedManagerExpanded] = useState(false);
 
   function openDoseModal(med: SavedMedication, tab: DoseModalTab) {
     setDoseModalTab(tab);
-    setDoseModalMed(med);
+    if (tab === "history") {
+      setQuickAdjustMed(null);
+      setDoseModalMed(med);
+    } else {
+      setDoseModalMed(null);
+      setQuickAdjustMed(med);
+    }
   }
 
   const { data: dailyLogs = [] } = useQuery({
@@ -284,6 +294,17 @@ export default function VaultPlannerSections() {
           </div>
         </div>
       </section>
+
+      <QuickDoseEditModal
+        med={quickAdjustMed}
+        open={!!quickAdjustMed}
+        onClose={() => setQuickAdjustMed(null)}
+        onOpenAdvanced={(m) => {
+          setQuickAdjustMed(null);
+          setDoseModalTab("adjust");
+          setDoseModalMed(m);
+        }}
+      />
 
       <DoseAdjustmentModal
         med={doseModalMed}

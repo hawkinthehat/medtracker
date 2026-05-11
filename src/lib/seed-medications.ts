@@ -1,70 +1,31 @@
 import type { Medication } from "@/lib/metabolic";
 
-export type SavedMedication = Medication & { id: string };
+/** Prescribed frequency hint for morning-slot checklist (2× / 3× daily). */
+export type FrequencyHint = "1x" | "2x" | "3x" | "prn";
 
-/** Demo / initial list for metabolic gate and meds UI. */
-export const SEED_SAVED_MEDICATIONS: SavedMedication[] = [
-  {
-    id: "seed-latuda",
-    name: "Latuda",
-    pathway: "CYP3A4",
-    is_inhibitor: false,
-    is_substrate: true,
-    pathway_role: "CYP3A4 substrate (lurasidone)",
-    has_orthostatic_hypotension: true,
-  },
-  {
-    id: "seed-gleevec",
-    name: "Gleevec",
-    pathway: "CYP3A4",
-    is_inhibitor: false,
-    is_substrate: true,
-    pathway_role: "CYP3A4 substrate (imatinib)",
-    has_orthostatic_hypotension: false,
-  },
-  {
-    id: "seed-trazodone",
-    name: "Trazodone",
-    pathway: "CYP3A4",
-    is_inhibitor: false,
-    is_substrate: true,
-    pathway_role: "CYP3A4 substrate",
-    has_orthostatic_hypotension: true,
-  },
-  {
-    id: "seed-fluconazole",
-    name: "Fluconazole",
-    pathway: "CYP3A4",
-    is_inhibitor: true,
-    is_substrate: false,
-    pathway_role: "CYP3A4 Inhibitor",
-  },
-  {
-    id: "seed-duloxetine",
-    name: "Duloxetine",
-    pathway: "CYP2D6",
-    is_inhibitor: true,
-    is_substrate: false,
-    pathway_role: "CYP2D6 inhibitor",
-    has_orthostatic_hypotension: true,
-  },
-  {
-    id: "seed-lorazepam",
-    name: "Lorazepam",
-    pathway: "UGT1A1",
-    is_inhibitor: false,
-    is_substrate: false,
-    pathway_role: "UGT conjugation; minimal CYP",
-    has_orthostatic_hypotension: true,
-  },
-  {
-    id: "seed-pregabalin",
-    name: "Pregabalin",
-    pathway: "Renal (Kidneys)",
-    is_inhibitor: false,
-    is_substrate: false,
-    pathway_role: "Renal clearance",
-    has_orthostatic_hypotension: false,
-    has_dizziness_side_effect: true,
-  },
-];
+export type SavedMedication = Medication & {
+  id: string;
+  /** Bold UI line, e.g. "100mg · 2× daily" */
+  doseLabel?: string;
+  frequencyHint?: FrequencyHint;
+  /** Short course with explicit calendar bounds (local device dates). */
+  isTemporary?: boolean;
+  tempStartDate?: string;
+  tempEndDate?: string;
+  /** After end date, one `course_end` row is written to medication_history; local dedupe. */
+  tempCourseEndLogged?: boolean;
+};
+
+/**
+ * No bundled medication list — users add via Meds, Quick Setup, or import.
+ * @deprecated Use `loadMedicationsFromStorage` / `fetchMedicationsQuery` (empty when unset).
+ */
+export const SEED_SAVED_MEDICATIONS: SavedMedication[] = [];
+
+export function morningSlotMedications(
+  meds: SavedMedication[],
+): SavedMedication[] {
+  return meds.filter(
+    (m) => m.frequencyHint === "2x" || m.frequencyHint === "3x",
+  );
+}

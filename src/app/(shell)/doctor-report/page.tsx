@@ -3,11 +3,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { FileDown } from "lucide-react";
 import { qk } from "@/lib/query-keys";
-import {
-  SEED_SAVED_MEDICATIONS,
-  type SavedMedication,
-} from "@/lib/seed-medications";
+import { fetchMedicationsQuery } from "@/lib/medications-query";
+import type { SavedMedication } from "@/lib/seed-medications";
 import { fetchMedicationHistoryFromSupabase } from "@/lib/supabase/medication-history";
+import { fetchMedicationLogsFromSupabase } from "@/lib/supabase/medication-logs";
 import { dailyLogsQueryFn } from "@/lib/daily-logs-query-fn";
 import type {
   DailyLogEntry,
@@ -17,6 +16,7 @@ import type {
   VitalRow,
 } from "@/lib/types";
 import type { MedicationHistoryEntry } from "@/lib/medication-profile-types";
+import type { MedicationLogRow } from "@/lib/supabase/medication-logs";
 import { generateDoctorSpecialistPdf } from "@/lib/pdf-export";
 
 export default function DoctorReportPage() {
@@ -24,7 +24,7 @@ export default function DoctorReportPage() {
 
   useQuery({
     queryKey: qk.medications,
-    queryFn: async () => SEED_SAVED_MEDICATIONS,
+    queryFn: fetchMedicationsQuery,
     staleTime: Infinity,
     gcTime: 1000 * 60 * 60 * 24 * 30,
     refetchOnWindowFocus: false,
@@ -79,11 +79,18 @@ export default function DoctorReportPage() {
     refetchOnWindowFocus: false,
   });
 
+  useQuery({
+    queryKey: qk.medicationLogs,
+    queryFn: () => fetchMedicationLogsFromSupabase(),
+    staleTime: 30_000,
+    gcTime: 1000 * 60 * 60 * 24 * 30,
+    refetchOnWindowFocus: true,
+  });
+
   const exportPdf = useMutation({
     mutationFn: async () => {
       const medications =
-        qc.getQueryData<SavedMedication[]>(qk.medications) ??
-        SEED_SAVED_MEDICATIONS;
+        qc.getQueryData<SavedMedication[]>(qk.medications) ?? [];
       let medicationHistory = qc.getQueryData<MedicationHistoryEntry[]>(
         qk.medicationHistory,
       );
@@ -99,6 +106,11 @@ export default function DoctorReportPage() {
         qc.getQueryData<SafetyGateBlockEvent[]>(qk.safetyGateBlocks) ?? [];
       const sideEffectLogs =
         qc.getQueryData<SideEffectLog[]>(qk.sideEffectLogs) ?? [];
+      let medicationLogs =
+        qc.getQueryData<MedicationLogRow[]>(qk.medicationLogs);
+      if (medicationLogs === undefined) {
+        medicationLogs = await fetchMedicationLogsFromSupabase(200);
+      }
 
       await generateDoctorSpecialistPdf({
         medications,
@@ -108,6 +120,7 @@ export default function DoctorReportPage() {
         dailyLogs,
         safetyGateBlocks,
         sideEffectLogs,
+        medicationLogs,
       });
     },
   });

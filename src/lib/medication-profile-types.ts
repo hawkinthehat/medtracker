@@ -14,7 +14,8 @@ export type MedicationHistoryChangeKind =
   | "dose"
   | "time"
   | "dose_time"
-  | "taper";
+  | "taper"
+  | "course_end";
 
 /** Mirrors `public.medication_history` and React Query cache. */
 export type MedicationHistoryEntry = {

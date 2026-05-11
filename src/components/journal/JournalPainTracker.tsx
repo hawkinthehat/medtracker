@@ -16,13 +16,14 @@ export default function JournalPainTracker() {
           Symptom sketch map
         </h2>
         <p className="text-sm leading-relaxed text-slate-600">
-          Trace burning, aching, or rash patterns right on the body outline —
-          clearer than tapping regions alone. Pick a brush color, draw on{" "}
+          Trace burning, aching, or rash patterns on the clinical outline —
+          clearer than tapping regions alone. After each circle, add a quick
+          note; or save the whole map with the button at the bottom. Draw on{" "}
           <span className="font-medium text-slate-800">front</span> and{" "}
-          <span className="font-medium text-slate-800">back</span>, then save.
+          <span className="font-medium text-slate-800">back</span> as needed.
           Syncs to{" "}
           <code className="rounded border border-slate-300 bg-slate-100 px-1.5 py-0.5 text-xs text-slate-800">
-            symptom_sketches
+            daily_logs
           </code>
           .
         </p>
@@ -33,13 +34,13 @@ export default function JournalPainTracker() {
           <span className="text-xs font-semibold uppercase tracking-widest text-slate-500">
             Front
           </span>
-          <SymptomCanvas side="front" className="w-full max-w-md" />
+          <SymptomCanvas side="front" className="w-full" />
         </div>
         <div className="flex flex-col items-center gap-2">
           <span className="text-xs font-semibold uppercase tracking-widest text-slate-500">
             Back
           </span>
-          <SymptomCanvas side="back" className="w-full max-w-md" />
+          <SymptomCanvas side="back" className="w-full" />
         </div>
       </div>
     </section>

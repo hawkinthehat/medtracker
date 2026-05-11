@@ -7,9 +7,9 @@ import {
 } from "@/lib/medication-schedule";
 import type { MedicationProfile } from "@/lib/medication-profile-types";
 import type { SavedMedication } from "@/lib/seed-medications";
-import { SEED_SAVED_MEDICATIONS } from "@/lib/seed-medications";
 import type { QueryClient } from "@tanstack/react-query";
 import { qk } from "@/lib/query-keys";
+import { getActiveMedications } from "@/lib/medication-active";
 
 function parseTimeToMinutes(t: string): number | null {
   const m = t.trim().match(/^(\d{1,2}):(\d{2})$/);
@@ -65,9 +65,9 @@ export function mergeProfilesIntoDoses(
 export async function fetchMergedMedicationDoses(
   qc: QueryClient
 ): Promise<ScheduledDose[]> {
-  const meds =
-    qc.getQueryData<SavedMedication[]>(qk.medications) ??
-    SEED_SAVED_MEDICATIONS;
+  const meds = getActiveMedications(
+    qc.getQueryData<SavedMedication[]>(qk.medications) ?? [],
+  );
   const profiles =
     qc.getQueryData<Record<string, MedicationProfile>>(qk.medicationProfiles) ??
     {};

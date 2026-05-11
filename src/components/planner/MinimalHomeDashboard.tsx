@@ -3,11 +3,22 @@
 import Link from "next/link";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { ClipboardList } from "lucide-react";
+import { ChevronDown, ClipboardList } from "lucide-react";
 import PulseStrip from "@/components/planner/PulseStrip";
+import MorningRoutine from "@/components/planner/MorningRoutine";
 import HydrationTracker from "@/components/planner/HydrationTracker";
+import ShowerTracker from "@/components/planner/ShowerTracker";
+import MovementTracker from "@/components/planner/MovementTracker";
 import DueMedicationsChecklist from "@/components/planner/DueMedicationsChecklist";
+import MedicationManager from "@/components/planner/MedicationManager";
 import SymptomCanvas from "@/components/journal/SymptomCanvas";
+import TiakiFirstTimeMedicationSetup from "@/components/home/TiakiFirstTimeMedicationSetup";
+import TiakiHomeWeatherSection from "@/components/home/TiakiHomeWeatherSection";
+import QuickRelief from "@/components/home/QuickRelief";
+import DoseAdjustmentModal, {
+  type DoseModalTab,
+} from "@/components/planner/DoseAdjustmentModal";
+import QuickDoseEditModal from "@/components/planner/QuickDoseEditModal";
 import {
   Sheet,
   SheetContent,
@@ -19,6 +30,11 @@ import { qk } from "@/lib/query-keys";
 import type { DailyLogEntry, EpisodeEntry } from "@/lib/types";
 import { persistDailyLogToSupabase } from "@/lib/supabase/daily-logs";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser-client";
+import {
+  atmosphericPressureFooter,
+  fetchAndLogWeather,
+} from "@/lib/weather";
+import type { SavedMedication } from "@/lib/seed-medications";
 
 function greeting(now = new Date()) {
   const h = now.getHours();
@@ -39,16 +55,40 @@ function formatLongDate(d = new Date()) {
 export default function MinimalHomeDashboard() {
   const qc = useQueryClient();
   const [episodeSketchOpen, setEpisodeSketchOpen] = useState(false);
+  const [quickAdjustMed, setQuickAdjustMed] = useState<SavedMedication | null>(
+    null,
+  );
+  const [doseModalMed, setDoseModalMed] = useState<SavedMedication | null>(
+    null,
+  );
+  const [doseModalTab, setDoseModalTab] = useState<DoseModalTab>("adjust");
+
+  function openDoseModal(m: SavedMedication, tab: DoseModalTab) {
+    setDoseModalTab(tab);
+    if (tab === "history") {
+      setQuickAdjustMed(null);
+      setDoseModalMed(m);
+    } else {
+      setDoseModalMed(null);
+      setQuickAdjustMed(m);
+    }
+  }
 
   const logCrisisAndOpenSketch = useMutation({
     mutationFn: async () => {
+      const snap = await fetchAndLogWeather().catch(() => null);
       const recordedAt = new Date().toISOString();
+      let notes = `Auto-logged when LOG EPISODE pressed (${recordedAt}).`;
+      if (snap) {
+        const line = atmosphericPressureFooter(snap.pressureHpa);
+        if (line) notes += `\n${line}`;
+      }
       const marker: DailyLogEntry = {
         id: crypto.randomUUID(),
         recordedAt,
         category: "other",
         label: "Crisis episode marker",
-        notes: `Auto-logged when LOG EPISODE pressed (${recordedAt}).`,
+        notes,
       };
       const episode: EpisodeEntry = {
         id: crypto.randomUUID(),
@@ -79,6 +119,10 @@ export default function MinimalHomeDashboard() {
 
   return (
     <div className="space-y-10 pb-10">
+      <TiakiHomeWeatherSection />
+
+      <TiakiFirstTimeMedicationSetup />
+
       <header className="space-y-1 border-b-2 border-slate-900 pb-6">
         <h1 className="text-3xl font-bold tracking-tight text-slate-900">
           {greeting()}, Jade
@@ -86,67 +130,106 @@ export default function MinimalHomeDashboard() {
         <p className="text-lg font-medium text-slate-700">{formatLongDate()}</p>
       </header>
 
-      <section aria-labelledby="pulse-heading" className="space-y-4">
+      <QuickRelief />
+
+      <MorningRoutine />
+
+      <section aria-labelledby="daily-pulse-heading" className="space-y-4">
         <h2
-          id="pulse-heading"
+          id="daily-pulse-heading"
           className="text-xs font-bold uppercase tracking-[0.25em] text-slate-900"
         >
-          The pulse
+          Daily pulse
         </h2>
         <PulseStrip />
         <HydrationTracker compact glassCount={8} />
       </section>
 
-      <section aria-labelledby="episode-heading" className="space-y-3">
-        <h2 id="episode-heading" className="sr-only">
-          Emergency logging
+      <ShowerTracker />
+
+      <MovementTracker />
+
+      <section aria-labelledby="quick-actions-heading" className="space-y-4">
+        <h2
+          id="quick-actions-heading"
+          className="text-xs font-bold uppercase tracking-[0.25em] text-slate-900"
+        >
+          Quick actions
         </h2>
         <button
           type="button"
           onClick={() => logCrisisAndOpenSketch.mutate()}
           disabled={logCrisisAndOpenSketch.isPending}
-          className="flex min-h-[72px] w-full items-center justify-center gap-3 rounded-2xl border-4 border-red-800 bg-red-600 px-6 py-5 text-lg font-black uppercase tracking-wide text-white shadow-lg transition hover:bg-red-700 active:scale-[0.99] disabled:opacity-60"
+          className="flex min-h-[72px] w-full items-center justify-center gap-3 rounded-2xl border-4 border-red-800 bg-red-600 px-6 py-5 text-xl font-black uppercase tracking-wide text-white shadow-lg transition hover:bg-red-700 active:scale-[0.99] disabled:opacity-60"
         >
-          <ClipboardList className="h-8 w-8 shrink-0" aria-hidden />
+          <ClipboardList className="h-9 w-9 shrink-0" aria-hidden />
           Log episode
         </button>
-        <p className="text-center text-sm text-slate-600">
-          Saves a crisis timestamp and opens the body drawing canvas.
+        <p className="text-center text-base font-medium text-slate-700">
+          Saves a crisis timestamp with barometric context when available, then
+          opens the body map.
         </p>
         {logCrisisAndOpenSketch.isError &&
           logCrisisAndOpenSketch.error instanceof Error && (
-            <p className="text-center text-sm font-medium text-red-700" role="alert">
+            <p
+              className="text-center text-base font-bold text-red-700"
+              role="alert"
+            >
               {logCrisisAndOpenSketch.error.message}
             </p>
           )}
       </section>
 
-      <section aria-labelledby="meds-heading" className="space-y-4">
-        <h2
-          id="meds-heading"
-          className="text-xs font-bold uppercase tracking-[0.25em] text-slate-900"
-        >
-          Today&apos;s meds
-        </h2>
-        <DueMedicationsChecklist />
-        <Link
-          href="/meds"
-          className="flex min-h-[48px] w-full items-center justify-center rounded-xl border-2 border-slate-900 bg-white py-3 text-sm font-bold uppercase tracking-wide text-slate-900 shadow-sm transition hover:bg-slate-100"
-        >
-          Manage meds
-        </Link>
-      </section>
+      <details className="group rounded-2xl border-4 border-black bg-white [&_summary::-webkit-details-marker]:hidden">
+        <summary className="flex min-h-[60px] cursor-pointer list-none items-center justify-between gap-3 px-4 py-4 text-xl font-black text-slate-900">
+          <span>Medication checklist</span>
+          <ChevronDown
+            className="h-8 w-8 shrink-0 text-slate-900 transition group-open:rotate-180"
+            aria-hidden
+          />
+        </summary>
+        <div className="space-y-6 border-t-4 border-slate-200 px-3 pb-6 pt-5 sm:px-4">
+          <DueMedicationsChecklist />
+          <MedicationManager embedded onOpenDoseModal={openDoseModal} />
+          <Link
+            href="/meds"
+            className="flex min-h-[56px] w-full items-center justify-center rounded-2xl border-4 border-black bg-white py-3 text-lg font-bold uppercase tracking-wide text-slate-900 shadow-sm transition hover:bg-slate-50"
+          >
+            Full medications page
+          </Link>
+        </div>
+      </details>
+
+      <QuickDoseEditModal
+        med={quickAdjustMed}
+        open={!!quickAdjustMed}
+        onClose={() => setQuickAdjustMed(null)}
+        onOpenAdvanced={(m) => {
+          setQuickAdjustMed(null);
+          setDoseModalTab("adjust");
+          setDoseModalMed(m);
+        }}
+      />
+
+      <DoseAdjustmentModal
+        med={doseModalMed}
+        open={!!doseModalMed}
+        initialTab={doseModalTab}
+        onClose={() => setDoseModalMed(null)}
+      />
 
       <Sheet open={episodeSketchOpen} onOpenChange={setEpisodeSketchOpen}>
         <SheetContent
           side="bottom"
-          className="max-h-[92vh] overflow-y-auto border-t-2 border-slate-900 bg-white"
+          className="max-h-[92vh] overflow-y-auto border-t-4 border-black bg-white"
         >
           <SheetHeader className="border-b border-slate-200 pb-4">
-            <SheetTitle className="text-slate-900">Body drawing</SheetTitle>
-            <SheetDescription className="text-slate-600">
-              Trace where symptoms are strongest; save each view to your daily
-              log for specialists.
+            <SheetTitle className="text-xl font-black text-slate-900">
+              Body drawing
+            </SheetTitle>
+            <SheetDescription className="text-base font-medium text-slate-700">
+              Trace where symptoms are strongest; saves go to your daily log for
+              specialists.
             </SheetDescription>
           </SheetHeader>
           <div className="space-y-8 py-6">
