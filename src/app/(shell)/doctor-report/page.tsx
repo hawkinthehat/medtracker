@@ -7,6 +7,10 @@ import { fetchMedicationsQuery } from "@/lib/medications-query";
 import type { SavedMedication } from "@/lib/seed-medications";
 import { fetchMedicationHistoryFromSupabase } from "@/lib/supabase/medication-history";
 import { fetchMedicationLogsFromSupabase } from "@/lib/supabase/medication-logs";
+import {
+  fetchSymptomLogsFromSupabase,
+  type SymptomLogRow,
+} from "@/lib/supabase/symptom-logs";
 import { dailyLogsQueryFn } from "@/lib/daily-logs-query-fn";
 import type {
   DailyLogEntry,
@@ -87,6 +91,14 @@ export default function DoctorReportPage() {
     refetchOnWindowFocus: true,
   });
 
+  useQuery({
+    queryKey: qk.symptomLogs,
+    queryFn: () => fetchSymptomLogsFromSupabase(500),
+    staleTime: 30_000,
+    gcTime: 1000 * 60 * 60 * 24 * 30,
+    refetchOnWindowFocus: true,
+  });
+
   const exportPdf = useMutation({
     mutationFn: async () => {
       const medications =
@@ -111,6 +123,10 @@ export default function DoctorReportPage() {
       if (medicationLogs === undefined) {
         medicationLogs = await fetchMedicationLogsFromSupabase(200);
       }
+      let symptomLogs = qc.getQueryData<SymptomLogRow[]>(qk.symptomLogs);
+      if (symptomLogs === undefined) {
+        symptomLogs = await fetchSymptomLogsFromSupabase(500);
+      }
 
       await generateDoctorSpecialistPdf({
         medications,
@@ -121,6 +137,7 @@ export default function DoctorReportPage() {
         safetyGateBlocks,
         sideEffectLogs,
         medicationLogs,
+        symptomLogs,
       });
     },
   });
@@ -132,8 +149,9 @@ export default function DoctorReportPage() {
       </h1>
       <p className="text-sm leading-relaxed text-slate-600">
         Compile medications, dose history, positional BP deltas, metabolic gate
-        blocks, side-effect logs, and body sketches into one printable PDF for
-        a new specialist.
+        blocks, side-effect logs, Symptom Matrix flare counts (with Fibromyalgia
+        pain/stiffness trends), and body sketches into one printable PDF for a new
+        specialist.
       </p>
       <button
         type="button"

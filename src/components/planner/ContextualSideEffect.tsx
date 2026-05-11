@@ -3,12 +3,9 @@
 import type { RecentDoseContext } from "@/lib/recent-dose-context";
 import { formatRoughHoursAgo } from "@/lib/recent-dose-context";
 
-type TriggerKind = "mood_crisis" | "brain_fog_total";
-
 type Props = {
   open: boolean;
   candidate: RecentDoseContext | null;
-  trigger: TriggerKind;
   onDismiss: () => void;
   onConfirmYes: () => void;
 };
@@ -16,16 +13,10 @@ type Props = {
 export default function ContextualSideEffect({
   open,
   candidate,
-  trigger,
   onDismiss,
   onConfirmYes,
 }: Props) {
   if (!open || !candidate) return null;
-
-  const hint =
-    trigger === "mood_crisis"
-      ? "This mood dip might be medication-related."
-      : "Severe fog can track with recent doses.";
 
   return (
     <div
@@ -41,7 +32,9 @@ export default function ContextualSideEffect({
         <span className="text-amber-200">{candidate.medicationName}</span> about{" "}
         {formatRoughHoursAgo(candidate.hoursAgo)} ago. Could this be a reaction?
       </p>
-      <p className="mt-2 text-xs leading-relaxed text-amber-200/85">{hint}</p>
+      <p className="mt-2 text-xs leading-relaxed text-amber-200/85">
+        This mood dip might be medication-related.
+      </p>
       <div className="mt-4 flex flex-wrap gap-2">
         <button
           type="button"

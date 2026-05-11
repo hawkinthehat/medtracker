@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.15",
+    "@supabase/ssr": "^0.5.2",
     "@supabase/supabase-js": "^2.105.1",
     "@tanstack/query-sync-storage-persister": "^5.100.6",
     "@tanstack/react-query": "^5.100.6",

@@ -303,7 +303,6 @@ export default function MoodTracker() {
         <ContextualSideEffect
           open={!!sideEffectPrompt}
           candidate={sideEffectPrompt?.candidate ?? null}
-          trigger={sideEffectPrompt?.trigger ?? "mood_crisis"}
           onDismiss={() => setSideEffectPrompt(null)}
           onConfirmYes={() => {
             if (!sideEffectPrompt) return;

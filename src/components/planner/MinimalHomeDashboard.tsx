@@ -16,6 +16,7 @@ import SymptomCanvas from "@/components/journal/SymptomCanvas";
 import HomeDashboardTopZone from "@/components/home/HomeDashboardTopZone";
 import HomeDailyActionGrid from "@/components/home/HomeDailyActionGrid";
 import QuickRelief from "@/components/home/QuickRelief";
+import SymptomMatrix from "@/components/home/SymptomMatrix";
 import WelcomeWizard from "@/components/WelcomeWizard";
 import DoseAdjustmentModal, {
   type DoseModalTab,
@@ -198,6 +199,8 @@ export default function MinimalHomeDashboard({
       <QuickRelief />
 
       <MorningRoutine />
+
+      <SymptomMatrix />
 
       <section aria-labelledby="daily-pulse-heading" className="space-y-4">
         <h2

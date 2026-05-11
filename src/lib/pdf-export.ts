@@ -1,5 +1,10 @@
 import type { MedicationHistoryEntry } from "@/lib/medication-profile-types";
 import type { MedicationLogRow } from "@/lib/supabase/medication-logs";
+import type { SymptomLogRow } from "@/lib/supabase/symptom-logs";
+import {
+  buildFibromyalgiaTrendsSummary,
+  buildSymptomMatrixRollingSevenDaySummary,
+} from "@/lib/symptom-matrix-report";
 import {
   calendarDayKeyLocal,
   getActiveMedications,
@@ -437,6 +442,8 @@ export type DoctorReportInput = {
   safetyGateBlocks: SafetyGateBlockEvent[];
   sideEffectLogs: SideEffectLog[];
   medicationLogs: MedicationLogRow[];
+  /** Quick-tap Symptom Matrix rows (`symptom_logs`) — summarized by category on the PDF. */
+  symptomLogs: SymptomLogRow[];
 };
 
 export function compileDoctorReportBundle(
@@ -603,6 +610,60 @@ export async function generateDoctorSpecialistPdf(
     });
     nextY = (doc as PdfWithAutoTable).lastAutoTable.finalY;
   }
+
+  const symptomSummary = buildSymptomMatrixRollingSevenDaySummary(
+    bundle.symptomLogs,
+    new Date(bundle.compiledAt),
+  );
+  doc.setFontSize(12);
+  doc.setTextColor(15, 23, 42);
+  doc.text("Symptom Matrix (quick taps) — rolling 7 days", 14, nextY + 12);
+  doc.setFontSize(10);
+  doc.setTextColor(51, 65, 85);
+  doc.text(
+    "Grouped by disorder bucket so specialists can scan flare frequency at a glance.",
+    14,
+    nextY + 17,
+    { maxWidth: pageW - 28 },
+  );
+  doc.setFontSize(10);
+  doc.setTextColor(15, 23, 42);
+  doc.setFont("helvetica", "bold");
+  const symptomLines = doc.splitTextToSize(symptomSummary, pageW - 28);
+  let symptomY = nextY + 26;
+  symptomLines.forEach((line: string) => {
+    doc.text(line, 14, symptomY);
+    symptomY += 5;
+  });
+  doc.setFont("helvetica", "normal");
+  nextY = symptomY + 6;
+
+  const fibroTrends = buildFibromyalgiaTrendsSummary(
+    bundle.symptomLogs,
+    new Date(bundle.compiledAt),
+  );
+  doc.setFontSize(12);
+  doc.setTextColor(15, 23, 42);
+  doc.text("Fibromyalgia trends (rolling 7 days)", 14, nextY + 12);
+  doc.setFontSize(9);
+  doc.setTextColor(71, 85, 105);
+  doc.text(
+    "Pain vs stiffness frequency helps compare fibro clustering with dysautonomia flares and pressure-sensitive symptoms.",
+    14,
+    nextY + 17,
+    { maxWidth: pageW - 28 },
+  );
+  doc.setFontSize(10);
+  doc.setTextColor(15, 23, 42);
+  doc.setFont("helvetica", "bold");
+  const fibroLines = doc.splitTextToSize(fibroTrends, pageW - 28);
+  let fibroY = nextY + 26;
+  fibroLines.forEach((line: string) => {
+    doc.text(line, 14, fibroY);
+    fibroY += 5;
+  });
+  doc.setFont("helvetica", "normal");
+  nextY = fibroY + 6;
 
   doc.setFontSize(12);
   doc.setTextColor(127, 29, 29);

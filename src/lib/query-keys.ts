@@ -32,6 +32,8 @@ export const qk = {
   weatherLogs: ["weatherLogs", "v1"] as const,
   /** PRN quick-relief logs (`medication_logs`) */
   medicationLogs: ["medicationLogs", "v1"] as const,
+  /** Quick-tap symptom matrix (`symptom_logs`) */
+  symptomLogs: ["symptomLogs", "v1"] as const,
   /** Symptom map rows per body region (`pain_map`) */
   painMap: (bodyPartId: string) => ["painMap", bodyPartId] as const,
   /** Distinct body_part_id values present in `pain_map` (for mapper highlights) */

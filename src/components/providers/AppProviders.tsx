@@ -9,6 +9,7 @@ import { useState } from "react";
 import WeatherHourlyLogger from "@/components/providers/WeatherHourlyLogger";
 import MedicationsHydrator from "@/components/providers/MedicationsHydrator";
 import MedicationExpiryWatcher from "@/components/providers/MedicationExpiryWatcher";
+import SupabaseAuthListener from "@/components/providers/SupabaseAuthListener";
 
 export default function AppProviders({
   children,
@@ -43,6 +44,7 @@ export default function AppProviders({
         maxAge: 1000 * 60 * 60 * 24 * 30,
       }}
     >
+      <SupabaseAuthListener />
       <MedicationsHydrator />
       <MedicationExpiryWatcher />
       <WeatherHourlyLogger />

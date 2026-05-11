@@ -1,5 +1,6 @@
 import type { DailyLogEntry } from "@/lib/types";
 import type { MedicationLogRow } from "@/lib/supabase/medication-logs";
+import { ENTRY_TYPE_WATER } from "@/lib/daily-log-entry-type";
 import { isWithinLastDays } from "@/lib/clinical-summary-stats";
 
 export const WATER_OZ_LABEL = "Water (oz)";
@@ -32,10 +33,21 @@ export function sumWaterOzToday(
 ): number {
   let oz = 0;
   for (const e of dailyLogs) {
+    if (!isSameLocalCalendarDay(e.recordedAt, ref)) continue;
+
+    if (e.entryType === ENTRY_TYPE_WATER || e.entryType === "water") {
+      if (e.label === LEGACY_GLASS_LABEL) {
+        oz += 8;
+        continue;
+      }
+      const n = Number.parseInt(String(e.notes ?? "").trim(), 10);
+      if (Number.isFinite(n) && n > 0) oz += n;
+      continue;
+    }
+
     if (e.category !== "hydration") continue;
     if (e.label !== WATER_OZ_LABEL && e.label !== LEGACY_GLASS_LABEL)
       continue;
-    if (!isSameLocalCalendarDay(e.recordedAt, ref)) continue;
     if (e.label === LEGACY_GLASS_LABEL) {
       oz += 8;
       continue;
@@ -53,10 +65,21 @@ export function sumWaterOzLastDays(
 ): number {
   let oz = 0;
   for (const e of dailyLogs) {
+    if (!isWithinLastDays(e.recordedAt, days)) continue;
+
+    if (e.entryType === ENTRY_TYPE_WATER || e.entryType === "water") {
+      if (e.label === LEGACY_GLASS_LABEL) {
+        oz += 8;
+        continue;
+      }
+      const n = Number.parseInt(String(e.notes ?? "").trim(), 10);
+      if (Number.isFinite(n) && n > 0) oz += n;
+      continue;
+    }
+
     if (e.category !== "hydration") continue;
     if (e.label !== WATER_OZ_LABEL && e.label !== LEGACY_GLASS_LABEL)
       continue;
-    if (!isWithinLastDays(e.recordedAt, days)) continue;
     if (e.label === LEGACY_GLASS_LABEL) {
       oz += 8;
       continue;

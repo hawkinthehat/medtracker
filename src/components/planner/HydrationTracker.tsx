@@ -1,12 +1,17 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
+import type { User } from "@supabase/supabase-js";
 import { qk } from "@/lib/query-keys";
 import type { DailyLogEntry } from "@/lib/types";
 import { dailyLogsQueryFn } from "@/lib/daily-logs-query-fn";
-import { persistDailyLogToSupabase } from "@/lib/supabase/daily-logs";
+import {
+  fetchTodayWaterOzSumForCurrentUser,
+  persistDailyLogToSupabase,
+} from "@/lib/supabase/daily-logs";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser-client";
 import {
   fetchMedicationLogsFromSupabase,
@@ -40,9 +45,64 @@ export default function HydrationTracker({
   compact = false,
 }: HydrationTrackerProps) {
   const router = useRouter();
+  const pathname = usePathname();
   const qc = useQueryClient();
   const supabaseConfigured = Boolean(getSupabaseBrowserClient());
+
+  const [sessionUser, setSessionUser] = useState<User | null>(null);
+  const [sessionResolved, setSessionResolved] = useState(false);
+  /** Today's oz from `daily_logs` for the signed-in user (authoritative when cloud sync). */
+  const [storedWaterOz, setStoredWaterOz] = useState(0);
+  const [waterBaselineLoaded, setWaterBaselineLoaded] = useState(false);
+
   const [toast, setToast] = useState<string | null>(null);
+
+  useEffect(() => {
+    const sb = getSupabaseBrowserClient();
+    if (!sb) {
+      setSessionUser(null);
+      setSessionResolved(true);
+      return;
+    }
+    void sb.auth.getSession().then(({ data: { session } }) => {
+      setSessionUser(session?.user ?? null);
+      setSessionResolved(true);
+    });
+    const {
+      data: { subscription },
+    } = sb.auth.onAuthStateChange((_event, session) => {
+      setSessionUser(session?.user ?? null);
+      setSessionResolved(true);
+    });
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadTodayWaterFromDb() {
+      if (!supabaseConfigured) {
+        setWaterBaselineLoaded(true);
+        return;
+      }
+      if (!sessionUser) {
+        setStoredWaterOz(0);
+        setWaterBaselineLoaded(true);
+        return;
+      }
+      setWaterBaselineLoaded(false);
+      const { oz } = await fetchTodayWaterOzSumForCurrentUser();
+      if (!cancelled) {
+        setStoredWaterOz(oz);
+        setWaterBaselineLoaded(true);
+      }
+    }
+    void loadTodayWaterFromDb();
+    return () => {
+      cancelled = true;
+    };
+  }, [supabaseConfigured, sessionUser]);
 
   const { data: dailyLogs = [] } = useQuery({
     queryKey: qk.dailyLogs,
@@ -61,15 +121,29 @@ export default function HydrationTracker({
     refetchOnWindowFocus: true,
   });
 
-  const computedOz = useMemo(
+  const cacheOz = useMemo(
     () => sumWaterOzToday(dailyLogs),
     [dailyLogs],
   );
-  /** Pending oz not yet reflected in React Query cache after tap (optimistic UI). */
+
+  const baselineOz = !supabaseConfigured
+    ? cacheOz
+    : !sessionResolved || !sessionUser
+      ? 0
+      : waterBaselineLoaded
+        ? storedWaterOz
+        : cacheOz;
+
+  /** Pending oz not yet confirmed after tap (optimistic UI). */
   const [optimisticOz, setOptimisticOz] = useState(0);
   /** Which +oz button just fired — brief checkmark flash. */
   const [flashOz, setFlashOz] = useState<number | null>(null);
-  const currentWaterIntake = computedOz + optimisticOz;
+
+  const needsSignIn = supabaseConfigured && sessionResolved && !sessionUser;
+  const showWaterPlaceholder =
+    supabaseConfigured && !!sessionUser && !waterBaselineLoaded;
+
+  const currentWaterIntake = baselineOz + optimisticOz;
 
   const sodiumMgToday = useMemo(
     () => sumThermotabsSodiumMgToday(medicationLogs as MedicationLogRow[]),
@@ -89,6 +163,7 @@ export default function HydrationTracker({
         } = await sb.auth.getUser();
         userId = user?.id;
       }
+      // persistDailyLogToSupabase attaches user_id from this row or the same session user.
       const row: DailyLogEntry = {
         id: crypto.randomUUID(),
         recordedAt: new Date().toISOString(),
@@ -109,8 +184,8 @@ export default function HydrationTracker({
         row,
         ...prev,
       ]);
+      setStoredWaterOz((s) => s + amountOz);
       setOptimisticOz((o) => Math.max(0, o - amountOz));
-      void qc.invalidateQueries({ queryKey: qk.dailyLogs });
       router.refresh();
       setToast(toastWaterLogged(amountOz));
       window.setTimeout(() => setToast(null), 4500);
@@ -123,6 +198,11 @@ export default function HydrationTracker({
   });
 
   function quickAddOz(amount: number) {
+    if (needsSignIn) {
+      router.push(`/auth?next=${encodeURIComponent(pathname || "/")}`);
+      return;
+    }
+
     setOptimisticOz((o) => o + amount);
     setFlashOz(amount);
     window.setTimeout(() => setFlashOz(null), 700);
@@ -238,17 +318,45 @@ export default function HydrationTracker({
         </p>
       )}
 
+      {needsSignIn && (
+        <div
+          className={`rounded-2xl border-4 border-black bg-slate-50 px-4 py-4 ${
+            compact ? "mt-3" : "mt-4"
+          }`}
+        >
+          <p className="text-lg font-bold leading-snug text-black">
+            Please sign in to track water and salt. Your logs need an account so
+            they save under the correct user.
+          </p>
+          <Link
+            href={`/auth?next=${encodeURIComponent(pathname || "/")}`}
+            className="mt-4 inline-flex min-h-[52px] min-w-[10rem] items-center justify-center rounded-xl border-4 border-black bg-black px-6 text-lg font-black text-white"
+          >
+            Sign in
+          </Link>
+        </div>
+      )}
+
       <div className={compact ? "mt-1" : "mt-5"}>
         <p className="text-center font-mono text-4xl font-black tabular-nums text-slate-900">
-          {currentWaterIntake}
-          <span className="text-2xl font-bold text-slate-600"> oz</span>
+          {showWaterPlaceholder ? (
+            <span className="text-slate-400">…</span>
+          ) : (
+            <>
+              {currentWaterIntake}
+              <span className="text-2xl font-bold text-slate-600"> oz</span>
+            </>
+          )}
         </p>
         <div className="mt-4 flex flex-wrap justify-center gap-3">
           {([8, 16, 32] as const).map((oz) => (
             <button
               key={oz}
               type="button"
-              disabled={addOzMutation.isPending && supabaseConfigured}
+              disabled={
+                (addOzMutation.isPending && supabaseConfigured) ||
+                showWaterPlaceholder
+              }
               onClick={() => quickAddOz(oz)}
               className={`relative flex min-h-[56px] min-w-[5.5rem] flex-col items-center justify-center rounded-2xl border-4 border-black px-4 text-xl font-black text-white shadow-md transition hover:bg-sky-700 disabled:opacity-50 ${
                 flashOz === oz ? "bg-emerald-600 ring-2 ring-emerald-300" : "bg-sky-600"
@@ -273,7 +381,7 @@ export default function HydrationTracker({
         <div className="mb-1 flex items-center justify-between text-xs font-semibold uppercase tracking-wide text-slate-600">
           <span>Water goal</span>
           <span className="tabular-nums text-slate-900">
-            {currentWaterIntake} / {waterGoalOz} oz
+            {showWaterPlaceholder ? "…" : currentWaterIntake} / {waterGoalOz} oz
           </span>
         </div>
         <div

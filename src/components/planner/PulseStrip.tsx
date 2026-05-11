@@ -6,17 +6,7 @@ import type {
   TaperSensitivityEvent,
 } from "@/lib/medication-profile-types";
 import { hasAnyActiveTaperOnDate } from "@/lib/taper-plan";
-import {
-  AlertTriangle,
-  Brain,
-  Cloud,
-  CloudFog,
-  CloudRain,
-  CloudSun,
-  Eye,
-  Smile,
-  Sparkles,
-} from "lucide-react";
+import { AlertTriangle, Cloud, CloudRain, Smile, Sparkles } from "lucide-react";
 import type { ScheduledDose } from "@/lib/medication-schedule";
 import { fetchMergedMedicationDoses } from "@/lib/merge-medication-doses";
 import { qk } from "@/lib/query-keys";
@@ -26,13 +16,9 @@ import {
   findRecentDoseContext,
   type RecentDoseContext,
 } from "@/lib/recent-dose-context";
-import {
-  persistBrainFogToSupabase,
-  persistMoodToSupabase,
-  persistSideEffectLogToSupabase,
-} from "@/lib/supabase/wellness-side-effects";
+import { persistMoodToSupabase, persistSideEffectLogToSupabase } from "@/lib/supabase/wellness-side-effects";
 import { loadTaperPlansMap } from "@/lib/supabase/medication-history";
-import type { BrainFogEntry, MoodEntry, SideEffectLog } from "@/lib/types";
+import type { MoodEntry, SideEffectLog } from "@/lib/types";
 import ContextualSideEffect from "./ContextualSideEffect";
 import { useState } from "react";
 import {
@@ -40,11 +26,7 @@ import {
   fetchAndLogWeather,
 } from "@/lib/weather";
 import { getEnvironmentSnapshot } from "@/lib/environment-snapshot";
-import {
-  TOAST_BRAIN_FOG,
-  TOAST_MOOD,
-  toastLinkedMedication,
-} from "@/lib/educational-toasts";
+import { TOAST_MOOD, toastLinkedMedication } from "@/lib/educational-toasts";
 
 const MOOD_SCALE: { value: MoodEntry["mood"]; label: string }[] = [
   { value: 5, label: "Great" },
@@ -56,27 +38,12 @@ const MOOD_SCALE: { value: MoodEntry["mood"]; label: string }[] = [
 
 const MOOD_ICONS = [Sparkles, Smile, Cloud, CloudRain, AlertTriangle] as const;
 
-const BRAIN_FOG_STEPS: {
-  score: BrainFogEntry["score"];
-  label: string;
-}[] = [
-  { score: 2, label: "Clear" },
-  { score: 4, label: "Light" },
-  { score: 6, label: "Moderate" },
-  { score: 8, label: "Heavy" },
-  { score: 10, label: "Total fog" },
-];
-
-const BRAIN_ICONS = [Eye, CloudSun, Cloud, CloudFog, Brain] as const;
-
-/** Minimal light-mode pulse row for the home dashboard (one tap = save). */
+/** Mood-only pulse row. Brain fog quick-taps live under Symptom Matrix on home. */
 export default function PulseStrip() {
   const qc = useQueryClient();
   const [toast, setToast] = useState<string | null>(null);
-  const [sideEffectPrompt, setSideEffectPrompt] = useState<{
-    candidate: RecentDoseContext;
-    trigger: "mood_crisis" | "brain_fog_total";
-  } | null>(null);
+  const [sideEffectPrompt, setSideEffectPrompt] =
+    useState<RecentDoseContext | null>(null);
 
   const { data: medications = [] } = useQuery({
     queryKey: qk.medications,
@@ -141,7 +108,7 @@ export default function PulseStrip() {
           };
           qc.setQueryData<TaperSensitivityEvent[]>(
             qk.taperSensitivityEvents,
-            (prev = []) => [ev, ...prev]
+            (prev = []) => [ev, ...prev],
           );
         }
         const candidate = findRecentDoseContext(
@@ -149,92 +116,28 @@ export default function PulseStrip() {
           getActiveMedications(medications),
         );
         if (candidate) {
-          setSideEffectPrompt({ candidate, trigger: "mood_crisis" });
-        }
-      }
-    },
-  });
-
-  const saveBrainFog = useMutation({
-    mutationFn: async (score: BrainFogEntry["score"]) => {
-      let snap = null;
-      if (score >= 8) {
-        snap =
-          (await fetchAndLogWeather().catch(() => null)) ??
-          getEnvironmentSnapshot();
-      }
-      const row: BrainFogEntry = {
-        id: crypto.randomUUID(),
-        recordedAt: new Date().toISOString(),
-        score,
-      };
-      if (score >= 8 && snap) {
-        const line = atmosphericPressureFooter(snap.pressureHpa);
-        if (line) row.note = line;
-      }
-      await persistBrainFogToSupabase(row);
-      return row;
-    },
-    onSuccess: (row) => {
-      qc.setQueryData<BrainFogEntry[]>(qk.brainFog, (prev = []) => [
-        row,
-        ...prev,
-      ]);
-      setToast(TOAST_BRAIN_FOG);
-      window.setTimeout(() => setToast(null), 4000);
-      setSideEffectPrompt(null);
-      if (row.score === 10) {
-        const plans =
-          qc.getQueryData<Record<string, TaperPlan>>(qk.taperPlans) ?? {};
-        const { active, names } = hasAnyActiveTaperOnDate(plans, new Date());
-        if (active && names.length > 0) {
-          const ev: TaperSensitivityEvent = {
-            id: crypto.randomUUID(),
-            recordedAt: row.recordedAt,
-            kind: "brain_fog_total",
-            medicationNamesInTaper: names,
-            note: `Severe brain fog during active taper (${names.join(", ")}).`,
-          };
-          qc.setQueryData<TaperSensitivityEvent[]>(
-            qk.taperSensitivityEvents,
-            (prev = []) => [ev, ...prev]
-          );
-        }
-        const candidate = findRecentDoseContext(
-          doses,
-          getActiveMedications(medications),
-        );
-        if (candidate) {
-          setSideEffectPrompt({ candidate, trigger: "brain_fog_total" });
+          setSideEffectPrompt(candidate);
         }
       }
     },
   });
 
   const linkSideEffect = useMutation({
-    mutationFn: async (payload: {
-      candidate: RecentDoseContext;
-      trigger: "mood_crisis" | "brain_fog_total";
-    }) => {
+    mutationFn: async (candidate: RecentDoseContext) => {
       const med =
         medications.find(
           (m) =>
-            m.name.toLowerCase() === payload.candidate.medicationName.toLowerCase()
+            m.name.toLowerCase() === candidate.medicationName.toLowerCase(),
         ) ?? null;
-      const medicationId = med?.id ?? payload.candidate.medicationId;
-      const medicationName = med?.name ?? payload.candidate.medicationName;
-
-      const symptoms: string[] =
-        payload.trigger === "mood_crisis"
-          ? ["Crisis mood", "Suspected reaction"]
-          : ["Brain fog", "Total fog", "Suspected reaction"];
+      const medicationId = med?.id ?? candidate.medicationId;
+      const medicationName = med?.name ?? candidate.medicationName;
 
       const log: SideEffectLog = {
         id: crypto.randomUUID(),
         recordedAt: new Date().toISOString(),
         medicationId,
         medicationName,
-        symptoms,
+        symptoms: ["Crisis mood", "Suspected reaction"],
       };
       await persistSideEffectLogToSupabase(log);
       return log;
@@ -284,49 +187,13 @@ export default function PulseStrip() {
         })}
       </div>
 
-      <p
-        id="pulse-fog"
-        className="mt-6 text-xs font-bold uppercase tracking-[0.2em] text-slate-900"
-      >
-        Brain fog
-      </p>
-      <div
-        className="mt-3 flex justify-between gap-1 overflow-x-auto pb-1"
-        role="group"
-        aria-labelledby="pulse-fog"
-      >
-        {BRAIN_FOG_STEPS.map(({ score, label }, i) => {
-          const Icon = BRAIN_ICONS[i];
-          return (
-            <button
-              key={score}
-              type="button"
-              disabled={saveBrainFog.isPending}
-              onClick={() => saveBrainFog.mutate(score)}
-              title={label}
-              aria-label={`Log brain fog: ${label}`}
-              className="flex min-h-[88px] min-w-[3.5rem] flex-1 flex-col items-center justify-center gap-1 rounded-xl border-2 border-slate-900 bg-white py-2 transition active:scale-[0.97] disabled:opacity-50"
-            >
-              <Icon className="h-9 w-9 text-violet-700" aria-hidden />
-              <span className="text-center text-[10px] font-semibold uppercase leading-tight text-slate-800">
-                {label}
-              </span>
-            </button>
-          );
-        })}
-      </div>
-
       <ContextualSideEffect
         open={!!sideEffectPrompt}
-        candidate={sideEffectPrompt?.candidate ?? null}
-        trigger={sideEffectPrompt?.trigger ?? "mood_crisis"}
+        candidate={sideEffectPrompt}
         onDismiss={() => setSideEffectPrompt(null)}
         onConfirmYes={() => {
           if (!sideEffectPrompt) return;
-          linkSideEffect.mutate({
-            candidate: sideEffectPrompt.candidate,
-            trigger: sideEffectPrompt.trigger,
-          });
+          linkSideEffect.mutate(sideEffectPrompt);
         }}
       />
 
