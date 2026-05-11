@@ -229,11 +229,14 @@ export default function MovementTracker() {
 
       await logMovementEntry.mutateAsync(row);
 
-      await insertActivityLogRow({
-        activity_type: "active_movement",
+      const act = await insertActivityLogRow({
+        activity_type: "dog_walk",
         notes: getWalkNotesDefault().trim() || DEFAULT_WALK_NOTES,
         recorded_at: recordedAt,
       });
+      if (!act.ok) {
+        throw new Error(act.error ?? "Could not save activity log.");
+      }
 
       void qc.invalidateQueries({ queryKey: qk.dailyLogs });
       router.refresh();
@@ -271,11 +274,14 @@ export default function MovementTracker() {
 
       await logMovementEntry.mutateAsync(row);
 
-      await insertActivityLogRow({
-        activity_type: "pt_session",
+      const act = await insertActivityLogRow({
+        activity_type: "pt",
         notes: `${humanLabel} · ${slot}`,
         recorded_at: row.recordedAt,
       });
+      if (!act.ok) {
+        throw new Error(act.error ?? "Could not save activity log.");
+      }
 
       void qc.invalidateQueries({ queryKey: qk.dailyLogs });
       router.refresh();

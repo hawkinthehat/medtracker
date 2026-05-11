@@ -34,6 +34,8 @@ export const qk = {
   medicationLogs: ["medicationLogs", "v1"] as const,
   /** Quick-tap symptom matrix (`symptom_logs`) */
   symptomLogs: ["symptomLogs", "v1"] as const,
+  /** Today's `activity_logs` counts for dashboard (dog_walk / pt) */
+  activityToday: ["activityLogs", "today", "v1"] as const,
   /** Symptom map rows per body region (`pain_map`) */
   painMap: (bodyPartId: string) => ["painMap", bodyPartId] as const,
   /** Distinct body_part_id values present in `pain_map` (for mapper highlights) */

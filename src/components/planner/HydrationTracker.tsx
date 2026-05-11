@@ -155,15 +155,6 @@ export default function HydrationTracker({
 
   const addOzMutation = useMutation({
     mutationFn: async (amountOz: number) => {
-      const sb = getSupabaseBrowserClient();
-      let userId: string | undefined;
-      if (sb) {
-        const {
-          data: { user },
-        } = await sb.auth.getUser();
-        userId = user?.id;
-      }
-      // persistDailyLogToSupabase attaches user_id from this row or the same session user.
       const row: DailyLogEntry = {
         id: crypto.randomUUID(),
         recordedAt: new Date().toISOString(),
@@ -171,7 +162,7 @@ export default function HydrationTracker({
         label: WATER_OZ_LABEL,
         notes: String(amountOz),
         entryType: ENTRY_TYPE_WATER,
-        userId,
+        valueOz: amountOz,
       };
       const ok = await persistDailyLogToSupabase(row);
       if (supabaseConfigured && !ok) {
@@ -215,6 +206,7 @@ export default function HydrationTracker({
         label: WATER_OZ_LABEL,
         notes: String(amount),
         entryType: ENTRY_TYPE_WATER,
+        valueOz: amount,
       };
       qc.setQueryData<DailyLogEntry[]>(qk.dailyLogs, (prev = []) => [
         row,

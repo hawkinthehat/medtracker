@@ -26,7 +26,7 @@ export function isSameLocalCalendarDay(iso: string, ref = new Date()) {
   return x.y === r.y && x.m === r.m && x.day === r.day;
 }
 
-/** Sum fluid ounces from hydration logs (each row stores oz amount in `notes`). */
+/** Sum fluid ounces from hydration logs (`valueOz` / `daily_logs.value`, else legacy `notes`). */
 export function sumWaterOzToday(
   dailyLogs: DailyLogEntry[],
   ref = new Date(),
@@ -40,8 +40,13 @@ export function sumWaterOzToday(
         oz += 8;
         continue;
       }
-      const n = Number.parseInt(String(e.notes ?? "").trim(), 10);
-      if (Number.isFinite(n) && n > 0) oz += n;
+      const fromVal =
+        e.valueOz != null &&
+        Number.isFinite(e.valueOz) &&
+        e.valueOz > 0
+          ? Math.round(e.valueOz)
+          : Number.parseInt(String(e.notes ?? "").trim(), 10);
+      if (Number.isFinite(fromVal) && fromVal > 0) oz += fromVal;
       continue;
     }
 
@@ -52,8 +57,13 @@ export function sumWaterOzToday(
       oz += 8;
       continue;
     }
-    const n = Number.parseInt(String(e.notes ?? "").trim(), 10);
-    if (Number.isFinite(n) && n > 0) oz += n;
+    const fromVal =
+      e.valueOz != null &&
+      Number.isFinite(e.valueOz) &&
+      e.valueOz > 0
+        ? Math.round(e.valueOz)
+        : Number.parseInt(String(e.notes ?? "").trim(), 10);
+    if (Number.isFinite(fromVal) && fromVal > 0) oz += fromVal;
   }
   return oz;
 }
@@ -72,8 +82,13 @@ export function sumWaterOzLastDays(
         oz += 8;
         continue;
       }
-      const n = Number.parseInt(String(e.notes ?? "").trim(), 10);
-      if (Number.isFinite(n) && n > 0) oz += n;
+      const fromVal =
+        e.valueOz != null &&
+        Number.isFinite(e.valueOz) &&
+        e.valueOz > 0
+          ? Math.round(e.valueOz)
+          : Number.parseInt(String(e.notes ?? "").trim(), 10);
+      if (Number.isFinite(fromVal) && fromVal > 0) oz += fromVal;
       continue;
     }
 
@@ -84,8 +99,13 @@ export function sumWaterOzLastDays(
       oz += 8;
       continue;
     }
-    const n = Number.parseInt(String(e.notes ?? "").trim(), 10);
-    if (Number.isFinite(n) && n > 0) oz += n;
+    const fromVal =
+      e.valueOz != null &&
+      Number.isFinite(e.valueOz) &&
+      e.valueOz > 0
+        ? Math.round(e.valueOz)
+        : Number.parseInt(String(e.notes ?? "").trim(), 10);
+    if (Number.isFinite(fromVal) && fromVal > 0) oz += fromVal;
   }
   return oz;
 }

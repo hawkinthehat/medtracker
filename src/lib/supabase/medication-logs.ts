@@ -1,5 +1,9 @@
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser-client";
 import type { QuickReliefPeriod } from "@/lib/quick-relief";
+import {
+  logDataNotSavedNoUser,
+  resolveSupabaseUserId,
+} from "@/lib/supabase/auth-save-guard";
 
 export type MedicationLogRow = {
   id: string;
@@ -12,7 +16,11 @@ export type MedicationLogRow = {
   linkedPainCategory: string | null;
   linkedPainIntensity: number | null;
   linkSummary: string | null;
+  status: string | null;
+  userId: string | null;
 };
+
+export const MORNING_ROUTINE_MEDICATION_NAME = "Morning Routine";
 
 function rowToLog(r: Record<string, unknown>): MedicationLogRow {
   return {
@@ -31,6 +39,8 @@ function rowToLog(r: Record<string, unknown>): MedicationLogRow {
         ? null
         : Number(r.linked_pain_intensity),
     linkSummary: r.link_summary == null ? null : String(r.link_summary),
+    status: r.status == null ? null : String(r.status),
+    userId: r.user_id == null ? null : String(r.user_id),
   };
 }
 
@@ -39,11 +49,16 @@ export async function fetchMedicationLogsFromSupabase(
 ): Promise<MedicationLogRow[]> {
   const sb = getSupabaseBrowserClient();
   if (!sb) return [];
+  const uid = await resolveSupabaseUserId(sb);
+  if (!uid) return [];
+
   const { data, error } = await sb
     .from("medication_logs")
     .select("*")
+    .or(`user_id.eq.${uid},user_id.is.null`)
     .order("recorded_at", { ascending: false })
     .limit(limit);
+
   if (error || !data) return [];
   return data.map((x) => rowToLog(x as Record<string, unknown>));
 }
@@ -57,6 +72,7 @@ export type InsertMedicationLogInput = {
   linkedPainCategory?: string | null;
   linkedPainIntensity?: number | null;
   linkSummary?: string | null;
+  status?: string | null;
 };
 
 export async function insertMedicationLogRow(
@@ -66,6 +82,13 @@ export async function insertMedicationLogRow(
   if (!sb) {
     return { ok: false, error: "Supabase is not configured." };
   }
+
+  const uid = await resolveSupabaseUserId(sb);
+  if (!uid) {
+    logDataNotSavedNoUser();
+    return { ok: false, error: "not_signed_in" };
+  }
+
   const id = crypto.randomUUID();
   const recordedAt = new Date().toISOString();
   const { error } = await sb.from("medication_logs").insert({
@@ -79,6 +102,8 @@ export async function insertMedicationLogRow(
     linked_pain_category: input.linkedPainCategory ?? null,
     linked_pain_intensity: input.linkedPainIntensity ?? null,
     link_summary: input.linkSummary ?? null,
+    status: input.status ?? null,
+    user_id: uid,
   });
 
   if (error) {
@@ -95,6 +120,49 @@ export async function insertMedicationLogRow(
     linkedPainCategory: input.linkedPainCategory ?? null,
     linkedPainIntensity: input.linkedPainIntensity ?? null,
     linkSummary: input.linkSummary ?? null,
+    status: input.status ?? null,
+    userId: uid,
   };
   return { ok: true, row };
+}
+
+/**
+ * Morning meds toggle — matches specialist expectation: name + status + user.
+ */
+export async function insertMorningRoutineMedicationLog(): Promise<{
+  ok: boolean;
+  error?: string;
+}> {
+  const sb = getSupabaseBrowserClient();
+  if (!sb) return { ok: false, error: "no_client" };
+
+  const uid = await resolveSupabaseUserId(sb);
+  if (!uid) {
+    logDataNotSavedNoUser();
+    return { ok: false, error: "not_signed_in" };
+  }
+
+  const id = crypto.randomUUID();
+  const recordedAt = new Date().toISOString();
+
+  const { error } = await sb.from("medication_logs").insert({
+    id,
+    recorded_at: recordedAt,
+    medication_name: MORNING_ROUTINE_MEDICATION_NAME,
+    dosage_label: "—",
+    period: "AM",
+    medication_id: null,
+    linked_body_part_id: null,
+    linked_pain_category: null,
+    linked_pain_intensity: null,
+    link_summary: null,
+    status: "taken",
+    user_id: uid,
+  });
+
+  if (error) {
+    console.warn("[medication_logs] Morning Routine insert:", error.message);
+    return { ok: false, error: error.message };
+  }
+  return { ok: true };
 }

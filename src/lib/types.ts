@@ -83,6 +83,8 @@ export type DailyLogEntry = {
   notes?: string;
   /** Optional semantic tag (matches Supabase `entry_type`). */
   entryType?: string;
+  /** Fluid ounces when logging water (`daily_logs.value`). */
+  valueOz?: number;
   /** Owner when row was inserted authenticated (matches Supabase `user_id`). */
   userId?: string;
   /** Body symptom sketch (PNG base64, no data URL prefix) when saved from SymptomCanvas */

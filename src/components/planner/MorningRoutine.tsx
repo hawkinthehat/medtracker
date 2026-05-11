@@ -7,6 +7,7 @@ import { Activity, Heart, Loader2, Scale, UtensilsCrossed } from "lucide-react";
 import { qk } from "@/lib/query-keys";
 import type { DailyLogEntry, VitalRow } from "@/lib/types";
 import { persistDailyLogToSupabase } from "@/lib/supabase/daily-logs";
+import { insertMorningRoutineMedicationLog } from "@/lib/supabase/medication-logs";
 import { persistVitalToSupabase } from "@/lib/supabase/vitals";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser-client";
 import { fetchAndLogWeather } from "@/lib/weather";
@@ -101,14 +102,6 @@ export default function MorningRoutine() {
 
   const logMorningMedsTaken = useMutation({
     mutationFn: async () => {
-      const sb = getSupabaseBrowserClient();
-      let userId: string | undefined;
-      if (sb) {
-        const {
-          data: { user },
-        } = await sb.auth.getUser();
-        userId = user?.id;
-      }
       const recordedAt = new Date().toISOString();
       const row: DailyLogEntry = {
         id: crypto.randomUUID(),
@@ -117,12 +110,19 @@ export default function MorningRoutine() {
         label: "Morning meds",
         notes: recordedAt,
         entryType: MORNING_MEDS_ENTRY_TYPE,
-        userId,
       };
       if (supabaseConfigured) {
         const ok = await persistDailyLogToSupabase(row);
         if (!ok) {
           throw new Error("Could not save morning meds — check Supabase.");
+        }
+        const medOk = await insertMorningRoutineMedicationLog();
+        if (!medOk.ok) {
+          throw new Error(
+            medOk.error === "not_signed_in"
+              ? "Sign in to save morning meds."
+              : medOk.error ?? "Could not save medication log.",
+          );
         }
       }
       return row;
@@ -133,8 +133,9 @@ export default function MorningRoutine() {
         ...prev,
       ]);
       void qc.invalidateQueries({ queryKey: qk.dailyLogs });
+      void qc.invalidateQueries({ queryKey: qk.medicationLogs });
       router.refresh();
-      setToast("Morning meds logged to daily_logs.");
+      setToast("Morning meds logged to medication_logs & daily_logs.");
       window.setTimeout(() => setToast(null), 3200);
     },
     onError: (e: Error) => {

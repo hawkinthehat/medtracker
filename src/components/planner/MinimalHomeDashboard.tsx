@@ -2,7 +2,9 @@
 
 import Link from "next/link";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import type { User } from "@supabase/supabase-js";
 import { ChevronDown, ClipboardList } from "lucide-react";
 import PulseStrip from "@/components/planner/PulseStrip";
 import MorningRoutine from "@/components/planner/MorningRoutine";
@@ -17,6 +19,7 @@ import HomeDashboardTopZone from "@/components/home/HomeDashboardTopZone";
 import HomeDailyActionGrid from "@/components/home/HomeDailyActionGrid";
 import QuickRelief from "@/components/home/QuickRelief";
 import SymptomMatrix from "@/components/home/SymptomMatrix";
+import DashboardTodayCounters from "@/components/home/DashboardTodayCounters";
 import WelcomeWizard from "@/components/WelcomeWizard";
 import DoseAdjustmentModal, {
   type DoseModalTab,
@@ -68,7 +71,37 @@ type MinimalHomeDashboardProps = {
 export default function MinimalHomeDashboard({
   bypassBarometerAdvisory = false,
 }: MinimalHomeDashboardProps) {
+  const router = useRouter();
   const qc = useQueryClient();
+  const supabaseConfigured = Boolean(getSupabaseBrowserClient());
+  const [sessionUser, setSessionUser] = useState<User | null>(null);
+  const [sessionResolved, setSessionResolved] = useState(false);
+
+  useEffect(() => {
+    const sb = getSupabaseBrowserClient();
+    if (!sb) {
+      setSessionUser(null);
+      setSessionResolved(true);
+      return;
+    }
+    void sb.auth.getSession().then(({ data: { session } }) => {
+      setSessionUser(session?.user ?? null);
+      setSessionResolved(true);
+    });
+    const {
+      data: { subscription },
+    } = sb.auth.onAuthStateChange((event, session) => {
+      setSessionUser(session?.user ?? null);
+      setSessionResolved(true);
+      if (event === "SIGNED_IN") {
+        router.refresh();
+        void qc.invalidateQueries({ queryKey: qk.dailyLogs });
+        void qc.invalidateQueries({ queryKey: qk.medicationLogs });
+        void qc.invalidateQueries({ queryKey: qk.activityToday });
+      }
+    });
+    return () => subscription.unsubscribe();
+  }, [qc, router]);
   const [displayFirstName, setDisplayFirstName] = useState("");
   const [episodeSketchOpen, setEpisodeSketchOpen] = useState(false);
   const [episodeFabOpen, setEpisodeFabOpen] = useState(false);
