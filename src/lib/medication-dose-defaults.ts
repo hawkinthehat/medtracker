@@ -1,4 +1,4 @@
-/** Sensible defaults when opening dose editor (mg) — aligned with Jade's list where noted. */
+/** Sensible defaults when opening dose editor (mg) — common generic strengths. */
 export function defaultDoseMgForMedicationName(name: string): number {
   const n = name.trim().toLowerCase();
   const map: Record<string, number> = {

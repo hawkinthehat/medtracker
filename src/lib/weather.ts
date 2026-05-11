@@ -1,6 +1,7 @@
 /**
  * Browser-only weather fetch + Supabase `weather_logs` insert.
- * Uses geolocation and NEXT_PUBLIC_OPENWEATHER_API_KEY (Current Weather API).
+ * Barometric advisory / current conditions use the device GPS (geolocation) +
+ * OpenWeather per coordinates — not a hard-coded city.
  */
 import { persistWeatherLogToSupabase } from "@/lib/supabase/weather-logs";
 import {

@@ -94,6 +94,19 @@ export default function MedsPage() {
     e.preventDefault();
     const trimmed = name.trim();
     if (!trimmed) return;
+
+    const norm = trimmed.toLowerCase().replace(/\s+/g, " ");
+    const duplicate = activeMedications.find(
+      (m) => m.name.trim().toLowerCase().replace(/\s+/g, " ") === norm,
+    );
+    if (duplicate) {
+      const ok = window.confirm(
+        "This med is already in Tiaki. Do you want to update the dosage instead?",
+      );
+      if (ok) setFullDoseMed(duplicate);
+      return;
+    }
+
     const audited = resolveAuditedMedication(trimmed);
     const mg = Math.max(1, Math.round(doseMg));
     const doseLabel = buildDoseFrequencyDisplayLine(mg, "mg", frequencyHint);

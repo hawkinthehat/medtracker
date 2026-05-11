@@ -52,6 +52,13 @@ export const QUICK_RELIEF_DEFS: readonly QuickReliefDef[] = [
     gradientClass: "from-emerald-500 to-teal-700",
     ringClass: "ring-emerald-300",
   },
+  {
+    displayName: "Thermotabs",
+    matchNames: ["thermotabs"],
+    fallbackDoseLabel: "1 tablet (~360 mg sodium)",
+    gradientClass: "from-amber-400 via-orange-500 to-slate-700",
+    ringClass: "ring-amber-300",
+  },
 ] as const;
 
 function norm(s: string) {

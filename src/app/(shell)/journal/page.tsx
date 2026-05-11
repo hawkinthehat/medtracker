@@ -6,13 +6,14 @@ import { qk } from "@/lib/query-keys";
 import type { JournalEntry, JournalSetting } from "@/lib/types";
 import { labelJournalSetting } from "@/lib/journal-setting";
 import { CalendarDays } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import JournalPainTracker from "@/components/journal/JournalPainTracker";
+import { TOAST_JOURNAL_ENTRY } from "@/lib/educational-toasts";
 
 const SETTING_OPTIONS: { value: JournalSetting; hint: string }[] = [
   { value: "unspecified", hint: "Skip if unclear" },
   { value: "indoor", hint: "Home, clinic, etc." },
-  { value: "outdoor", hint: "Missouri outdoor exposure" },
+  { value: "outdoor", hint: "Outside air / exertion" },
 ];
 
 export default function JournalPage() {
@@ -27,6 +28,13 @@ export default function JournalPage() {
 
   const [text, setText] = useState("");
   const [setting, setSetting] = useState<JournalSetting>("unspecified");
+  const [saveToast, setSaveToast] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!saveToast) return;
+    const t = window.setTimeout(() => setSaveToast(null), 4200);
+    return () => window.clearTimeout(t);
+  }, [saveToast]);
 
   const addEntry = useMutation({
     mutationFn: async (e: JournalEntry) => e,
@@ -37,6 +45,7 @@ export default function JournalPage() {
       ]);
       setText("");
       setSetting("unspecified");
+      setSaveToast(TOAST_JOURNAL_ENTRY);
     },
   });
 
@@ -63,7 +72,7 @@ export default function JournalPage() {
             <p className="mt-2 text-sm leading-relaxed text-slate-600">
               Short entries sync to your phone first — helpful when signal is
               weak. Mark <span className="text-slate-700">indoor vs outdoor</span>{" "}
-              when flares might tie to Missouri outdoor exposure vs food.
+              when flares might tie to outdoor environments vs food or meds.
             </p>
           </div>
           <Link
@@ -75,6 +84,15 @@ export default function JournalPage() {
           </Link>
         </div>
       </header>
+
+      {saveToast && (
+        <p
+          className="rounded-2xl border-4 border-emerald-800 bg-emerald-50 px-4 py-4 text-[18px] font-semibold leading-snug text-emerald-950"
+          role="status"
+        >
+          {saveToast}
+        </p>
+      )}
 
       <JournalPainTracker />
 

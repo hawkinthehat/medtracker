@@ -11,7 +11,7 @@ import type {
 } from "@/lib/types";
 import { generateThirtyDayMedicalPdf } from "@/lib/pdf-export";
 import ClinicalSummaryCard from "@/components/ClinicalSummaryCard";
-import DrugTolerabilityReport from "@/components/DrugTolerabilityReport";
+import SideEffectTracker from "@/components/SideEffectTracker";
 import TaperSensitivitySection from "@/components/TaperSensitivitySection";
 import { useState } from "react";
 
@@ -121,7 +121,7 @@ export default function TransferPage() {
         </button>
       </header>
 
-      <DrugTolerabilityReport />
+      <SideEffectTracker />
 
       <TaperSensitivitySection />
 

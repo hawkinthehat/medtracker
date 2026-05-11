@@ -21,7 +21,7 @@ export async function generateTransitionClinicalPdf(params: {
   const [{ default: jsPDF }] = await Promise.all([import("jspdf")]);
 
   const title =
-    "Patient Health Summary: Jade - Transition to Missouri Specialty Care";
+    "Patient Health Summary — clinical transition handoff";
 
   const orthoAvg = averageOrthostaticDeltaLastDays(params.orthostatic, 7);
   const moodAvg = rollingAverageMood7d(params.moods);
@@ -46,7 +46,7 @@ export async function generateTransitionClinicalPdf(params: {
 
   doc.setTextColor(51, 65, 85);
   doc.text(
-    "Clinical summary for care coordination during transition to Missouri specialty care. Not a substitute for the medical record.",
+    "Clinical summary for care coordination during specialty handoffs. Not a substitute for the medical record.",
     14,
     y,
     { maxWidth: 180 }
@@ -144,6 +144,6 @@ export async function generateTransitionClinicalPdf(params: {
   }
 
   doc.save(
-    `patient-health-summary-jade-missouri-${new Date().toISOString().slice(0, 10)}.pdf`
+    `patient-health-summary-${new Date().toISOString().slice(0, 10)}.pdf`
   );
 }

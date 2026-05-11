@@ -5,85 +5,36 @@ import { useMemo, useState } from "react";
 import { qk } from "@/lib/query-keys";
 import type { DailyLogEntry } from "@/lib/types";
 import { dailyLogsQueryFn } from "@/lib/daily-logs-query-fn";
-import {
-  persistDailyLogToSupabase,
-} from "@/lib/supabase/daily-logs";
+import { persistDailyLogToSupabase } from "@/lib/supabase/daily-logs";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser-client";
-import { Droplets } from "lucide-react";
-
-const DEFAULT_GLASS_COUNT = 8;
-const DEFAULT_DAILY_GOAL = 8;
-const HYDRATION_LABEL = "Water glass";
-
-function localDayParts(d: Date) {
-  return {
-    y: d.getFullYear(),
-    m: d.getMonth(),
-    day: d.getDate(),
-  };
-}
-
-function isSameLocalCalendarDay(iso: string, ref = new Date()) {
-  const a = new Date(iso);
-  const r = localDayParts(ref);
-  const x = localDayParts(a);
-  return x.y === r.y && x.m === r.m && x.day === r.day;
-}
-
-function GlassIcon({
-  filled,
-  index,
-  onTap,
-}: {
-  filled: boolean;
-  index: number;
-  onTap: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onTap}
-      aria-label={
-        filled ? `Glass ${index + 1}, filled` : `Glass ${index + 1}, empty`
-      }
-      aria-pressed={filled}
-      className="flex h-[60px] w-[52px] shrink-0 touch-manipulation items-end justify-center rounded-xl border-4 border-slate-900 bg-white p-1 shadow-sm transition hover:border-sky-600 hover:shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600 active:scale-[0.97]"
-    >
-      <svg
-        viewBox="0 0 48 64"
-        className="h-full w-full"
-        aria-hidden
-      >
-        <path
-          d="M14 6h20l2 8v42c0 3-2.5 6-5.5 6h-13C14.5 62 12 59 12 56V14l2-8z"
-          fill={filled ? "rgba(37, 99, 235, 0.35)" : "rgba(241, 245, 249, 0.9)"}
-          stroke="currentColor"
-          strokeWidth={2}
-          className="text-slate-700"
-        />
-        {filled && (
-          <path
-            d="M16 38h16v14c0 2.2-1.8 4-4 4h-8c-2.2 0-4-1.8-4-4V38z"
-            fill="rgb(37 99 235)"
-            opacity={0.85}
-          />
-        )}
-      </svg>
-    </button>
-  );
-}
+import {
+  fetchMedicationLogsFromSupabase,
+  type MedicationLogRow,
+} from "@/lib/supabase/medication-logs";
+import {
+  DEFAULT_SODIUM_GOAL_MG,
+  DEFAULT_WATER_GOAL_OZ,
+  THERMOTABS_SODIUM_MG,
+  WATER_OZ_LABEL,
+  sumThermotabsSodiumMgToday,
+  sumWaterOzToday,
+} from "@/lib/hydration-summary";
+import { Droplets, Pill } from "lucide-react";
+import { FeatureHelpTrigger } from "@/components/FeatureHelpModal";
+import { toastWaterLogged } from "@/lib/educational-toasts";
 
 type HydrationTrackerProps = {
-  /** Number of glass icons in the row (default 8). */
-  glassCount?: number;
-  dailyGoal?: number;
+  /** Daily fluid goal in fluid ounces (default 100). */
+  waterGoalOz?: number;
+  /** Daily sodium goal from Thermotabs tally in mg (default 3000). */
+  sodiumGoalMg?: number;
   /** Hide large header — for embedding under Pulse on home. */
   compact?: boolean;
 };
 
 export default function HydrationTracker({
-  glassCount = DEFAULT_GLASS_COUNT,
-  dailyGoal = DEFAULT_DAILY_GOAL,
+  waterGoalOz = DEFAULT_WATER_GOAL_OZ,
+  sodiumGoalMg = DEFAULT_SODIUM_GOAL_MG,
   compact = false,
 }: HydrationTrackerProps) {
   const qc = useQueryClient();
@@ -99,46 +50,92 @@ export default function HydrationTracker({
     refetchOnMount: true,
   });
 
-  const glassesToday = useMemo(() => {
-    return dailyLogs.filter(
-      (e) =>
-        e.category === "hydration" &&
-        e.label === HYDRATION_LABEL &&
-        isSameLocalCalendarDay(e.recordedAt),
-    ).length;
-  }, [dailyLogs]);
+  const { data: medicationLogs = [] } = useQuery({
+    queryKey: qk.medicationLogs,
+    queryFn: () => fetchMedicationLogsFromSupabase(400),
+    staleTime: 15_000,
+    gcTime: 1000 * 60 * 60 * 24 * 7,
+    refetchOnWindowFocus: true,
+  });
 
-  const filledDisplay = Math.min(glassesToday, glassCount);
-  const progress = Math.min(1, glassesToday / dailyGoal);
+  const ozToday = useMemo(
+    () => sumWaterOzToday(dailyLogs),
+    [dailyLogs],
+  );
+  const sodiumMgToday = useMemo(
+    () => sumThermotabsSodiumMgToday(medicationLogs as MedicationLogRow[]),
+    [medicationLogs],
+  );
 
-  const addGlass = useMutation({
-    mutationFn: async () => {
+  const waterProgress = Math.min(1, ozToday / waterGoalOz);
+  const sodiumProgress = Math.min(1, sodiumMgToday / sodiumGoalMg);
+
+  const addOzMutation = useMutation({
+    mutationFn: async (amountOz: number) => {
       const row: DailyLogEntry = {
         id: crypto.randomUUID(),
         recordedAt: new Date().toISOString(),
         category: "hydration",
-        label: HYDRATION_LABEL,
+        label: WATER_OZ_LABEL,
+        notes: String(amountOz),
       };
       const ok = await persistDailyLogToSupabase(row);
       if (supabaseConfigured && !ok) {
-        throw new Error("Could not save glass — check Supabase.");
+        throw new Error("Could not save — check Supabase.");
       }
       return row;
     },
-    onSuccess: (row) => {
+    onSuccess: (row, amountOz) => {
       qc.setQueryData<DailyLogEntry[]>(qk.dailyLogs, (prev = []) => [
         row,
         ...prev,
       ]);
       void qc.invalidateQueries({ queryKey: qk.dailyLogs });
-      setToast(`Logged glass ${Math.min(glassesToday + 1, 99)} today`);
-      window.setTimeout(() => setToast(null), 2000);
+      setToast(toastWaterLogged(amountOz));
+      window.setTimeout(() => setToast(null), 4500);
     },
     onError: (err: Error) => {
       setToast(err.message);
       window.setTimeout(() => setToast(null), 3200);
     },
   });
+
+  function quickAddOz(amount: number) {
+    if (!supabaseConfigured) {
+      const row: DailyLogEntry = {
+        id: crypto.randomUUID(),
+        recordedAt: new Date().toISOString(),
+        category: "hydration",
+        label: WATER_OZ_LABEL,
+        notes: String(amount),
+      };
+      qc.setQueryData<DailyLogEntry[]>(qk.dailyLogs, (prev = []) => [
+        row,
+        ...prev,
+      ]);
+      setToast(toastWaterLogged(amount, { localOnly: true }));
+      window.setTimeout(() => setToast(null), 4500);
+      return;
+    }
+    addOzMutation.mutate(amount);
+  }
+
+  const thermotabsCountToday = useMemo(() => {
+    const ref = new Date();
+    let n = 0;
+    for (const row of medicationLogs as MedicationLogRow[]) {
+      if (row.medicationName !== "Thermotabs") continue;
+      const t = new Date(row.recordedAt);
+      if (
+        t.getFullYear() === ref.getFullYear() &&
+        t.getMonth() === ref.getMonth() &&
+        t.getDate() === ref.getDate()
+      ) {
+        n += 1;
+      }
+    }
+    return n;
+  }, [medicationLogs]);
 
   return (
     <section
@@ -153,30 +150,47 @@ export default function HydrationTracker({
             <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border-2 border-sky-600 bg-sky-50 text-sky-800">
               <Droplets className="h-6 w-6" aria-hidden />
             </span>
-            <div>
-              <h2
-                id="hydration-heading"
-                className="text-lg font-bold tracking-tight text-slate-900"
-              >
-                Water today
-              </h2>
-              <p className="mt-1 text-sm text-slate-600">
-                Tap a glass for each cup you drink — saved to your daily log.
-              </p>
+            <div className="flex flex-wrap items-start gap-2">
+              <div>
+                <h2
+                  id="hydration-heading"
+                  className="text-lg font-bold tracking-tight text-slate-900"
+                >
+                  Water &amp; salt today
+                </h2>
+                <p className="mt-1 text-sm text-slate-600">
+                  Fluid in ounces; sodium tally from Thermotabs taps in Quick
+                  relief (≈{THERMOTABS_SODIUM_MG} mg each).
+                </p>
+              </div>
+              <FeatureHelpTrigger ariaLabel="Hydration help" title="Water & salt">
+                <p>
+                  Fluid and sodium targets support blood volume — helpful context
+                  for orthostatic symptoms when paired with your care plan.
+                </p>
+              </FeatureHelpTrigger>
             </div>
           </div>
         </div>
       )}
 
       {compact && (
-        <div className="mb-3 flex items-center gap-2">
-          <Droplets className="h-5 w-5 text-sky-800" aria-hidden />
-          <h2
-            id="hydration-heading"
-            className="text-sm font-bold uppercase tracking-[0.15em] text-slate-900"
-          >
-            Hydration
-          </h2>
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <div className="flex min-w-0 flex-1 items-center gap-2">
+            <Droplets className="h-5 w-5 shrink-0 text-sky-800" aria-hidden />
+            <h2
+              id="hydration-heading"
+              className="text-sm font-bold uppercase tracking-[0.15em] text-slate-900"
+            >
+              Hydration
+            </h2>
+            <FeatureHelpTrigger ariaLabel="Hydration help" title="Water & salt">
+              <p>
+                Fluid and sodium targets support blood volume — helpful context
+                for orthostatic symptoms when paired with your care plan.
+              </p>
+            </FeatureHelpTrigger>
+          </div>
         </div>
       )}
 
@@ -186,78 +200,98 @@ export default function HydrationTracker({
             compact ? "mb-3" : "mt-3"
           }`}
         >
-          Connect Supabase to sync hydration to{" "}
-          <code className="rounded bg-white px-1">daily_logs</code>.
+          Connect Supabase to sync hydration and Thermotab logs to your chart.
         </p>
       )}
 
-      <div
-        className={`flex flex-wrap justify-center gap-2 sm:justify-between sm:gap-3 ${
-          compact ? "mt-1" : "mt-5"
-        }`}
-      >
-        {Array.from({ length: glassCount }, (_, i) => (
-          <GlassIcon
-            key={i}
-            index={i}
-            filled={i < filledDisplay}
-            onTap={() => {
-              if (i < filledDisplay) return;
-              if (i !== filledDisplay) return;
-
-              if (!supabaseConfigured) {
-                const row: DailyLogEntry = {
-                  id: crypto.randomUUID(),
-                  recordedAt: new Date().toISOString(),
-                  category: "hydration",
-                  label: HYDRATION_LABEL,
-                };
-                qc.setQueryData<DailyLogEntry[]>(qk.dailyLogs, (prev = []) => [
-                  row,
-                  ...prev,
-                ]);
-                setToast("Saved on this device only");
-                window.setTimeout(() => setToast(null), 2000);
-                return;
-              }
-
-              if (glassesToday >= glassCount) {
-                setToast(
-                  "You’ve filled every glass slot — add more from Daily summary if needed.",
-                );
-                window.setTimeout(() => setToast(null), 2800);
-                return;
-              }
-
-              addGlass.mutate();
-            }}
-          />
-        ))}
+      <div className={compact ? "mt-1" : "mt-5"}>
+        <p className="text-center font-mono text-4xl font-black tabular-nums text-slate-900">
+          {ozToday}
+          <span className="text-2xl font-bold text-slate-600"> oz</span>
+        </p>
+        <div className="mt-4 flex flex-wrap justify-center gap-3">
+          {([8, 16, 32] as const).map((oz) => (
+            <button
+              key={oz}
+              type="button"
+              disabled={addOzMutation.isPending && supabaseConfigured}
+              onClick={() => quickAddOz(oz)}
+              className="min-h-[56px] min-w-[5.5rem] rounded-2xl border-4 border-black bg-sky-600 px-4 text-xl font-black text-white shadow-md transition hover:bg-sky-700 disabled:opacity-50"
+            >
+              +{oz} oz
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className={compact ? "mt-4" : "mt-5"}>
         <div className="mb-1 flex items-center justify-between text-xs font-semibold uppercase tracking-wide text-slate-600">
-          <span>Daily goal</span>
+          <span>Water goal</span>
           <span className="tabular-nums text-slate-900">
-            {glassesToday} / {dailyGoal}
+            {ozToday} / {waterGoalOz} oz
           </span>
         </div>
         <div
           className="h-3 w-full overflow-hidden rounded-full border border-slate-300 bg-slate-100"
           role="progressbar"
-          aria-valuenow={Math.round(progress * 100)}
+          aria-valuenow={Math.round(waterProgress * 100)}
           aria-valuemin={0}
           aria-valuemax={100}
         >
           <div
             className="h-full rounded-full bg-sky-600 transition-[width] duration-300 ease-out"
-            style={{ width: `${progress * 100}%` }}
+            style={{ width: `${waterProgress * 100}%` }}
           />
         </div>
       </div>
 
+      <div
+        className={`flex items-start gap-3 rounded-xl border-2 border-amber-800/40 bg-amber-50/90 p-3 ${
+          compact ? "mt-4" : "mt-5"
+        }`}
+      >
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border-2 border-amber-700 bg-white text-amber-900">
+          <Pill className="h-5 w-5" aria-hidden />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-black text-amber-950">
+            Thermotabs sodium (today)
+          </p>
+          <p className="mt-1 font-mono text-2xl font-black tabular-nums text-amber-950">
+            {sodiumMgToday}
+            <span className="text-base font-bold text-amber-900/90"> mg</span>
+            <span className="ml-2 text-sm font-bold text-amber-900/80">
+              ({thermotabsCountToday} × {THERMOTABS_SODIUM_MG} mg)
+            </span>
+          </p>
+          <div className="mt-2">
+            <div className="mb-1 flex items-center justify-between text-[11px] font-semibold uppercase tracking-wide text-amber-900/90">
+              <span>Daily goal</span>
+              <span className="tabular-nums">
+                {sodiumMgToday} / {sodiumGoalMg} mg
+              </span>
+            </div>
+            <div
+              className="h-2.5 w-full overflow-hidden rounded-full border border-amber-600/50 bg-amber-100/80"
+              role="progressbar"
+              aria-valuenow={Math.round(sodiumProgress * 100)}
+              aria-valuemin={0}
+              aria-valuemax={100}
+            >
+              <div
+                className="h-full rounded-full bg-amber-600 transition-[width] duration-300 ease-out"
+                style={{ width: `${sodiumProgress * 100}%` }}
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+
       {toast && (
-        <p className="mt-3 text-center text-sm font-medium text-slate-800" role="status">
+        <p
+          className="mt-3 text-center text-[18px] font-medium leading-snug text-[#0f172a]"
+          role="status"
+        >
           {toast}
         </p>
       )}

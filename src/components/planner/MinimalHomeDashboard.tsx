@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ChevronDown, ClipboardList } from "lucide-react";
 import PulseStrip from "@/components/planner/PulseStrip";
 import MorningRoutine from "@/components/planner/MorningRoutine";
 import HydrationTracker from "@/components/planner/HydrationTracker";
+import LogEpisodeFab from "@/components/planner/LogEpisodeFab";
 import ShowerTracker from "@/components/planner/ShowerTracker";
 import MovementTracker from "@/components/planner/MovementTracker";
 import DueMedicationsChecklist from "@/components/planner/DueMedicationsChecklist";
@@ -15,6 +16,7 @@ import SymptomCanvas from "@/components/journal/SymptomCanvas";
 import TiakiFirstTimeMedicationSetup from "@/components/home/TiakiFirstTimeMedicationSetup";
 import TiakiHomeWeatherSection from "@/components/home/TiakiHomeWeatherSection";
 import QuickRelief from "@/components/home/QuickRelief";
+import WelcomeWizard from "@/components/WelcomeWizard";
 import DoseAdjustmentModal, {
   type DoseModalTab,
 } from "@/components/planner/DoseAdjustmentModal";
@@ -35,6 +37,12 @@ import {
   fetchAndLogWeather,
 } from "@/lib/weather";
 import type { SavedMedication } from "@/lib/seed-medications";
+import {
+  isBaselinesComplete,
+  isWelcomeWizardComplete,
+  loadBaselines,
+  type BaselinesProfile,
+} from "@/lib/baselines-storage";
 
 function greeting(now = new Date()) {
   const h = now.getHours();
@@ -54,7 +62,9 @@ function formatLongDate(d = new Date()) {
 
 export default function MinimalHomeDashboard() {
   const qc = useQueryClient();
+  const [displayFirstName, setDisplayFirstName] = useState("");
   const [episodeSketchOpen, setEpisodeSketchOpen] = useState(false);
+  const [episodeFabOpen, setEpisodeFabOpen] = useState(false);
   const [quickAdjustMed, setQuickAdjustMed] = useState<SavedMedication | null>(
     null,
   );
@@ -62,6 +72,35 @@ export default function MinimalHomeDashboard() {
     null,
   );
   const [doseModalTab, setDoseModalTab] = useState<DoseModalTab>("adjust");
+  const [baselines, setBaselines] = useState<BaselinesProfile>(loadBaselines);
+  const [baselinesPromptVisible, setBaselinesPromptVisible] = useState(false);
+  const [welcomeOpen, setWelcomeOpen] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    try {
+      setDisplayFirstName(
+        window.localStorage.getItem("tiaki-display-name")?.trim() ?? "",
+      );
+    } catch {
+      setDisplayFirstName("");
+    }
+  }, []);
+
+  useEffect(() => {
+    setBaselines(loadBaselines());
+    setBaselinesPromptVisible(!isBaselinesComplete());
+    const onBaselines = () => {
+      setBaselines(loadBaselines());
+      setBaselinesPromptVisible(!isBaselinesComplete());
+    };
+    window.addEventListener("tiaki-baselines-updated", onBaselines);
+    return () =>
+      window.removeEventListener("tiaki-baselines-updated", onBaselines);
+  }, []);
+
+  useEffect(() => {
+    setWelcomeOpen(!isWelcomeWizardComplete());
+  }, []);
 
   function openDoseModal(m: SavedMedication, tab: DoseModalTab) {
     setDoseModalTab(tab);
@@ -74,11 +113,13 @@ export default function MinimalHomeDashboard() {
     }
   }
 
-  const logCrisisAndOpenSketch = useMutation({
-    mutationFn: async () => {
+  const logEpisodeAndOpenSketch = useMutation({
+    mutationFn: async (payload: Omit<EpisodeEntry, "id" | "recordedAt">) => {
       const snap = await fetchAndLogWeather().catch(() => null);
       const recordedAt = new Date().toISOString();
-      let notes = `Auto-logged when LOG EPISODE pressed (${recordedAt}).`;
+      let notes = `Episode log (${recordedAt}).\n${payload.description}`;
+      notes += `\nCompression garment: ${payload.compressionGarment ? "yes" : "no"}`;
+      notes += `\nAbdominal binder: ${payload.abdominalBinder ? "yes" : "no"}`;
       if (snap) {
         const line = atmosphericPressureFooter(snap.pressureHpa);
         if (line) notes += `\n${line}`;
@@ -87,19 +128,21 @@ export default function MinimalHomeDashboard() {
         id: crypto.randomUUID(),
         recordedAt,
         category: "other",
-        label: "Crisis episode marker",
+        label: "Episode log",
         notes,
       };
       const episode: EpisodeEntry = {
         id: crypto.randomUUID(),
         recordedAt,
-        description: "Crisis episode — body sketch session opened",
-        painRegions: {},
+        description: payload.description,
+        painRegions: payload.painRegions,
+        compressionGarment: payload.compressionGarment,
+        abdominalBinder: payload.abdominalBinder,
       };
       const sb = getSupabaseBrowserClient();
       if (sb) {
         const ok = await persistDailyLogToSupabase(marker);
-        if (!ok) throw new Error("Could not save crisis marker.");
+        if (!ok) throw new Error("Could not save episode.");
       }
       return { marker, episode };
     },
@@ -119,7 +162,32 @@ export default function MinimalHomeDashboard() {
 
   return (
     <div className="space-y-10 pb-10">
+      {welcomeOpen === true && (
+        <WelcomeWizard onComplete={() => setWelcomeOpen(false)} />
+      )}
+
       <TiakiHomeWeatherSection />
+
+      {baselinesPromptVisible && (
+        <aside
+          role="status"
+          className="rounded-2xl border-4 border-violet-800 bg-violet-100 px-5 py-5 shadow-md"
+        >
+          <p className="text-xl font-black leading-snug text-slate-950">
+            Personalize your daily goals
+          </p>
+          <p className="mt-2 text-base font-semibold text-slate-800">
+            Set target water, salt, and typical symptoms so your home progress
+            bars match your care plan.
+          </p>
+          <Link
+            href="/profile-setup"
+            className="mt-4 inline-flex min-h-[56px] items-center justify-center rounded-2xl border-4 border-black bg-white px-6 text-lg font-black uppercase tracking-wide text-slate-950 shadow-sm transition hover:bg-slate-50"
+          >
+            Open profile setup
+          </Link>
+        </aside>
+      )}
 
       <div className="rounded-2xl border-4 border-black bg-gradient-to-r from-sky-600 via-sky-700 to-indigo-800 px-5 py-6 shadow-xl">
         <p className="text-[11px] font-black uppercase tracking-[0.4em] text-white/90">
@@ -129,7 +197,7 @@ export default function MinimalHomeDashboard() {
           Your daily care companion
         </p>
         <p className="mt-2 max-w-xl text-base font-semibold leading-snug text-white/95">
-          Built for Jade — medications, routines, and quick logs in one calm,
+          Medications, routines, vitals, and quick logs in one calm,
           high-contrast screen.
         </p>
       </div>
@@ -138,7 +206,9 @@ export default function MinimalHomeDashboard() {
 
       <header className="space-y-1 border-b-2 border-slate-900 pb-6">
         <h1 className="text-3xl font-bold tracking-tight text-slate-900">
-          {greeting()}, Jade
+          {displayFirstName
+            ? `${greeting()}, ${displayFirstName}`
+            : greeting()}
         </h1>
         <p className="text-lg font-medium text-slate-700">{formatLongDate()}</p>
       </header>
@@ -155,7 +225,17 @@ export default function MinimalHomeDashboard() {
           Daily pulse
         </h2>
         <PulseStrip />
-        <HydrationTracker compact glassCount={8} />
+        <HydrationTracker
+          compact
+          waterGoalOz={baselines.targetWaterOz}
+          sodiumGoalMg={baselines.targetSodiumMg}
+        />
+        <Link
+          href="/vault#side-effect-tracker"
+          className="flex min-h-[56px] w-full items-center justify-center rounded-2xl border-4 border-violet-800 bg-violet-600 px-5 py-4 text-lg font-black uppercase tracking-wide text-white shadow-md transition hover:bg-violet-700"
+        >
+          Track Side Effects
+        </Link>
       </section>
 
       <ShowerTracker />
@@ -171,24 +251,24 @@ export default function MinimalHomeDashboard() {
         </h2>
         <button
           type="button"
-          onClick={() => logCrisisAndOpenSketch.mutate()}
-          disabled={logCrisisAndOpenSketch.isPending}
+          onClick={() => setEpisodeFabOpen(true)}
+          disabled={logEpisodeAndOpenSketch.isPending}
           className="flex min-h-[72px] w-full items-center justify-center gap-3 rounded-2xl border-4 border-red-800 bg-red-600 px-6 py-5 text-xl font-black uppercase tracking-wide text-white shadow-lg transition hover:bg-red-700 active:scale-[0.99] disabled:opacity-60"
         >
           <ClipboardList className="h-9 w-9 shrink-0" aria-hidden />
           Log episode
         </button>
         <p className="text-center text-base font-medium text-slate-700">
-          Saves a crisis timestamp with barometric context when available, then
-          opens the body map.
+          Describe what happened, note compression gear, then save — opens the
+          body map with barometric context when available.
         </p>
-        {logCrisisAndOpenSketch.isError &&
-          logCrisisAndOpenSketch.error instanceof Error && (
+        {logEpisodeAndOpenSketch.isError &&
+          logEpisodeAndOpenSketch.error instanceof Error && (
             <p
               className="text-center text-base font-bold text-red-700"
               role="alert"
             >
-              {logCrisisAndOpenSketch.error.message}
+              {logEpisodeAndOpenSketch.error.message}
             </p>
           )}
       </section>
@@ -237,6 +317,16 @@ export default function MinimalHomeDashboard() {
         open={!!doseModalMed}
         initialTab={doseModalTab}
         onClose={() => setDoseModalMed(null)}
+      />
+
+      <LogEpisodeFab
+        open={episodeFabOpen}
+        onClose={() => setEpisodeFabOpen(false)}
+        painRegions={{}}
+        onSubmit={(payload) => {
+          setEpisodeFabOpen(false);
+          logEpisodeAndOpenSketch.mutate(payload);
+        }}
       />
 
       <Sheet open={episodeSketchOpen} onOpenChange={setEpisodeSketchOpen}>

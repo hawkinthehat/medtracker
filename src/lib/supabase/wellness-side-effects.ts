@@ -39,6 +39,7 @@ export async function persistSideEffectLogToSupabase(
     medication_name: row.medicationName,
     dose_label: row.doseLabel ?? null,
     symptoms: row.symptoms,
+    severity: row.severity ?? null,
   });
   return !error;
 }

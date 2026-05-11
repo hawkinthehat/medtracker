@@ -10,12 +10,13 @@ import {
   computeMcasProximityIds,
 } from "@/lib/daily-summary";
 import { labelJournalSetting } from "@/lib/journal-setting";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { ChevronLeft } from "lucide-react";
 import TodayMedicationStrip from "@/components/planner/TodayMedicationStrip";
 import { dailyLogsQueryFn } from "@/lib/daily-logs-query-fn";
 import { persistDailyLogToSupabase } from "@/lib/supabase/daily-logs";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser-client";
+import { TOAST_DAILY_LOG } from "@/lib/educational-toasts";
 
 const CATEGORIES: { value: DailyLogCategory; label: string }[] = [
   { value: "food", label: "Food" },
@@ -54,6 +55,13 @@ export default function DailySummaryPage() {
   const [recordedAtLocal, setRecordedAtLocal] = useState(() =>
     toDatetimeLocalInput(new Date())
   );
+  const [dailyToast, setDailyToast] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!dailyToast) return;
+    const t = window.setTimeout(() => setDailyToast(null), 4200);
+    return () => window.clearTimeout(t);
+  }, [dailyToast]);
 
   const highlightIds = useMemo(
     () => computeMcasProximityIds(dailyLogs, journal),
@@ -83,6 +91,7 @@ export default function DailySummaryPage() {
       setLabel("");
       setNotes("");
       setRecordedAtLocal(toDatetimeLocalInput(new Date()));
+      setDailyToast(TOAST_DAILY_LOG);
     },
   });
 
@@ -125,13 +134,22 @@ export default function DailySummaryPage() {
         </div>
       </header>
 
+      {dailyToast && (
+        <p
+          className="rounded-2xl border-4 border-emerald-800 bg-emerald-50 px-4 py-4 text-[18px] font-semibold leading-snug text-emerald-950"
+          role="status"
+        >
+          {dailyToast}
+        </p>
+      )}
+
       <TodayMedicationStrip />
 
       <div
-        className="rounded-xl border border-amber-900/50 bg-amber-950/25 px-3 py-3 text-sm text-amber-100/90"
+        className="rounded-xl border-2 border-amber-400 bg-amber-50 px-3 py-3 text-sm text-amber-950"
         role="note"
       >
-        <span className="font-semibold text-amber-200">MCAS proximity: </span>
+        <span className="font-semibold text-amber-900">MCAS proximity: </span>
         Amber-bordered rows pair a <strong>food</strong> log with a{" "}
         <strong>journal</strong> entry logged within two hours. This is a
         correlation hint only—not a diagnosis.

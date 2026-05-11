@@ -132,7 +132,7 @@ export default function DoctorReportPage() {
       </h1>
       <p className="text-sm leading-relaxed text-slate-600">
         Compile medications, dose history, positional BP deltas, metabolic gate
-        blocks, tolerability logs, and body sketches into one printable PDF for
+        blocks, side-effect logs, and body sketches into one printable PDF for
         a new specialist.
       </p>
       <button

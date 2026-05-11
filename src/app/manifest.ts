@@ -6,7 +6,7 @@ export default function manifest(): MetadataRoute.Manifest {
     name: "MedTracker",
     short_name: "MedTracker",
     description:
-      "Medications, vitals, symptom journal, and specialist notes — Jade View dashboard.",
+      "Medications, vitals, symptom journal, and specialist notes — Tiaki dashboard.",
     start_url: "/",
     scope: "/",
     display: "standalone",

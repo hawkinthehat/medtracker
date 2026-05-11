@@ -21,12 +21,12 @@ export default function TaperSensitivitySection() {
       <div className="flex flex-wrap items-center gap-2">
         <AlertTriangle className="h-5 w-5 text-rose-400" aria-hidden />
         <h2 className="text-lg font-semibold text-rose-100">
-          Taper sensitivity (Missouri transfer)
+          Taper sensitivity (recent courses)
         </h2>
       </div>
       <p className="mt-2 max-w-prose text-sm leading-relaxed text-rose-200/85">
         Crisis mood or severe brain fog logged while a taper was active — worth
-        reviewing with your Missouri specialists.
+        reviewing with your specialty team.
       </p>
       <ul className="mt-4 space-y-3">
         {events.map((e) => (

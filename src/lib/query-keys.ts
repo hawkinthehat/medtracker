@@ -17,7 +17,7 @@ export const qk = {
   medicationHistory: ["medicationHistory", "v1"] as const,
   /** Taper schedules keyed by medication id */
   taperPlans: ["taperPlans", "v1"] as const,
-  /** Crisis / severe fog during an active taper — Missouri transfer highlight */
+  /** Crisis / severe fog during an active taper — highlighted on dashboards */
   taperSensitivityEvents: ["taperSensitivityEvents", "v1"] as const,
   moods: ["moods"] as const,
   brainFog: ["brainFog"] as const,

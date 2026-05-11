@@ -13,10 +13,22 @@ import {
   EDEMA_LEVEL_TYPE_LABELS,
   type EdemaLevelType,
 } from "@/lib/edema-level-type";
-import { useState } from "react";
+import {
+  TOAST_ACTIVE_STAND,
+  TOAST_SPOT_VITAL,
+  TOAST_SWELLING,
+} from "@/lib/educational-toasts";
+import { useEffect, useState } from "react";
 
 export default function VitalsPage() {
   const qc = useQueryClient();
+  const [vitalsToast, setVitalsToast] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!vitalsToast) return;
+    const t = window.setTimeout(() => setVitalsToast(null), 4500);
+    return () => window.clearTimeout(t);
+  }, [vitalsToast]);
   const { data: vitals = [] } = useQuery({
     queryKey: qk.vitals,
     queryFn: async (): Promise<VitalRow[]> => [],
@@ -45,6 +57,7 @@ export default function VitalsPage() {
     mutationFn: async (v: VitalRow) => v,
     onSuccess: (row) => {
       qc.setQueryData<VitalRow[]>(qk.vitals, (prev = []) => [row, ...prev]);
+      setVitalsToast(TOAST_SPOT_VITAL);
     },
   });
 
@@ -55,6 +68,7 @@ export default function VitalsPage() {
         session,
         ...prev,
       ]);
+      setVitalsToast(TOAST_ACTIVE_STAND);
     },
   });
 
@@ -65,6 +79,7 @@ export default function VitalsPage() {
         row,
         ...prev,
       ]);
+      setVitalsToast(TOAST_SWELLING);
     },
   });
 
@@ -110,12 +125,22 @@ export default function VitalsPage() {
 
   return (
     <div className="space-y-8">
+      {vitalsToast && (
+        <p
+          className="rounded-2xl border-4 border-emerald-800 bg-emerald-50 px-4 py-4 text-center text-[18px] font-semibold leading-snug text-emerald-950 shadow-sm"
+          role="status"
+          aria-live="polite"
+        >
+          {vitalsToast}
+        </p>
+      )}
       <header>
         <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
           Vitals
         </h1>
         <p className="mt-2 text-sm leading-relaxed text-slate-400">
-          Log routine readings and guided orthostatic checks for clinic visits.
+          Active stand test (gold-standard style orthostatic screen), optional
+          timed orthostatic flow, spot readings, and swelling checks.
         </p>
       </header>
 

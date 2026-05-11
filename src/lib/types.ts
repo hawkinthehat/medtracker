@@ -16,6 +16,9 @@ export type VitalRow = {
   diastolic: number;
   heartRate?: number;
   notes?: string;
+  /** Compression leggings/socks — encoded into Supabase `notes` for specialists. */
+  compressionGarment?: boolean;
+  abdominalBinder?: boolean;
 };
 
 /** BP reading with optional pulse — used in orthostatic sessions. */
@@ -33,18 +36,26 @@ export type OrthostaticSession = {
   /** Standing BP at ~1 minute (after standing). */
   standing1m?: BpHrReading;
   /**
-   * Standing BP at ~3 minutes — used for orthostatic hypotension threshold vs lying.
-   * Older snapshots used `standing` only.
+   * Standing BP at ~3 minutes — legacy; active stand test uses `standing10m` when set.
    */
   standing3m?: BpHrReading;
+  /** Standing BP at ~10 minutes (active stand / poor man's tilt table). */
+  standing10m?: BpHrReading;
   /** @deprecated prefer standing3m — retained for older localStorage snapshots */
   standing?: BpHrReading;
+  /** Optional checklist from active stand test UI. */
+  activeStandSymptoms?: string[];
   deltaSystolic: number;
   deltaDiastolic: number;
   positiveOrthostatic: boolean;
+  /** Standing HR − lying HR > 30 (per common POTS screening cue). */
+  potsSuspect?: boolean;
+  /** Gear worn during the standing portion — shown on doctor report. */
+  compressionGarment?: boolean;
+  abdominalBinder?: boolean;
 };
 
-/** Where symptoms occurred — MCAS correlation (e.g. outdoor Mo. environment vs food). */
+/** Where symptoms occurred — indoor vs outdoor for environmental correlation. */
 export type JournalSetting = "indoor" | "outdoor" | "unspecified";
 
 export type JournalEntry = {
@@ -95,9 +106,11 @@ export type SideEffectLog = {
   recordedAt: string;
   medicationId: string;
   medicationName: string;
-  /** e.g. "40 mg with dinner" — splits tolerability by dose when set */
+  /** e.g. "40 mg with dinner" — splits reporting by dose when set */
   doseLabel?: string;
   symptoms: string[];
+  /** 1 = mild … 10 = severe */
+  severity?: number;
 };
 
 /** Logged when Add medication is blocked: new inhibitor vs existing substrate on same pathway. */
@@ -148,6 +161,8 @@ export type EpisodeEntry = {
   recordedAt: string;
   description: string;
   painRegions?: Partial<Record<PainRegionId, number>>;
+  compressionGarment?: boolean;
+  abdominalBinder?: boolean;
 };
 
 /** Local nightly clinical correlation (9 PM engine); persisted via React Query. */

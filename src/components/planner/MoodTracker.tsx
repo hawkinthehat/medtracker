@@ -33,9 +33,13 @@ import {
 } from "@/lib/supabase/wellness-side-effects";
 import { loadTaperPlansMap } from "@/lib/supabase/medication-history";
 import type { BrainFogEntry, MoodEntry, SideEffectLog } from "@/lib/types";
+import {
+  TOAST_BRAIN_FOG,
+  TOAST_MOOD,
+  toastLinkedMedication,
+} from "@/lib/educational-toasts";
 import ContextualSideEffect from "./ContextualSideEffect";
 
-/** Mood: Great (5) … Crisis (1) — left to right */
 const MOOD_SCALE: { value: MoodEntry["mood"]; label: string }[] = [
   { value: 5, label: "Great" },
   { value: 4, label: "Good" },
@@ -59,13 +63,6 @@ const BRAIN_FOG_STEPS: {
 ];
 
 const BRAIN_ICONS = [Eye, CloudSun, Cloud, CloudFog, Brain] as const;
-
-function formatSavedAt(d: Date): string {
-  return d.toLocaleTimeString(undefined, {
-    hour: "numeric",
-    minute: "2-digit",
-  });
-}
 
 export default function MoodTracker() {
   const qc = useQueryClient();
@@ -118,7 +115,7 @@ export default function MoodTracker() {
     },
     onSuccess: (row) => {
       qc.setQueryData<MoodEntry[]>(qk.moods, (prev = []) => [row, ...prev]);
-      setToast(`Log saved at ${formatSavedAt(new Date(row.recordedAt))}`);
+      setToast(TOAST_MOOD);
       setPulseKey((k) => k + 1);
       setSideEffectPrompt(null);
       if (row.mood === 1) {
@@ -157,11 +154,7 @@ export default function MoodTracker() {
       return row;
     },
     onSuccess: (row) => {
-      qc.setQueryData<BrainFogEntry[]>(qk.brainFog, (prev = []) => [
-        row,
-        ...prev,
-      ]);
-      setToast(`Log saved at ${formatSavedAt(new Date(row.recordedAt))}`);
+      setToast(TOAST_BRAIN_FOG);
       setPulseKey((k) => k + 1);
       setSideEffectPrompt(null);
       if (row.score === 10) {
@@ -223,24 +216,24 @@ export default function MoodTracker() {
         ...prev,
       ]);
       setSideEffectPrompt(null);
-      setToast(`Linked to ${log.medicationName} · ${formatSavedAt(new Date(log.recordedAt))}`);
+      setToast(toastLinkedMedication(log.medicationName));
     },
   });
 
   return (
-    <section className="relative overflow-hidden rounded-2xl border border-sky-500/25 bg-gradient-to-br from-slate-950 via-slate-900 to-sky-950/40 ring-1 ring-sky-500/15">
+    <section className="relative overflow-hidden rounded-2xl border-4 border-slate-900 bg-[#ffffff] shadow-md">
       <div
         key={pulseKey}
-        className="pointer-events-none absolute inset-0 opacity-[0.35] motion-safe:animate-pulse-strip"
+        className="pointer-events-none absolute inset-0 opacity-[0.12] motion-safe:animate-pulse-strip"
         aria-hidden
       />
       <div className="relative px-4 pb-4 pt-4">
-        <p className="text-[10px] font-bold uppercase tracking-[0.35em] text-sky-400/90">
+        <p className="text-[10px] font-bold uppercase tracking-[0.35em] text-sky-700">
           Pulse check-in
         </p>
 
         <div className="mt-4">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-700">
             Mood · Great to crisis
           </p>
           <div
@@ -260,10 +253,10 @@ export default function MoodTracker() {
                   aria-label={`Log mood: ${label}`}
                   className="group flex min-w-[4.25rem] flex-1 flex-col items-center gap-2 rounded-2xl border border-slate-300 bg-slate-100/80 px-2 py-3 shadow-inner transition hover:border-sky-500/50 hover:bg-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-400 disabled:opacity-50"
                 >
-                  <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-b from-slate-800 to-slate-950 ring-1 ring-white/10 transition group-active:scale-95">
-                    <Icon className="h-8 w-8 text-sky-300" aria-hidden />
+                  <span className="flex h-14 w-14 items-center justify-center rounded-2xl border-2 border-slate-900 bg-sky-50 transition group-active:scale-95">
+                    <Icon className="h-8 w-8 text-sky-700" aria-hidden />
                   </span>
-                  <span className="text-[10px] font-medium uppercase tracking-wide text-slate-500">
+                  <span className="text-[10px] font-medium uppercase tracking-wide text-slate-700">
                     {label}
                   </span>
                 </button>
@@ -273,7 +266,7 @@ export default function MoodTracker() {
         </div>
 
         <div className="mt-8 border-t border-slate-300 pt-6">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-700">
             Brain fog · Clear to total fog
           </p>
           <div
@@ -284,7 +277,7 @@ export default function MoodTracker() {
             {BRAIN_FOG_STEPS.map(({ score, label }, i) => {
               const Icon = BRAIN_ICONS[i];
               const foggy =
-                i >= 3 ? "text-violet-300" : "text-indigo-300";
+                i >= 3 ? "text-violet-700" : "text-indigo-700";
               return (
                 <button
                   key={score}
@@ -295,10 +288,10 @@ export default function MoodTracker() {
                   aria-label={`Log brain fog: ${label}`}
                   className="group flex min-w-[4.25rem] flex-1 flex-col items-center gap-2 rounded-2xl border border-slate-300 bg-slate-100/80 px-2 py-3 shadow-inner transition hover:border-violet-500/45 hover:bg-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-400 disabled:opacity-50"
                 >
-                  <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-b from-slate-800 to-slate-950 ring-1 ring-white/10 transition group-active:scale-95">
+                  <span className="flex h-14 w-14 items-center justify-center rounded-2xl border-2 border-slate-900 bg-violet-50 transition group-active:scale-95">
                     <Icon className={`h-8 w-8 ${foggy}`} aria-hidden />
                   </span>
-                  <span className="text-[10px] font-medium uppercase tracking-wide text-slate-500">
+                  <span className="text-[10px] font-medium uppercase tracking-wide text-slate-700">
                     {label}
                   </span>
                 </button>
@@ -323,7 +316,7 @@ export default function MoodTracker() {
 
         {toast && (
           <div
-            className="fixed bottom-[calc(5.5rem+env(safe-area-inset-bottom))] left-1/2 z-[85] max-w-[min(90vw,20rem)] -translate-x-1/2 rounded-full border border-emerald-500/40 bg-emerald-950/95 px-5 py-2.5 text-center text-sm font-medium text-emerald-50 shadow-lg shadow-emerald-950/50 ring-1 ring-emerald-800/50"
+            className="fixed bottom-[calc(5.5rem+env(safe-area-inset-bottom))] left-1/2 z-[85] max-w-[min(92vw,24rem)] -translate-x-1/2 rounded-2xl border-4 border-emerald-800 bg-emerald-50 px-5 py-3 text-center text-[18px] font-semibold leading-snug text-[#0f172a] shadow-lg"
             role="status"
           >
             {toast}

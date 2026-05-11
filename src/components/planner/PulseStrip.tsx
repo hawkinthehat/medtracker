@@ -40,6 +40,11 @@ import {
   fetchAndLogWeather,
 } from "@/lib/weather";
 import { getEnvironmentSnapshot } from "@/lib/environment-snapshot";
+import {
+  TOAST_BRAIN_FOG,
+  TOAST_MOOD,
+  toastLinkedMedication,
+} from "@/lib/educational-toasts";
 
 const MOOD_SCALE: { value: MoodEntry["mood"]; label: string }[] = [
   { value: 5, label: "Great" },
@@ -119,8 +124,8 @@ export default function PulseStrip() {
     },
     onSuccess: (row) => {
       qc.setQueryData<MoodEntry[]>(qk.moods, (prev = []) => [row, ...prev]);
-      setToast("Mood saved");
-      window.setTimeout(() => setToast(null), 1800);
+      setToast(TOAST_MOOD);
+      window.setTimeout(() => setToast(null), 4000);
       setSideEffectPrompt(null);
       if (row.mood === 1) {
         const plans =
@@ -175,8 +180,8 @@ export default function PulseStrip() {
         row,
         ...prev,
       ]);
-      setToast("Brain fog saved");
-      window.setTimeout(() => setToast(null), 1800);
+      setToast(TOAST_BRAIN_FOG);
+      window.setTimeout(() => setToast(null), 4000);
       setSideEffectPrompt(null);
       if (row.score === 10) {
         const plans =
@@ -240,8 +245,8 @@ export default function PulseStrip() {
         ...prev,
       ]);
       setSideEffectPrompt(null);
-      setToast(`Linked to ${log.medicationName}`);
-      window.setTimeout(() => setToast(null), 2200);
+      setToast(toastLinkedMedication(log.medicationName));
+      window.setTimeout(() => setToast(null), 4000);
     },
   });
 
@@ -327,7 +332,7 @@ export default function PulseStrip() {
 
       {toast && (
         <p
-          className="mt-4 rounded-lg border-2 border-emerald-700 bg-emerald-50 px-3 py-2 text-center text-sm font-semibold text-emerald-950"
+          className="mt-4 rounded-lg border-2 border-emerald-700 bg-emerald-50 px-3 py-3 text-center text-[18px] font-semibold leading-snug text-emerald-950"
           role="status"
         >
           {toast}

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { FeatureHelpTrigger } from "@/components/FeatureHelpModal";
 import { qk } from "@/lib/query-keys";
 import { checkPressureDrop } from "@/lib/weather";
 
@@ -192,6 +193,34 @@ export default function TiakiHomeWeatherSection() {
 
   return (
     <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border-4 border-slate-900 bg-white px-4 py-4 shadow-sm">
+        <h2 className="text-lg font-black tracking-tight text-slate-900 sm:text-xl">
+          Barometric pressure
+        </h2>
+        <FeatureHelpTrigger
+          ariaLabel="Why barometric pressure matters"
+          title="Barometric pressure"
+        >
+          <p>
+            <strong>Why it matters for dysautonomia:</strong> Rapid drops in air
+            pressure are linked to wider blood vessels and lighter head
+            sensations — many people notice more dizziness, fatigue, or migraine
+            overlap when pressure falls quickly.
+          </p>
+          <p>
+            <strong>How Tiaki measures this:</strong> The advisory uses your
+            device&apos;s GPS coordinates with OpenWeather forecast data for{" "}
+            <em>your current location</em> — not a fixed city. Grant location for
+            the most accurate heads-up.
+          </p>
+          <p>
+            <strong>What to log:</strong> Keep doing your usual orthostatic and
+            symptom checks; Tiaki attaches pressure context so you and your team
+            can correlate flares with weather swings over time.
+          </p>
+        </FeatureHelpTrigger>
+      </div>
+
       {showBanner && (
         <section
           role="alert"
@@ -199,8 +228,8 @@ export default function TiakiHomeWeatherSection() {
           className="rounded-2xl border-4 border-amber-700 bg-amber-300 p-5 shadow-lg ring-4 ring-amber-500/80"
         >
           <p className="text-center text-xl font-black leading-snug text-slate-950 sm:text-2xl">
-            ⚠️ Weather Alert: Pressure Drop Detected for Tomorrow. Please
-            increase your water and salt intake tonight to prepare.
+            Atmospheric pressure shift detected. Maintain hydration and salt
+            protocols per your care plan.
           </p>
           {!isLoading && advisory != null && (
             <p className="mt-3 text-center text-lg font-bold text-slate-900">

@@ -24,7 +24,7 @@ import {
 import { useMemo } from "react";
 import { AlertTriangle, FileDown } from "lucide-react";
 import ClinicalSummaryCard from "@/components/ClinicalSummaryCard";
-import DrugTolerabilityReport from "@/components/DrugTolerabilityReport";
+import SideEffectTracker from "@/components/SideEffectTracker";
 import TaperSensitivitySection from "@/components/TaperSensitivitySection";
 import VaultPlannerSections from "@/components/planner/VaultPlannerSections";
 import { dailyLogsQueryFn } from "@/lib/daily-logs-query-fn";
@@ -201,7 +201,7 @@ export default function VaultPage() {
             </h2>
             <p className="mt-1 max-w-prose text-sm text-slate-400">
               Seven-day rolling averages for mood and brain fog as your
-              environment shifts (e.g. Missouri transition). Export a clinical
+              environment shifts and humidity. Export a clinical
               PDF for specialty visits.
             </p>
           </div>
@@ -268,7 +268,7 @@ export default function VaultPage() {
         )}
       </section>
 
-      <DrugTolerabilityReport />
+      <SideEffectTracker />
 
       <TaperSensitivitySection />
 

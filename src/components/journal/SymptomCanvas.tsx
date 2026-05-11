@@ -8,6 +8,7 @@ import { getSupabaseBrowserClient } from "@/lib/supabase/browser-client";
 import { persistDailyLogToSupabase } from "@/lib/supabase/daily-logs";
 import { qk } from "@/lib/query-keys";
 import type { DailyLogEntry } from "@/lib/types";
+import { TOAST_SYMPTOM_MAP } from "@/lib/educational-toasts";
 import ClinicalBodySilhouette, {
   CLINICAL_VIEWBOX,
 } from "@/components/journal/ClinicalBodySilhouette";
@@ -41,6 +42,14 @@ const BRUSH_OPTIONS: {
 ];
 
 const QUICK_NOTE_LABELS = ["Burning", "Aching", "Rash"] as const;
+
+/** Large tap targets for common dysautonomia sensations (append to spot note). */
+const DYSAUT_QUICK_TAGS = [
+  "Coat hanger pain",
+  "Presyncope",
+  "Blood pooling",
+  "Air hunger",
+] as const;
 
 const INK_THRESHOLD_PX = 8;
 
@@ -187,7 +196,7 @@ export default function SymptomCanvas({ side, className }: SymptomCanvasProps) {
     onSuccess: () => {
       setNoteModalOpen(false);
       setDraftNote("");
-      setSavedHint("Saved with your note.");
+      setSavedHint(TOAST_SYMPTOM_MAP);
       window.setTimeout(() => setSavedHint(null), 2800);
     },
   });
@@ -207,7 +216,7 @@ export default function SymptomCanvas({ side, className }: SymptomCanvasProps) {
       return row;
     },
     onSuccess: () => {
-      setSavedHint("Daily symptom map saved.");
+      setSavedHint(TOAST_SYMPTOM_MAP);
       window.setTimeout(() => setSavedHint(null), 2800);
     },
   });
@@ -288,6 +297,23 @@ export default function SymptomCanvas({ side, className }: SymptomCanvasProps) {
                 key={label}
                 type="button"
                 className="min-h-[60px] rounded-2xl border-4 border-black bg-white px-3 text-xl font-black text-slate-900 hover:bg-slate-50"
+                onClick={() => {
+                  setDraftNote(label);
+                }}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <p className="mt-6 text-xl font-black text-slate-900">
+            Dysautonomia quick tags
+          </p>
+          <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+            {DYSAUT_QUICK_TAGS.map((label) => (
+              <button
+                key={label}
+                type="button"
+                className="min-h-[72px] rounded-2xl border-4 border-indigo-900 bg-indigo-50 px-3 text-lg font-black leading-snug text-indigo-950 hover:bg-indigo-100"
                 onClick={() => {
                   setDraftNote(label);
                 }}
@@ -438,7 +464,7 @@ export default function SymptomCanvas({ side, className }: SymptomCanvasProps) {
         </p>
       )}
       {savedHint && (
-        <p className="mt-3 text-lg font-bold text-emerald-800" role="status">
+        <p className="mt-3 text-[18px] font-semibold leading-snug text-emerald-900" role="status">
           {savedHint}
         </p>
       )}

@@ -9,6 +9,7 @@ import { dailyLogsQueryFn } from "@/lib/daily-logs-query-fn";
 import { persistDailyLogToSupabase } from "@/lib/supabase/daily-logs";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser-client";
 import { mealLinkedToRecentFlare } from "@/lib/food-flare-hint";
+import { toastFoodLogged } from "@/lib/educational-toasts";
 
 function recentFavoriteMeals(logs: DailyLogEntry[], limit = 5): string[] {
   const seen = new Set<string>();
@@ -95,7 +96,7 @@ export default function FoodTracker() {
       ]);
       void qc.invalidateQueries({ queryKey: qk.dailyLogs });
       setInspectLabel(row.label);
-      setStatus(`Logged: ${row.label}`);
+      setStatus(toastFoodLogged(row.label));
       window.setTimeout(() => setStatus(null), 2400);
       setManual("");
     },

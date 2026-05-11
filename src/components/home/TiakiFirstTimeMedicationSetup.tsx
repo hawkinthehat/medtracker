@@ -1,14 +1,23 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { qk } from "@/lib/query-keys";
-import type { SavedMedication } from "@/lib/seed-medications";
 import { fetchMedicationsQuery } from "@/lib/medications-query";
-import { JADE_QUICK_SETUP_MEDICATIONS } from "@/lib/quick-setup/jade-presets";
-import { setMedicationsAndPersist } from "@/lib/medications-persist";
 
 const ONBOARDING_LS = "medtracker-onboarding-complete-v2";
+const CLIMATE_LS = "tiaki-tracking-climate-v1";
+const DISPLAY_NAME_LS = "tiaki-display-name";
+
+const CLIMATE_OPTIONS = [
+  "Humid subtropical / summer heat",
+  "Dry / continental",
+  "Maritime or cool temperate",
+  "High altitude",
+  "Tropical",
+  "Other or prefer not to say",
+] as const;
 
 function readOnboardingDone(): boolean {
   try {
@@ -27,7 +36,6 @@ function writeOnboardingDone() {
 }
 
 export default function TiakiFirstTimeMedicationSetup() {
-  const qc = useQueryClient();
   const { data: meds = [] } = useQuery({
     queryKey: qk.medications,
     queryFn: fetchMedicationsQuery,
@@ -37,25 +45,31 @@ export default function TiakiFirstTimeMedicationSetup() {
   });
 
   const [onboardingDone, setOnboardingDone] = useState<boolean | null>(null);
+  const [climate, setClimate] = useState<string>(CLIMATE_OPTIONS[0]);
+  const [displayName, setDisplayName] = useState("");
 
   useEffect(() => {
     setOnboardingDone(readOnboardingDone());
+    try {
+      const c = window.localStorage.getItem(CLIMATE_LS)?.trim();
+      if (c) setClimate(c);
+      const n = window.localStorage.getItem(DISPLAY_NAME_LS)?.trim();
+      if (n) setDisplayName(n);
+    } catch {
+      /* ignore */
+    }
   }, []);
 
-  const applyQuick = useMutation({
+  const finish = useMutation({
     mutationFn: async () => {
-      const next: SavedMedication[] = JADE_QUICK_SETUP_MEDICATIONS.map((m) => ({
-        ...m,
-      }));
-      setMedicationsAndPersist(qc, () => next);
-      writeOnboardingDone();
-      return next.length;
-    },
-    onSuccess: () => setOnboardingDone(true),
-  });
-
-  const skip = useMutation({
-    mutationFn: async () => {
+      try {
+        window.localStorage.setItem(CLIMATE_LS, climate.trim());
+        const dn = displayName.trim();
+        if (dn) window.localStorage.setItem(DISPLAY_NAME_LS, dn);
+        else window.localStorage.removeItem(DISPLAY_NAME_LS);
+      } catch {
+        /* ignore */
+      }
       writeOnboardingDone();
     },
     onSuccess: () => setOnboardingDone(true),
@@ -74,37 +88,60 @@ export default function TiakiFirstTimeMedicationSetup() {
         id="first-setup-heading"
         className="text-2xl font-black text-slate-900"
       >
-        Welcome — add your medications
+        Welcome — set up Tiaki
       </h2>
       <p className="mt-2 text-lg font-medium text-slate-800">
-        Tiaki starts with an empty list so it is safe to share. Use Quick Setup
-        for Jade&apos;s saved regimen, or add meds manually below.
+        Which region or climate are you tracking? This helps interpret weather
+        and symptom patterns (stored only on this device).
       </p>
+
+      <label className="mt-5 block text-lg font-bold text-slate-900">
+        Region / climate
+        <select
+          className="mt-2 min-h-[52px] w-full rounded-xl border-4 border-black bg-white px-4 text-lg font-semibold text-slate-900"
+          value={climate}
+          onChange={(e) => setClimate(e.target.value)}
+        >
+          {CLIMATE_OPTIONS.map((c) => (
+            <option key={c} value={c}>
+              {c}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      <label className="mt-4 block text-lg font-bold text-slate-900">
+        What should we call you?{" "}
+        <span className="font-normal text-slate-600">(optional)</span>
+        <input
+          className="mt-2 min-h-[52px] w-full rounded-xl border-4 border-black bg-white px-4 text-lg font-semibold text-slate-900"
+          value={displayName}
+          onChange={(e) => setDisplayName(e.target.value)}
+          placeholder="First name or nickname"
+          autoComplete="nickname"
+        />
+      </label>
+
+      <p className="mt-5 text-lg font-semibold text-slate-800">
+        Next, add the medications you take — Tiaki starts with an empty list so
+        it stays private on shared devices.
+      </p>
+
       <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
         <button
           type="button"
-          disabled={applyQuick.isPending}
-          onClick={() => applyQuick.mutate()}
+          disabled={finish.isPending}
+          onClick={() => finish.mutate()}
           className="min-h-[56px] flex-1 rounded-xl border-4 border-black bg-sky-600 px-5 text-lg font-black uppercase tracking-wide text-white shadow hover:bg-sky-700 disabled:opacity-50"
         >
-          Quick Setup (Jade)
+          Save &amp; continue
         </button>
-        <button
-          type="button"
-          disabled
-          title="Camera-based import coming soon"
-          className="min-h-[56px] flex-1 cursor-not-allowed rounded-xl border-4 border-slate-400 bg-slate-200 px-5 text-lg font-bold text-slate-600"
+        <Link
+          href="/meds"
+          className="flex min-h-[56px] flex-1 items-center justify-center rounded-xl border-4 border-black bg-white px-5 text-lg font-black uppercase tracking-wide text-slate-900 shadow hover:bg-slate-50"
         >
-          Import meds from photo (soon)
-        </button>
-        <button
-          type="button"
-          disabled={skip.isPending}
-          onClick={() => skip.mutate()}
-          className="min-h-[56px] flex-1 rounded-xl border-4 border-black bg-white px-5 text-lg font-bold text-slate-900 hover:bg-slate-50"
-        >
-          Skip — I&apos;ll add them manually
-        </button>
+          Open medications
+        </Link>
       </div>
     </section>
   );

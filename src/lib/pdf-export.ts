@@ -22,6 +22,24 @@ import type { jsPDF } from "jspdf";
 
 type PdfWithAutoTable = jsPDF & { lastAutoTable: { finalY: number } };
 
+function orthostaticClinicalFlags(o: OrthostaticSession): string {
+  const oh = o.positiveOrthostatic;
+  const pots = Boolean(o.potsSuspect);
+  if (oh && pots) return "OH + POTS";
+  if (oh) return "OH";
+  if (pots) return "POTS";
+  return "—";
+}
+
+function orthostaticGearYesNo(v: boolean | undefined): string {
+  if (v === undefined) return "—";
+  return v ? "Yes" : "No";
+}
+
+function orthostaticRowFlagged(o: OrthostaticSession): boolean {
+  return Boolean(o.positiveOrthostatic || o.potsSuspect);
+}
+
 const MS_DAY = 24 * 60 * 60 * 1000;
 
 function withinLastDays(iso: string, days: number) {
@@ -99,7 +117,7 @@ export async function generateThirtyDayMedicalPdf(params: {
   doc.setTextColor(71, 85, 105);
   doc.setFontSize(9);
   doc.text(
-    "Highlighted values meet common orthostatic hypotension criteria: ΔSBP ≥ 20 mmHg and/or ΔDBP ≥ 10 mmHg.",
+    "Rows may highlight when ΔBP suggests orthostatic hypotension (OH) or ΔHR suggests a POTS pattern — gear columns show compression use.",
     14,
     nextY + 17,
     { maxWidth: 180 }
@@ -115,7 +133,9 @@ export async function generateThirtyDayMedicalPdf(params: {
         "Standing",
         "Δ Sys",
         "Δ Dia",
-        "Orthostatic warning",
+        "Flags",
+        "Compress",
+        "Binder",
       ],
     ],
     body: ortho.map((o) => [
@@ -125,7 +145,9 @@ export async function generateThirtyDayMedicalPdf(params: {
       `${standing3mReading(o)?.systolic ?? "—"}/${standing3mReading(o)?.diastolic ?? "—"}`,
       `${o.deltaSystolic}`,
       `${o.deltaDiastolic}`,
-      o.positiveOrthostatic ? "YES — positive screen" : "No",
+      orthostaticClinicalFlags(o),
+      orthostaticGearYesNo(o.compressionGarment),
+      orthostaticGearYesNo(o.abdominalBinder),
     ]),
     styles: { fontSize: 9, cellPadding: 2 },
     headStyles: {
@@ -136,13 +158,10 @@ export async function generateThirtyDayMedicalPdf(params: {
     didParseCell: (data) => {
       if (data.section !== "body") return;
       const session = ortho[data.row.index];
-      if (!session?.positiveOrthostatic) return;
-      const col = data.column.index;
-      if (col >= 4) {
-        data.cell.styles.textColor = [185, 28, 28];
-        data.cell.styles.fontStyle = "bold";
-        data.cell.styles.fillColor = [254, 226, 226];
-      }
+      if (!session || !orthostaticRowFlagged(session)) return;
+      data.cell.styles.fillColor = [254, 226, 226];
+      data.cell.styles.textColor = [127, 29, 29];
+      if (data.column.index === 6) data.cell.styles.fontStyle = "bold";
     },
   });
 
@@ -318,7 +337,9 @@ export async function generateClinicalCorrelationLockedPdf(params: {
         "Standing",
         "Δ Sys",
         "Δ Dia",
-        "Positive screen",
+        "Flags",
+        "Compress",
+        "Binder",
       ],
     ],
     body: ortho.map((o) => [
@@ -327,13 +348,23 @@ export async function generateClinicalCorrelationLockedPdf(params: {
       `${standing3mReading(o)?.systolic ?? "—"}/${standing3mReading(o)?.diastolic ?? "—"}`,
       `${o.deltaSystolic}`,
       `${o.deltaDiastolic}`,
-      o.positiveOrthostatic ? "Yes" : "No",
+      orthostaticClinicalFlags(o),
+      orthostaticGearYesNo(o.compressionGarment),
+      orthostaticGearYesNo(o.abdominalBinder),
     ]),
     styles: { fontSize: 8, cellPadding: 1.8 },
     headStyles: {
       fillColor: [127, 29, 29],
       textColor: [254, 226, 226],
       fontStyle: "bold",
+    },
+    didParseCell: (data) => {
+      if (data.section !== "body") return;
+      const session = ortho[data.row.index];
+      if (!session || !orthostaticRowFlagged(session)) return;
+      data.cell.styles.fillColor = [254, 226, 226];
+      data.cell.styles.textColor = [127, 29, 29];
+      if (data.column.index === 5) data.cell.styles.fontStyle = "bold";
     },
   });
 
@@ -456,7 +487,7 @@ export async function generateDoctorSpecialistPdf(
   doc.text(`Generated: ${new Date(bundle.compiledAt).toLocaleString()}`, 14, y);
   y += 5;
   doc.text(
-    bundle.patientLabel ?? "Patient: Jade · MedTracker export",
+    bundle.patientLabel ?? "Patient · MedTracker export",
     14,
     y,
     { maxWidth: pageW - 28 }
@@ -470,7 +501,7 @@ export async function generateDoctorSpecialistPdf(
 
   autoTable(doc, {
     startY: y,
-    head: [["Medication", "Class / notes (seed)"]],
+    head: [["Medication", "Class / notes"]],
     body: activeMedicationRows.map((m) => [
       m.name,
       m.pathway_role ?? m.pathway,
@@ -594,7 +625,9 @@ export async function generateDoctorSpecialistPdf(
         "Standing",
         "Δ Sys",
         "Δ Dia",
-        "Positive screen",
+        "Flags",
+        "Compress",
+        "Binder",
       ],
     ],
     body: bundle.orthostatic.slice(0, 40).map((o) => [
@@ -603,7 +636,9 @@ export async function generateDoctorSpecialistPdf(
       `${standing3mReading(o)?.systolic ?? "—"}/${standing3mReading(o)?.diastolic ?? "—"}`,
       `${o.deltaSystolic}`,
       `${o.deltaDiastolic}`,
-      o.positiveOrthostatic ? "Yes" : "No",
+      orthostaticClinicalFlags(o),
+      orthostaticGearYesNo(o.compressionGarment),
+      orthostaticGearYesNo(o.abdominalBinder),
     ]),
     styles: { fontSize: 8, cellPadding: 1.8 },
     headStyles: {
@@ -612,6 +647,15 @@ export async function generateDoctorSpecialistPdf(
       fontStyle: "bold",
     },
     theme: "plain",
+    didParseCell: (data) => {
+      if (data.section !== "body") return;
+      const rows = bundle.orthostatic.slice(0, 40);
+      const session = rows[data.row.index];
+      if (!session || !orthostaticRowFlagged(session)) return;
+      data.cell.styles.fillColor = [254, 226, 226];
+      data.cell.styles.textColor = [127, 29, 29];
+      if (data.column.index === 5) data.cell.styles.fontStyle = "bold";
+    },
   });
 
   nextY = (doc as PdfWithAutoTable).lastAutoTable.finalY;
@@ -663,7 +707,7 @@ export async function generateDoctorSpecialistPdf(
   nextY = (doc as PdfWithAutoTable).lastAutoTable.finalY;
 
   doc.setFontSize(12);
-  doc.text("Post-dose tolerability (recent)", 14, nextY + 12);
+  doc.text("Side effects after doses (recent)", 14, nextY + 12);
   autoTable(doc, {
     startY: nextY + 16,
     head: [["Date", "Medication", "Symptoms"]],

@@ -2,7 +2,7 @@
 
 import type { EpisodeEntry, PainRegionId } from "@/lib/types";
 import { X } from "lucide-react";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 type Props = {
   open: boolean;
@@ -18,6 +18,8 @@ export default function LogEpisodeFab({
   onSubmit,
 }: Props) {
   const panelRef = useRef<HTMLDivElement>(null);
+  const [compressionYes, setCompressionYes] = useState(false);
+  const [binderYes, setBinderYes] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -47,6 +49,8 @@ export default function LogEpisodeFab({
     onSubmit({
       description,
       painRegions: attachPain ? { ...painRegions } : undefined,
+      compressionGarment: compressionYes,
+      abdominalBinder: binderYes,
     });
     onClose();
   }
@@ -104,6 +108,73 @@ export default function LogEpisodeFab({
               placeholder="Onset, duration, triggers, associated symptoms…"
             />
           </label>
+
+          <div className="rounded-2xl border-2 border-slate-300 bg-slate-50 p-4">
+            <p className="text-sm font-bold text-slate-900">
+              Compression & binder (for your specialist)
+            </p>
+            <div className="mt-3 grid gap-4 sm:grid-cols-2">
+              <div>
+                <p className="text-xs font-semibold text-slate-700">
+                  Wearing compression?
+                </p>
+                <div className="mt-2 flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setCompressionYes(true)}
+                    className={`min-h-[52px] flex-1 rounded-xl border-2 border-slate-900 text-sm font-black ${
+                      compressionYes
+                        ? "bg-emerald-600 text-white"
+                        : "bg-white text-slate-900"
+                    }`}
+                  >
+                    Yes
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCompressionYes(false)}
+                    className={`min-h-[52px] flex-1 rounded-xl border-2 border-slate-900 text-sm font-black ${
+                      !compressionYes
+                        ? "bg-slate-700 text-white"
+                        : "bg-white text-slate-900"
+                    }`}
+                  >
+                    No
+                  </button>
+                </div>
+              </div>
+              <div>
+                <p className="text-xs font-semibold text-slate-700">
+                  Abdominal binder?
+                </p>
+                <div className="mt-2 flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setBinderYes(true)}
+                    className={`min-h-[52px] flex-1 rounded-xl border-2 border-slate-900 text-sm font-black ${
+                      binderYes
+                        ? "bg-emerald-600 text-white"
+                        : "bg-white text-slate-900"
+                    }`}
+                  >
+                    Yes
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setBinderYes(false)}
+                    className={`min-h-[52px] flex-1 rounded-xl border-2 border-slate-900 text-sm font-black ${
+                      !binderYes
+                        ? "bg-slate-700 text-white"
+                        : "bg-white text-slate-900"
+                    }`}
+                  >
+                    No
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
           {hasPain && (
             <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-300 bg-slate-100/70 px-3 py-3">
               <input

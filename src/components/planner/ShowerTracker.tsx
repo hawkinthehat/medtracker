@@ -8,6 +8,7 @@ import { qk } from "@/lib/query-keys";
 import type { DailyLogEntry } from "@/lib/types";
 import { persistDailyLogToSupabase } from "@/lib/supabase/daily-logs";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser-client";
+import { toastShowerCheck } from "@/lib/educational-toasts";
 
 const FEELINGS = ["Fine", "Dizzy", "Fainted", "Flare"] as const;
 
@@ -19,6 +20,8 @@ export default function ShowerTracker() {
   useEffect(() => setMounted(true), []);
 
   const supabaseConfigured = Boolean(getSupabaseBrowserClient());
+
+  const [afterToast, setAfterToast] = useState<string | null>(null);
 
   const saveFeeling = useMutation({
     mutationFn: async (feeling: (typeof FEELINGS)[number]) => {
@@ -36,13 +39,15 @@ export default function ShowerTracker() {
       }
       return row;
     },
-    onSuccess: (row) => {
+    onSuccess: (row, feeling) => {
       qc.setQueryData<DailyLogEntry[]>(qk.dailyLogs, (prev = []) => [
         row,
         ...prev,
       ]);
       void qc.invalidateQueries({ queryKey: qk.dailyLogs });
       setOpen(false);
+      setAfterToast(toastShowerCheck(feeling));
+      window.setTimeout(() => setAfterToast(null), 4500);
     },
   });
 
@@ -110,6 +115,14 @@ export default function ShowerTracker() {
         Shower tracker
       </button>
       {modal}
+      {afterToast && (
+        <p
+          className="rounded-2xl border-4 border-sky-700 bg-sky-50 px-4 py-4 text-center text-[18px] font-semibold leading-snug text-sky-950"
+          role="status"
+        >
+          {afterToast}
+        </p>
+      )}
     </section>
   );
 }

@@ -25,10 +25,10 @@ function norm(s: string): string {
 }
 
 /**
- * Silent background map for Jade’s regimen — automaps to pathways for doctor
+ * Silent automapping from medication names to metabolic pathways for doctor-facing
  * reports and interaction checks; not shown in the simplified Meds UI.
  */
-const JADE_MED_AUDIT_ROWS: AuditRow[] = [
+const MED_NAME_AUDIT_ROWS: AuditRow[] = [
   {
     aliases: ["gleevec", "imatinib"],
     pathway: "CYP3A4",
@@ -168,7 +168,7 @@ function nameMatchesAlias(key: string, alias: string): boolean {
 function matchRow(name: string): AuditRow | null {
   const key = norm(name);
   if (!key) return null;
-  for (const row of JADE_MED_AUDIT_ROWS) {
+  for (const row of MED_NAME_AUDIT_ROWS) {
     if (row.aliases.some((a) => nameMatchesAlias(key, a))) return row;
   }
   return null;

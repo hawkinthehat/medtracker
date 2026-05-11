@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
+import { FeatureHelpTrigger } from "@/components/FeatureHelpModal";
 import type { BpHrReading, OrthostaticSession } from "@/lib/types";
 
 type StageProps = {
@@ -84,7 +85,7 @@ function parseHr(s: string): number | undefined {
 function buildReading(
   sys: string,
   dia: string,
-  hr: string
+  hr: string,
 ): BpHrReading | null {
   const s = Number(sys);
   const d = Number(dia);
@@ -97,85 +98,191 @@ function buildReading(
   };
 }
 
+const ACTIVE_STAND_SYMPTOMS = [
+  "Dizziness",
+  "Palpitations",
+  "Tremor",
+  "Syncope",
+] as const;
+
 type Props = {
   onSaveSession: (session: OrthostaticSession) => void;
 };
 
 export function GuidedOrthostaticCard({ onSaveSession }: Props) {
   const [lying, setLying] = useState({ sys: "", dia: "", hr: "" });
-  const [sitting, setSitting] = useState({ sys: "", dia: "", hr: "" });
-  const [standing, setStanding] = useState({ sys: "", dia: "", hr: "" });
+  const [stand1m, setStand1m] = useState({ sys: "", dia: "", hr: "" });
+  const [stand10m, setStand10m] = useState({ sys: "", dia: "", hr: "" });
+  const [symptomPick, setSymptomPick] = useState<Set<string>>(() => new Set());
 
-  const delta = useMemo(() => {
-    const lie = buildReading(lying.sys, lying.dia, lying.hr);
-    const stand = buildReading(standing.sys, standing.dia, standing.hr);
-    if (!lie || !stand) return null;
-    const deltaSystolic = lie.systolic - stand.systolic;
-    const deltaDiastolic = lie.diastolic - stand.diastolic;
+  const lieRead = useMemo(
+    () => buildReading(lying.sys, lying.dia, lying.hr),
+    [lying],
+  );
+  const s1Read = useMemo(
+    () => buildReading(stand1m.sys, stand1m.dia, stand1m.hr),
+    [stand1m],
+  );
+  const s10Read = useMemo(
+    () => buildReading(stand10m.sys, stand10m.dia, stand10m.hr),
+    [stand10m],
+  );
+
+  const deltaVs10 = useMemo(() => {
+    if (!lieRead || !s10Read) return null;
+    const deltaSystolic = lieRead.systolic - s10Read.systolic;
+    const deltaDiastolic = lieRead.diastolic - s10Read.diastolic;
     const positiveOrthostatic =
       deltaSystolic >= 20 || deltaDiastolic >= 10;
+    let hrJump1: number | null = null;
+    let hrJump10: number | null = null;
+    if (
+      lieRead.heartRate != null &&
+      s1Read?.heartRate != null
+    ) {
+      hrJump1 = s1Read.heartRate - lieRead.heartRate;
+    }
+    if (
+      lieRead.heartRate != null &&
+      s10Read.heartRate != null
+    ) {
+      hrJump10 = s10Read.heartRate - lieRead.heartRate;
+    }
+    const hrVals = [hrJump1, hrJump10].filter(
+      (x): x is number => x != null && Number.isFinite(x),
+    );
+    const maxHrJump = hrVals.length ? Math.max(...hrVals) : null;
+    const potsSuspect =
+      maxHrJump != null && maxHrJump > 30;
+    const bpAlert = positiveOrthostatic;
+    const hrAlert = potsSuspect;
     return {
       deltaSystolic,
       deltaDiastolic,
       positiveOrthostatic,
+      potsSuspect,
+      hrJump1,
+      hrJump10,
+      bpAlert,
+      hrAlert,
     };
-  }, [lying, standing]);
+  }, [lieRead, s1Read, s10Read]);
 
   function reset() {
     setLying({ sys: "", dia: "", hr: "" });
-    setSitting({ sys: "", dia: "", hr: "" });
-    setStanding({ sys: "", dia: "", hr: "" });
+    setStand1m({ sys: "", dia: "", hr: "" });
+    setStand10m({ sys: "", dia: "", hr: "" });
+    setSymptomPick(new Set());
+  }
+
+  function toggleSymptom(s: string) {
+    setSymptomPick((prev) => {
+      const next = new Set(prev);
+      if (next.has(s)) next.delete(s);
+      else next.add(s);
+      return next;
+    });
   }
 
   function save() {
-    const lie = buildReading(lying.sys, lying.dia, lying.hr);
-    const sit = buildReading(sitting.sys, sitting.dia, sitting.hr);
-    const st = buildReading(standing.sys, standing.dia, standing.hr);
-    if (!lie || !sit || !st) return;
-    const deltaSystolic = lie.systolic - st.systolic;
-    const deltaDiastolic = lie.diastolic - st.diastolic;
+    const lie = lieRead;
+    const s1 = s1Read;
+    const s10 = s10Read;
+    if (!lie || !s1 || !s10 || !deltaVs10) return;
+
+    const deltaSystolic = lie.systolic - s10.systolic;
+    const deltaDiastolic = lie.diastolic - s10.diastolic;
     const positiveOrthostatic =
       deltaSystolic >= 20 || deltaDiastolic >= 10;
+
+    let potsSuspect = false;
+    if (lie.heartRate != null && s1.heartRate != null) {
+      if (s1.heartRate - lie.heartRate > 30) potsSuspect = true;
+    }
+    if (lie.heartRate != null && s10.heartRate != null) {
+      if (s10.heartRate - lie.heartRate > 30) potsSuspect = true;
+    }
+
+    const symptoms =
+      symptomPick.size > 0 ? Array.from(symptomPick) : undefined;
 
     const session: OrthostaticSession = {
       id: crypto.randomUUID(),
       recordedAt: new Date().toISOString(),
       lying: lie,
-      sitting: sit,
-      standing3m: st,
-      standing: st,
+      sitting: lie,
+      standing1m: s1,
+      standing10m: s10,
+      standing3m: s10,
+      standing: s10,
       deltaSystolic,
       deltaDiastolic,
       positiveOrthostatic,
+      potsSuspect,
+      ...(symptoms ? { activeStandSymptoms: symptoms } : {}),
     };
     onSaveSession(session);
     reset();
   }
 
-  const canSave =
-    buildReading(lying.sys, lying.dia, lying.hr) &&
-    buildReading(sitting.sys, sitting.dia, sitting.hr) &&
-    buildReading(standing.sys, standing.dia, standing.hr);
+  const canSave = lieRead && s1Read && s10Read;
 
   return (
     <section className="rounded-2xl border-2 border-amber-500/50 bg-black p-5 shadow-xl ring-2 ring-amber-500/20">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h2 className="text-lg font-bold tracking-tight text-white">
-            Guided Orthostatic Test
+        <div className="min-w-0 flex-1">
+          <h2 className="text-2xl font-black tracking-tight text-white sm:text-3xl">
+            Active Stand Test
           </h2>
-          <p className="mt-1.5 text-sm leading-relaxed text-slate-700">
-            Lying (baseline) → sitting → standing. Deltas use{" "}
-            <span className="font-medium text-amber-200">lying vs standing</span>{" "}
-            as you type.
+          <p className="mt-2 text-sm font-semibold leading-relaxed text-amber-100/95">
+            Poor man&apos;s tilt table — supine rest, then standing at 1 and 10
+            minutes. Deltas use{" "}
+            <span className="font-black text-amber-200">lying → standing (10m)</span>{" "}
+            for BP; HR alert if jump &gt;30 vs lying at either standing timepoint.
           </p>
         </div>
+        <FeatureHelpTrigger
+          ariaLabel="How to take the active stand test"
+          title="Active Stand Test"
+        >
+          <p>
+            <strong>Why it matters:</strong> Lying vs standing BP and HR is the
+            practical gold standard screen for orthostatic hypotension (OH) and
+            supports many POTS evaluations — your doctor looks for big BP drops
+            and HR jumps when you stand.
+          </p>
+          <p>
+            <strong>How to measure:</strong> Rest lying flat ~5 minutes, then log
+            BP and HR. Stand still — log again at 1 minute and at ~10 minutes.
+            Use the same arm and cuff position each time.
+          </p>
+          <p>
+            <strong>Tips:</strong> Avoid talking or pacing during stands; note
+            symptoms like dizziness or palpitations so they sit alongside your
+            numbers in reports.
+          </p>
+        </FeatureHelpTrigger>
       </div>
 
-      <div className="mt-6 grid gap-4 md:grid-cols-3">
+      <ol className="mt-4 list-decimal space-y-2 pl-5 text-sm font-bold text-amber-50/95">
+        <li>
+          <strong className="text-white">Supine:</strong> rest lying down ~5
+          minutes, then enter BP/HR.
+        </li>
+        <li>
+          <strong className="text-white">Standing (1 min):</strong> stand
+          quietly; measure at 1 minute.
+        </li>
+        <li>
+          <strong className="text-white">Standing (10 min):</strong> remain
+          standing; measure at 10 minutes.
+        </li>
+      </ol>
+
+      <div className="mt-6 grid gap-4 lg:grid-cols-3">
         <StageInputs
-          title="Lying (baseline)"
-          subtitle="After ~5 min supine, when ready."
+          title="Step 1 · Supine"
+          subtitle="After ~5 min rest."
           sys={lying.sys}
           dia={lying.dia}
           hr={lying.hr}
@@ -184,60 +291,93 @@ export function GuidedOrthostaticCard({ onSaveSession }: Props) {
           onHr={(v) => setLying((p) => ({ ...p, hr: v }))}
         />
         <StageInputs
-          title="Sitting"
-          sys={sitting.sys}
-          dia={sitting.dia}
-          hr={sitting.hr}
-          onSys={(v) => setSitting((p) => ({ ...p, sys: v }))}
-          onDia={(v) => setSitting((p) => ({ ...p, dia: v }))}
-          onHr={(v) => setSitting((p) => ({ ...p, hr: v }))}
+          title="Step 2 · Standing 1 min"
+          subtitle="Quiet stance."
+          sys={stand1m.sys}
+          dia={stand1m.dia}
+          hr={stand1m.hr}
+          onSys={(v) => setStand1m((p) => ({ ...p, sys: v }))}
+          onDia={(v) => setStand1m((p) => ({ ...p, dia: v }))}
+          onHr={(v) => setStand1m((p) => ({ ...p, hr: v }))}
         />
         <StageInputs
-          title="Standing"
-          subtitle="Final standing BP for this check."
-          sys={standing.sys}
-          dia={standing.dia}
-          hr={standing.hr}
-          onSys={(v) => setStanding((p) => ({ ...p, sys: v }))}
-          onDia={(v) => setStanding((p) => ({ ...p, dia: v }))}
-          onHr={(v) => setStanding((p) => ({ ...p, hr: v }))}
+          title="Step 3 · Standing 10 min"
+          subtitle="Sustained orthostatic stress."
+          sys={stand10m.sys}
+          dia={stand10m.dia}
+          hr={stand10m.hr}
+          onSys={(v) => setStand10m((p) => ({ ...p, sys: v }))}
+          onDia={(v) => setStand10m((p) => ({ ...p, dia: v }))}
+          onHr={(v) => setStand10m((p) => ({ ...p, hr: v }))}
         />
       </div>
 
-      {delta && (
+      <div className="mt-6 rounded-xl border border-white/20 bg-zinc-950/80 px-4 py-4">
+        <p className="text-xs font-bold uppercase tracking-wider text-slate-400">
+          Symptoms during the test
+        </p>
+        <div className="mt-3 flex flex-wrap gap-2">
+          {ACTIVE_STAND_SYMPTOMS.map((s) => (
+            <button
+              key={s}
+              type="button"
+              onClick={() => toggleSymptom(s)}
+              className={`min-h-[48px] rounded-xl border-2 px-4 text-sm font-black ${
+                symptomPick.has(s)
+                  ? "border-amber-400 bg-amber-500/30 text-amber-50"
+                  : "border-white/25 text-slate-700 hover:bg-white/10"
+              }`}
+            >
+              {s}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {deltaVs10 && (
         <div className="mt-6 rounded-xl border border-white/20 bg-zinc-950 px-4 py-4">
           <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
-            Delta (lying − standing)
+            Delta (lying − standing 10m) · HR jumps vs lying
           </p>
-          <p className="mt-2 font-mono text-xl font-semibold tabular-nums text-white">
-            Δ Systolic: {delta.deltaSystolic} mmHg · Δ Diastolic:{" "}
-            {delta.deltaDiastolic} mmHg
+          <p
+            className={`mt-2 font-mono text-xl font-semibold tabular-nums ${
+              deltaVs10.bpAlert || deltaVs10.hrAlert
+                ? "text-red-400"
+                : "text-white"
+            }`}
+          >
+            Δ BP: {deltaVs10.deltaSystolic} / {deltaVs10.deltaDiastolic} mmHg
+            {" · "}
+            Δ HR @1m:{" "}
+            {deltaVs10.hrJump1 != null ? `+${deltaVs10.hrJump1} bpm` : "—"}
+            {" · "}
+            Δ HR @10m:{" "}
+            {deltaVs10.hrJump10 != null ? `+${deltaVs10.hrJump10} bpm` : "—"}
           </p>
-          {delta.positiveOrthostatic ? (
-            <div
-              className="mt-4 space-y-3 rounded-lg border-2 border-red-500 bg-red-950/90 px-4 py-3"
-              role="alert"
-            >
-              <p className="text-center text-base font-black uppercase tracking-wide text-red-100">
-                POSITIVE FOR ORTHOSTATIC HYPOTENSION
-              </p>
-              <p className="text-center text-sm text-red-200/95">
-                Systolic drop ≥ 20 mmHg and/or diastolic drop ≥ 10 mmHg vs lying.
-                Discuss with your clinician.
-              </p>
-              <Link
-                href="/journal"
-                className="flex w-full items-center justify-center rounded-lg border-2 border-white/30 bg-black px-4 py-3 text-sm font-bold text-white hover:bg-zinc-900"
-              >
-                Log concurrent symptoms (dizziness, nausea…)
-              </Link>
-            </div>
-          ) : (
-            <p className="mt-3 text-sm text-slate-400">
-              Threshold not met on BP numbers alone; still log symptoms if you feel
-              faint or nauseated.
+          {deltaVs10.bpAlert && (
+            <p className="mt-3 text-center text-base font-black uppercase text-red-300">
+              BP drop meets common orthostatic screen (≥20 systolic and/or ≥10
+              diastolic)
             </p>
           )}
+          {deltaVs10.hrAlert && (
+            <p className="mt-2 text-center text-base font-black uppercase text-red-300">
+              HR rise &gt;30 bpm — discuss POTS / orthostatic intolerance with
+              your clinician
+            </p>
+          )}
+          {!deltaVs10.bpAlert && !deltaVs10.hrAlert && (
+            <p className="mt-3 text-sm text-slate-400">
+              Thresholds not met on numbers alone; still save if you felt
+              symptomatic.
+            </p>
+          )}
+          <Link
+            href="/journal"
+            className="mt-4 flex w-full items-center justify-center rounded-lg border-2 border-white/30 bg-black px-4 py-3 text-sm font-bold text-white hover:bg-zinc-900"
+          >
+            Add free-text symptoms in journal
+          </Link>
         </div>
       )}
 
@@ -248,7 +388,7 @@ export function GuidedOrthostaticCard({ onSaveSession }: Props) {
           onClick={save}
           className="min-h-[48px] flex-1 rounded-xl bg-amber-500 px-4 py-3 text-sm font-bold text-black hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-40"
         >
-          Save orthostatic session
+          Save active stand session
         </button>
         <button
           type="button"

@@ -42,7 +42,7 @@ export default function RootLayout({
   return (
     <html lang="en" className="light h-full">
       <body
-        className={`${inter.variable} min-h-dvh bg-background font-sans text-foreground antialiased`}
+        className={`${inter.variable} min-h-dvh bg-[#ffffff] font-sans text-[#0f172a] antialiased`}
       >
         <AppProviders>{children}</AppProviders>
       </body>

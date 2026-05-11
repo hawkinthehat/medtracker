@@ -1,11 +1,10 @@
-/** Device-local labels — safe for shared installs; Jade’s defaults match her dogs. */
+/** Device-local labels for the primary movement log button and default notes line. */
 
 const LS_WALK_LABEL = "tiaki-movement-walk-button-label";
 const LS_WALK_NOTES = "tiaki-movement-walk-notes-default";
 
-export const DEFAULT_WALK_BUTTON_LABEL = "Walked the Dogs";
-export const DEFAULT_WALK_NOTES =
-  "Daily walk with Moki & Daisy";
+export const DEFAULT_WALK_BUTTON_LABEL = "Log Activity";
+export const DEFAULT_WALK_NOTES = "Physical activity session";
 
 export function getWalkButtonLabel(): string {
   if (typeof window === "undefined") return DEFAULT_WALK_BUTTON_LABEL;

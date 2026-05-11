@@ -131,7 +131,7 @@ export function computeSpotBpDropAfterActivityNarrative(
   return `Among spot BP checks today, systolic fell by ${maxDrop} mmHg between consecutive readings; log activities before readings to sharpen “after [X]” wording.`;
 }
 
-/** Summarize movement logs that carry ambient temp / pressure for Missouri humidity correlations. */
+/** Summarize movement logs that carry ambient temperature / pressure for clinical correlation. */
 export function computeMovementWeatherNarrative(
   dailyLogs: DailyLogEntry[],
   dateKey: string,

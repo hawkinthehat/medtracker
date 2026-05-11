@@ -24,6 +24,8 @@ import {
 } from "@/lib/supabase/medication-logs";
 import { fetchMostRecentPainMapTouchSince } from "@/lib/pain-map-db";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser-client";
+import { FeatureHelpTrigger } from "@/components/FeatureHelpModal";
+import { toastPrnLogged } from "@/lib/educational-toasts";
 
 const FOUR_H_MS = 4 * 60 * 60 * 1000;
 const THIRTY_MIN_MS = 30 * 60 * 1000;
@@ -145,7 +147,7 @@ export default function QuickRelief() {
       });
       void qc.invalidateQueries({ queryKey: qk.medicationLogs });
       const t = formatClock(row.recordedAt);
-      setToast(`Logged ${def.displayName} at ${t}`);
+      setToast(toastPrnLogged(def.displayName, t));
     },
     onError: (e) => {
       setErrorToast(
@@ -159,14 +161,26 @@ export default function QuickRelief() {
       aria-labelledby="quick-relief-heading"
       className="space-y-3 border-b-2 border-slate-200 pb-6"
     >
-      <div className="flex flex-wrap items-end justify-between gap-2">
-        <div>
-          <h2
-            id="quick-relief-heading"
-            className="text-xs font-bold uppercase tracking-[0.25em] text-slate-900"
-          >
-            Quick relief
-          </h2>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <h2
+              id="quick-relief-heading"
+              className="text-xs font-bold uppercase tracking-[0.25em] text-slate-900"
+            >
+              Quick relief
+            </h2>
+            <FeatureHelpTrigger
+              ariaLabel="Quick relief help"
+              title="Quick relief"
+            >
+              <p>
+                One-tap logging for PRN meds when you&apos;re dizzy or foggy.
+                When you&apos;re signed in, each tap is saved to your chart for
+                your doctor report.
+              </p>
+            </FeatureHelpTrigger>
+          </div>
           <p className="mt-1 text-sm font-medium text-slate-600">
             One tap logs the dose from your med list when it matches. Still
             tappable if your doctor said to override spacing. When you are
@@ -230,7 +244,7 @@ export default function QuickRelief() {
 
       {toast && (
         <div
-          className="fixed bottom-6 left-4 right-4 z-[90] rounded-2xl border-4 border-emerald-900 bg-emerald-50 px-5 py-5 text-center text-2xl font-black text-emerald-950 shadow-2xl sm:left-auto sm:right-auto sm:mx-auto sm:max-w-lg"
+          className="fixed bottom-6 left-4 right-4 z-[90] rounded-2xl border-4 border-emerald-900 bg-emerald-50 px-5 py-5 text-center text-[18px] font-semibold leading-snug text-[#0f172a] shadow-2xl sm:left-auto sm:right-auto sm:mx-auto sm:max-w-lg"
           role="status"
         >
           {toast}

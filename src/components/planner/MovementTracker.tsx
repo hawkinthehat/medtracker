@@ -27,6 +27,8 @@ import {
   ptMarker,
   type PtSlot,
 } from "@/lib/movement-tracking";
+import { FeatureHelpTrigger } from "@/components/FeatureHelpModal";
+import { TOAST_ACTIVITY, toastPtLogged } from "@/lib/educational-toasts";
 
 const PT_SLOTS: { slot: PtSlot; label: string }[] = [
   { slot: "morning", label: "Morning PT" },
@@ -135,12 +137,37 @@ export default function MovementTracker() {
     },
   });
 
-  const appendWeatherNotes = useCallback(async (baseNotes: string) => {
-    await fetchAndLogWeather().catch(() => {});
-    const snap = getEnvironmentSnapshot();
-    const full = appendAmbientContext(baseNotes, snap);
-    return full;
-  }, []);
+  const appendWeatherNotes = useCallback(
+    async (baseNotes: string, opts?: { skipWeatherFetch?: boolean }) => {
+      if (!opts?.skipWeatherFetch) {
+        await fetchAndLogWeather().catch(() => {});
+      }
+      const snap = getEnvironmentSnapshot();
+      const full = appendAmbientContext(baseNotes, snap);
+      return full;
+    },
+    [],
+  );
+
+  const [walkSuccessMessage, setWalkSuccessMessage] = useState<string | null>(
+    null,
+  );
+  const [ptSuccessMessage, setPtSuccessMessage] = useState<string | null>(
+    null,
+  );
+
+  function triggerWalkHaptic() {
+    try {
+      if (
+        typeof navigator !== "undefined" &&
+        typeof navigator.vibrate === "function"
+      ) {
+        navigator.vibrate(12);
+      }
+    } catch {
+      /* ignore unsupported environments */
+    }
+  }
 
   async function handleDogWalk(skipNudge = false) {
     const walksBefore = countDogWalksToday(
@@ -159,11 +186,37 @@ export default function MovementTracker() {
     }
 
     setShowHrNudge(false);
+    setWalkSuccessMessage(null);
+
+    await fetchAndLogWeather().catch(() => {});
+
+    const sb = getSupabaseBrowserClient();
+    if (sb) {
+      const {
+        data: { user },
+      } = await sb.auth.getUser();
+      if (user) {
+        const { error } = await sb.from("activity_logs").insert({
+          activity_type: "active_movement",
+          notes:
+            getWalkNotesDefault().trim() ||
+            DEFAULT_WALK_NOTES,
+          user_id: user.id,
+        });
+        if (error) {
+          console.error(
+            "[activity_logs] active_movement insert failed:",
+            error.message,
+            error,
+          );
+        }
+      }
+    }
 
     const label = getWalkButtonLabel();
     const base =
       `${getWalkNotesDefault().trim()}\n${DOG_WALK_MARKER}`.trim();
-    const notes = await appendWeatherNotes(base);
+    const notes = await appendWeatherNotes(base, { skipWeatherFetch: true });
 
     const row: DailyLogEntry = {
       id: crypto.randomUUID(),
@@ -173,7 +226,14 @@ export default function MovementTracker() {
       notes,
     };
 
-    await logMovementEntry.mutateAsync(row);
+    await logMovementEntry.mutateAsync(row).catch((e) => {
+      console.error("[handleDogWalk] Failed to save movement / daily_logs:", e);
+      throw e;
+    });
+
+    triggerWalkHaptic();
+    setWalkSuccessMessage(TOAST_ACTIVITY);
+    window.setTimeout(() => setWalkSuccessMessage(null), 4500);
   }
 
   async function handlePt(slot: PtSlot, humanLabel: string) {
@@ -191,6 +251,9 @@ export default function MovementTracker() {
     };
 
     await logMovementEntry.mutateAsync(row);
+
+    setPtSuccessMessage(toastPtLogged(humanLabel));
+    window.setTimeout(() => setPtSuccessMessage(null), 4500);
 
     setPtLatched((prev) => {
       const next = { ...prev, [slot]: true };
@@ -214,12 +277,20 @@ export default function MovementTracker() {
       className="rounded-2xl border-4 border-black bg-white p-5 shadow-md"
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <h2
-          id="movement-tracker-heading"
-          className="text-xl font-black tracking-tight text-slate-900"
-        >
-          Movement
-        </h2>
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+          <h2
+            id="movement-tracker-heading"
+            className="text-xl font-black tracking-tight text-slate-900"
+          >
+            Movement
+          </h2>
+          <FeatureHelpTrigger ariaLabel="Movement help" title="Movement">
+            <p>
+              One-tap logging for walks and PT — weather context is saved with
+              each entry so you and your care team can spot patterns.
+            </p>
+          </FeatureHelpTrigger>
+        </div>
         <button
           type="button"
           onClick={() => setSettingsOpen((o) => !o)}
@@ -234,7 +305,7 @@ export default function MovementTracker() {
       {settingsOpen && (
         <div className="mt-4 space-y-4 rounded-xl border-4 border-slate-400 bg-slate-50 p-4">
           <p className="text-lg font-semibold text-slate-800">
-            Customize dog walk text (saved on this device only).
+            Customize activity label (saved on this device only).
           </p>
           <label className="block text-lg font-bold text-slate-900">
             Button label
@@ -274,6 +345,26 @@ export default function MovementTracker() {
           {walkButtonDisplay}
         </span>
       </button>
+
+      {walkSuccessMessage && (
+        <p
+          className="mt-5 rounded-2xl border-4 border-emerald-800 bg-emerald-50 px-5 py-5 text-center text-lg font-black leading-snug tracking-tight text-emerald-950 sm:text-xl"
+          role="status"
+          aria-live="polite"
+        >
+          {walkSuccessMessage}
+        </p>
+      )}
+
+      {ptSuccessMessage && (
+        <p
+          className="mt-4 rounded-2xl border-4 border-sky-800 bg-sky-50 px-5 py-4 text-center text-lg font-black leading-snug text-sky-950"
+          role="status"
+          aria-live="polite"
+        >
+          {ptSuccessMessage}
+        </p>
+      )}
 
       <p className="mt-4 text-center text-xl font-black text-slate-900">
         Daily walks today:{" "}

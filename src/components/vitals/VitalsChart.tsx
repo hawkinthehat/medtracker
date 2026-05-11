@@ -19,7 +19,7 @@ export const POSITIONAL_COMPARISON_LABELS = [
   "Lying",
   "Sitting",
   "Standing (1m)",
-  "Standing (3m)",
+  "Standing (10m)",
 ] as const;
 
 export type PositionalComparisonRow = {
@@ -53,17 +53,14 @@ export function orthostaticSessionToPositionalBP(
       diastolic: o.standing1m?.diastolic ?? null,
     },
     {
-      position: "Standing (3m)",
+      position: "Standing (10m)",
       systolic: st3.systolic,
       diastolic: st3.diastolic,
     },
   ];
 }
 
-/**
- * Orthostatic-style alert: drop from lying to 3 min standing — same thresholds as
- * {@link OrthostaticTracker} (≥20 mmHg systolic or ≥10 mmHg diastolic).
- */
+/** Orthostatic-style alert: drop from lying to late standing — same thresholds as tracker (≥20 mmHg systolic or ≥10 mmHg diastolic). */
 export function isPositionalOrthostaticAlert(o: OrthostaticSession): boolean {
   const st3 = standing3mReading(o);
   if (!st3) return false;

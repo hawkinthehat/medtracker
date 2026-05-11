@@ -12,6 +12,8 @@ import { fetchAndLogWeather } from "@/lib/weather";
 import { fetchMedicationsQuery } from "@/lib/medications-query";
 import { getActiveMedications } from "@/lib/medication-active";
 import { morningSlotMedications, type SavedMedication } from "@/lib/seed-medications";
+import { TOAST_MORNING_ROUTINE } from "@/lib/educational-toasts";
+import MorningOrthostaticVitalCheck from "@/components/planner/MorningOrthostaticVitalCheck";
 
 const BREAKFAST_LS = "medtracker-morning-breakfast-v1";
 const MORNING_DONE_LS = "medtracker-morning-complete-day-v1";
@@ -61,6 +63,8 @@ export default function MorningRoutine() {
   const [morningTaken, setMorningTaken] = useState<Record<string, boolean>>(
     {},
   );
+  const [morningCompression, setMorningCompression] = useState(false);
+  const [morningBinder, setMorningBinder] = useState(false);
 
   const { data: medications = [] } = useQuery({
     queryKey: qk.medications,
@@ -177,6 +181,8 @@ export default function MorningRoutine() {
           diastolic: Math.round(d),
           heartRate: hasHr ? Math.round(hrNum) : undefined,
           notes: "Morning routine",
+          compressionGarment: morningCompression,
+          abdominalBinder: morningBinder,
         };
         tasks.push(
           (async () => {
@@ -280,9 +286,11 @@ export default function MorningRoutine() {
       } catch {
         /* ignore */
       }
-      setToast("Morning routine saved.");
+      setToast(TOAST_MORNING_ROUTINE);
       window.setTimeout(() => setToast(null), 3200);
       setSavedFavorite(loadFavoriteBreakfast());
+      setMorningCompression(false);
+      setMorningBinder(false);
     },
     onError: (e: Error) => {
       setToast(e.message);
@@ -339,6 +347,8 @@ export default function MorningRoutine() {
         </div>
       ) : (
         <>
+          <MorningOrthostaticVitalCheck />
+
           <div className="mt-6 space-y-6">
             <div>
               <label className="flex items-center gap-2 text-2xl font-bold text-slate-900">
@@ -395,6 +405,72 @@ export default function MorningRoutine() {
                   onChange={(e) => setDia(e.target.value)}
                   aria-label="Diastolic blood pressure"
                 />
+              </div>
+
+              <div className="mt-4 rounded-2xl border-4 border-black bg-slate-50 p-4">
+                <p className="text-lg font-black text-slate-900">
+                  Gear during this BP reading
+                </p>
+                <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                  <div>
+                    <p className="text-base font-bold text-slate-800">
+                      Wearing compression?
+                    </p>
+                    <div className="mt-2 flex gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setMorningCompression(true)}
+                        className={`min-h-[56px] flex-1 rounded-2xl border-4 border-black text-lg font-black ${
+                          morningCompression
+                            ? "bg-emerald-600 text-white"
+                            : "bg-white text-slate-900"
+                        }`}
+                      >
+                        Yes
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setMorningCompression(false)}
+                        className={`min-h-[56px] flex-1 rounded-2xl border-4 border-black text-lg font-black ${
+                          !morningCompression
+                            ? "bg-slate-700 text-white"
+                            : "bg-white text-slate-900"
+                        }`}
+                      >
+                        No
+                      </button>
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-base font-bold text-slate-800">
+                      Abdominal binder?
+                    </p>
+                    <div className="mt-2 flex gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setMorningBinder(true)}
+                        className={`min-h-[56px] flex-1 rounded-2xl border-4 border-black text-lg font-black ${
+                          morningBinder
+                            ? "bg-emerald-600 text-white"
+                            : "bg-white text-slate-900"
+                        }`}
+                      >
+                        Yes
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setMorningBinder(false)}
+                        className={`min-h-[56px] flex-1 rounded-2xl border-4 border-black text-lg font-black ${
+                          !morningBinder
+                            ? "bg-slate-700 text-white"
+                            : "bg-white text-slate-900"
+                        }`}
+                      >
+                        No
+                      </button>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
 

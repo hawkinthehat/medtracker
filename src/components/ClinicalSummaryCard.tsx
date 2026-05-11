@@ -201,9 +201,8 @@ export default function ClinicalSummaryCard() {
       <footer className="border-t border-slate-300/90 bg-white px-5 py-3">
         <p className="text-[12px] leading-relaxed text-slate-600">
           <span className="font-medium text-slate-700">At a glance — </span>
-          These are the same rolling figures your Missouri specialists can scan
-          before diving into raw logs; share this screen or bundle it with the
-          PDF export from Transfer.
+          Rolling summaries clinicians often scan before raw logs; bundle with the
+          PDF export from Transfer when needed.
         </p>
       </footer>
     </section>
