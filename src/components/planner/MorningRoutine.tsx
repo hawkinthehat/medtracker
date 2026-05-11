@@ -2,16 +2,18 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
-import { Activity, Heart, Pill, Scale, UtensilsCrossed } from "lucide-react";
+import { Activity, Check, Heart, Scale, UtensilsCrossed } from "lucide-react";
 import { qk } from "@/lib/query-keys";
 import type { DailyLogEntry, VitalRow } from "@/lib/types";
 import { persistDailyLogToSupabase } from "@/lib/supabase/daily-logs";
 import { persistVitalToSupabase } from "@/lib/supabase/vitals";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser-client";
 import { fetchAndLogWeather } from "@/lib/weather";
-import { fetchMedicationsQuery } from "@/lib/medications-query";
-import { getActiveMedications } from "@/lib/medication-active";
-import { morningSlotMedications, type SavedMedication } from "@/lib/seed-medications";
+import { dailyLogsQueryFn } from "@/lib/daily-logs-query-fn";
+import {
+  findMorningMedsLogToday,
+  MORNING_MEDS_TAKEN_LABEL,
+} from "@/lib/morning-meds-log";
 import { TOAST_MORNING_ROUTINE } from "@/lib/educational-toasts";
 import MorningOrthostaticVitalCheck from "@/components/planner/MorningOrthostaticVitalCheck";
 
@@ -60,23 +62,20 @@ export default function MorningRoutine() {
   const [toast, setToast] = useState<string | null>(null);
   const [savedFavorite, setSavedFavorite] = useState("");
   const [isLoggedToday, setIsLoggedToday] = useState(false);
-  const [morningTaken, setMorningTaken] = useState<Record<string, boolean>>(
-    {},
-  );
   const [morningCompression, setMorningCompression] = useState(false);
   const [morningBinder, setMorningBinder] = useState(false);
 
-  const { data: medications = [] } = useQuery({
-    queryKey: qk.medications,
-    queryFn: fetchMedicationsQuery,
-    staleTime: Infinity,
+  const { data: dailyLogs = [] } = useQuery({
+    queryKey: qk.dailyLogs,
+    queryFn: dailyLogsQueryFn,
+    staleTime: 30_000,
     gcTime: 1000 * 60 * 60 * 24 * 30,
-    refetchOnWindowFocus: false,
+    refetchOnWindowFocus: true,
   });
 
-  const morningSlotMeds = useMemo(
-    () => morningSlotMedications(getActiveMedications(medications)),
-    [medications],
+  const morningMedsLogged = useMemo(
+    () => findMorningMedsLogToday(dailyLogs),
+    [dailyLogs],
   );
 
   useEffect(() => {
@@ -98,16 +97,40 @@ export default function MorningRoutine() {
 
   const supabaseConfigured = Boolean(getSupabaseBrowserClient());
 
+  const logMorningMedsTaken = useMutation({
+    mutationFn: async () => {
+      const recordedAt = new Date().toISOString();
+      const row: DailyLogEntry = {
+        id: crypto.randomUUID(),
+        recordedAt,
+        category: "other",
+        label: MORNING_MEDS_TAKEN_LABEL,
+        notes: recordedAt,
+      };
+      if (supabaseConfigured) {
+        const ok = await persistDailyLogToSupabase(row);
+        if (!ok) {
+          throw new Error("Could not save morning meds — check Supabase.");
+        }
+      }
+      return row;
+    },
+    onSuccess: (row) => {
+      qc.setQueryData<DailyLogEntry[]>(qk.dailyLogs, (prev = []) => [
+        row,
+        ...prev,
+      ]);
+      setToast("Morning meds logged to daily_logs.");
+      window.setTimeout(() => setToast(null), 3200);
+    },
+    onError: (e: Error) => {
+      setToast(e.message);
+      window.setTimeout(() => setToast(null), 4200);
+    },
+  });
+
   const submit = useMutation({
-    mutationFn: async ({
-      morningChecks,
-    }: {
-      morningChecks: Record<string, boolean>;
-    }) => {
-      const meds = getActiveMedications(
-        qc.getQueryData<SavedMedication[]>(qk.medications) ?? [],
-      );
-      const slot = morningSlotMedications(meds);
+    mutationFn: async () => {
       const recordedAt = new Date().toISOString();
       const tasks: Promise<boolean>[] = [];
       const weightNum = Number(weight);
@@ -130,12 +153,9 @@ export default function MorningRoutine() {
         hrNum < 300;
       const breakfastTrim = breakfast.trim();
 
-      const takenMorning = slot.filter((m) => morningChecks[m.id]);
-      const anyMorning = takenMorning.length > 0;
-
-      if (!hasWeight && !hasBp && !breakfastTrim && !hasHr && !anyMorning) {
+      if (!hasWeight && !hasBp && !breakfastTrim && !hasHr) {
         throw new Error(
-          "Fill at least one: weight, blood pressure, heart rate, breakfast, or a morning medication checkbox.",
+          "Fill at least one: weight, blood pressure, heart rate, or breakfast.",
         );
       }
 
@@ -244,31 +264,6 @@ export default function MorningRoutine() {
         );
       }
 
-      if (anyMorning) {
-        const morningMedLog: DailyLogEntry = {
-          id: crypto.randomUUID(),
-          recordedAt,
-          category: "activity",
-          label: "Morning medication checklist",
-          notes: `Taken (morning slot): ${takenMorning
-            .map((m) => `${m.name}${m.doseLabel ? ` (${m.doseLabel})` : ""}`)
-            .join("; ")}`,
-        };
-        tasks.push(
-          (async () => {
-            if (supabaseConfigured) {
-              const ok = await persistDailyLogToSupabase(morningMedLog);
-              if (!ok) return false;
-            }
-            qc.setQueryData<DailyLogEntry[]>(qk.dailyLogs, (prev = []) => [
-              morningMedLog,
-              ...prev,
-            ]);
-            return true;
-          })(),
-        );
-      }
-
       const results = await Promise.all(tasks);
       if (supabaseConfigured && results.some((r) => !r)) {
         throw new Error("Some rows did not sync. Check Supabase.");
@@ -280,7 +275,6 @@ export default function MorningRoutine() {
     },
     onSuccess: () => {
       setIsLoggedToday(true);
-      setMorningTaken({});
       try {
         window.localStorage.setItem(MORNING_DONE_LS, calendarDayStamp());
       } catch {
@@ -321,8 +315,8 @@ export default function MorningRoutine() {
         )}
       </div>
       <p className="mt-2 text-lg font-medium text-slate-700">
-        Weight, BP, heart rate, breakfast, and morning multi-dose meds in one
-        save.
+        Log morning meds with one tap; weight, BP, heart rate, and breakfast in
+        one save below.
       </p>
 
       {isLoggedToday ? (
@@ -348,6 +342,63 @@ export default function MorningRoutine() {
       ) : (
         <>
           <MorningOrthostaticVitalCheck />
+
+          <div className="mt-6">
+            {morningMedsLogged ? (
+              <div className="flex min-h-[72px] items-center gap-4 rounded-2xl border-4 border-emerald-700 bg-emerald-50 px-5 py-4">
+                <Check
+                  className="h-12 w-12 shrink-0 text-emerald-800"
+                  strokeWidth={2.5}
+                  aria-hidden
+                />
+                <div className="min-w-0">
+                  <p className="text-xl font-black leading-tight text-emerald-950">
+                    ☀️ Morning meds taken
+                  </p>
+                  <p className="mt-1 text-sm font-semibold text-emerald-900">
+                    Logged{" "}
+                    {new Date(morningMedsLogged.recordedAt).toLocaleString()}
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <button
+                type="button"
+                disabled={logMorningMedsTaken.isPending}
+                onClick={() => {
+                  if (!supabaseConfigured) {
+                    const recordedAt = new Date().toISOString();
+                    const row: DailyLogEntry = {
+                      id: crypto.randomUUID(),
+                      recordedAt,
+                      category: "other",
+                      label: MORNING_MEDS_TAKEN_LABEL,
+                      notes: recordedAt,
+                    };
+                    qc.setQueryData<DailyLogEntry[]>(qk.dailyLogs, (prev = []) => [
+                      row,
+                      ...prev,
+                    ]);
+                    setToast("Morning meds saved on this device only.");
+                    window.setTimeout(() => setToast(null), 3200);
+                    return;
+                  }
+                  logMorningMedsTaken.mutate();
+                }}
+                className="flex min-h-[72px] w-full items-center justify-center gap-3 rounded-2xl border-4 border-amber-600 bg-amber-100 px-5 py-4 text-left shadow-md transition hover:bg-amber-200 disabled:opacity-60"
+              >
+                <span
+                  className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl border-4 border-black bg-white text-3xl"
+                  aria-hidden
+                >
+                  ☀️
+                </span>
+                <span className="text-2xl font-black leading-tight text-slate-950">
+                  Morning Meds Taken
+                </span>
+              </button>
+            )}
+          </div>
 
           <div className="mt-6 space-y-6">
             <div>
@@ -517,49 +568,6 @@ export default function MorningRoutine() {
                 </button>
               )}
             </div>
-
-            {morningSlotMeds.length > 0 && (
-              <div>
-                <label className="flex items-center gap-2 text-2xl font-bold text-slate-900">
-                  <Pill className="h-10 w-10 shrink-0 text-slate-900" aria-hidden />
-                  Morning medications (2× or 3× daily)
-                </label>
-                <p className="mt-2 text-base font-medium text-slate-600">
-                  Check each dose you took with your morning routine (first slot
-                  of the day).
-                </p>
-                <ul className="mt-4 space-y-4">
-                  {morningSlotMeds.map((m) => (
-                    <li key={m.id}>
-                      <label className="flex min-h-[56px] cursor-pointer items-start gap-4 rounded-xl border-4 border-black bg-white p-4 shadow-sm">
-                        <input
-                          type="checkbox"
-                          className="mt-1.5 h-9 w-9 shrink-0 rounded border-4 border-black accent-sky-600"
-                          checked={Boolean(morningTaken[m.id])}
-                          onChange={(e) =>
-                            setMorningTaken((prev) => ({
-                              ...prev,
-                              [m.id]: e.target.checked,
-                            }))
-                          }
-                          aria-label={`Take morning ${m.name}`}
-                        />
-                        <span className="min-w-0 flex-1">
-                          <span className="block text-2xl font-black leading-tight text-slate-900">
-                            Take morning {m.name}
-                          </span>
-                          {m.doseLabel ? (
-                            <span className="mt-1 block text-xl font-bold text-slate-800">
-                              {m.doseLabel}
-                            </span>
-                          ) : null}
-                        </span>
-                      </label>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
           </div>
 
           <button
@@ -570,13 +578,10 @@ export default function MorningRoutine() {
                 weight.trim() !== "" ||
                 (sys.trim() !== "" && dia.trim() !== "") ||
                 hr.trim() !== "" ||
-                breakfast.trim() !== "" ||
-                morningSlotMeds.some((m) => morningTaken[m.id])
+                breakfast.trim() !== ""
               )
             }
-            onClick={() =>
-              submit.mutate({ morningChecks: morningTaken })
-            }
+            onClick={() => submit.mutate()}
             className="mt-8 min-h-[60px] w-full rounded-xl border-4 border-black bg-sky-600 py-4 text-2xl font-black uppercase tracking-wide text-white shadow-lg transition hover:bg-sky-700 disabled:opacity-40"
           >
             {submit.isPending ? "Saving…" : "Submit all"}

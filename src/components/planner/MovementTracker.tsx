@@ -2,11 +2,12 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Dog, Settings2 } from "lucide-react";
+import { Dog, Check, Settings2 } from "lucide-react";
 import { qk } from "@/lib/query-keys";
 import type { DailyLogEntry } from "@/lib/types";
 import { persistDailyLogToSupabase } from "@/lib/supabase/daily-logs";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser-client";
+import { insertActivityLogRow } from "@/lib/supabase/activity-logs";
 import { dailyLogsQueryFn } from "@/lib/daily-logs-query-fn";
 import { fetchAndLogWeather } from "@/lib/weather";
 import { getEnvironmentSnapshot } from "@/lib/environment-snapshot";
@@ -133,7 +134,6 @@ export default function MovementTracker() {
         entry,
         ...prev,
       ]);
-      void qc.invalidateQueries({ queryKey: qk.dailyLogs });
     },
   });
 
@@ -155,6 +155,8 @@ export default function MovementTracker() {
   const [ptSuccessMessage, setPtSuccessMessage] = useState<string | null>(
     null,
   );
+  const [walkAckFlash, setWalkAckFlash] = useState(false);
+  const [ptAckFlash, setPtAckFlash] = useState<PtSlot | null>(null);
 
   function triggerWalkHaptic() {
     try {
@@ -168,6 +170,18 @@ export default function MovementTracker() {
       /* ignore unsupported environments */
     }
   }
+
+  useEffect(() => {
+    if (!walkAckFlash) return;
+    const t = window.setTimeout(() => setWalkAckFlash(false), 1600);
+    return () => window.clearTimeout(t);
+  }, [walkAckFlash]);
+
+  useEffect(() => {
+    if (!ptAckFlash) return;
+    const t = window.setTimeout(() => setPtAckFlash(null), 1600);
+    return () => window.clearTimeout(t);
+  }, [ptAckFlash]);
 
   async function handleDogWalk(skipNudge = false) {
     const walksBefore = countDogWalksToday(
@@ -190,29 +204,7 @@ export default function MovementTracker() {
 
     await fetchAndLogWeather().catch(() => {});
 
-    const sb = getSupabaseBrowserClient();
-    if (sb) {
-      const {
-        data: { user },
-      } = await sb.auth.getUser();
-      if (user) {
-        const { error } = await sb.from("activity_logs").insert({
-          activity_type: "active_movement",
-          notes:
-            getWalkNotesDefault().trim() ||
-            DEFAULT_WALK_NOTES,
-          user_id: user.id,
-        });
-        if (error) {
-          console.error(
-            "[activity_logs] active_movement insert failed:",
-            error.message,
-            error,
-          );
-        }
-      }
-    }
-
+    const recordedAt = new Date().toISOString();
     const label = getWalkButtonLabel();
     const base =
       `${getWalkNotesDefault().trim()}\n${DOG_WALK_MARKER}`.trim();
@@ -220,7 +212,7 @@ export default function MovementTracker() {
 
     const row: DailyLogEntry = {
       id: crypto.randomUUID(),
-      recordedAt: new Date().toISOString(),
+      recordedAt,
       category: "activity",
       label,
       notes,
@@ -231,7 +223,14 @@ export default function MovementTracker() {
       throw e;
     });
 
+    void insertActivityLogRow({
+      activity_type: "active_movement",
+      notes: getWalkNotesDefault().trim() || DEFAULT_WALK_NOTES,
+      recorded_at: recordedAt,
+    });
+
     triggerWalkHaptic();
+    setWalkAckFlash(true);
     setWalkSuccessMessage(TOAST_ACTIVITY);
     window.setTimeout(() => setWalkSuccessMessage(null), 4500);
   }
@@ -252,6 +251,14 @@ export default function MovementTracker() {
 
     await logMovementEntry.mutateAsync(row);
 
+    void insertActivityLogRow({
+      activity_type: "pt_session",
+      notes: `${humanLabel} · ${slot}`,
+      recorded_at: row.recordedAt,
+    });
+
+    setPtAckFlash(slot);
+    triggerWalkHaptic();
     setPtSuccessMessage(toastPtLogged(humanLabel));
     window.setTimeout(() => setPtSuccessMessage(null), 4500);
 
@@ -340,9 +347,21 @@ export default function MovementTracker() {
         type="button"
         disabled={busy}
         onClick={() => void handleDogWalk()}
-        className="mt-5 flex min-h-[80px] w-full items-center justify-center gap-4 rounded-2xl border-4 border-black bg-white px-5 py-6 text-2xl font-black leading-snug text-slate-900 shadow-sm transition hover:bg-slate-50 disabled:opacity-50"
+        className={`mt-5 flex min-h-[80px] w-full items-center justify-center gap-4 rounded-2xl border-4 px-5 py-6 text-2xl font-black leading-snug shadow-sm transition hover:bg-slate-50 disabled:opacity-50 ${
+          walkAckFlash
+            ? "border-emerald-600 bg-emerald-100 text-emerald-950 ring-4 ring-emerald-400"
+            : "border-black bg-white text-slate-900"
+        }`}
       >
-        <Dog className="h-12 w-12 shrink-0 text-slate-900" strokeWidth={2.5} aria-hidden />
+        {walkAckFlash ? (
+          <Check
+            className="h-12 w-12 shrink-0 text-emerald-800"
+            strokeWidth={3}
+            aria-hidden
+          />
+        ) : (
+          <Dog className="h-12 w-12 shrink-0 text-slate-900" strokeWidth={2.5} aria-hidden />
+        )}
         <span className="text-center leading-tight">
           {walkButtonDisplay}
         </span>
@@ -411,9 +430,11 @@ export default function MovementTracker() {
               disabled={ptLatched[slot] || busy}
               onClick={() => void handlePt(slot, label)}
               className={`min-h-[68px] flex-1 rounded-2xl border-4 px-5 py-4 text-xl font-black transition sm:min-w-[11rem] ${
-                ptLatched[slot]
-                  ? "border-black bg-amber-300 text-slate-950 ring-4 ring-amber-500/70"
-                  : "border-black bg-white text-slate-900 hover:bg-slate-50"
+                ptAckFlash === slot
+                  ? "border-emerald-600 bg-emerald-200 text-emerald-950 ring-4 ring-emerald-400"
+                  : ptLatched[slot]
+                    ? "border-black bg-amber-300 text-slate-950 ring-4 ring-amber-500/70"
+                    : "border-black bg-white text-slate-900 hover:bg-slate-50"
               } disabled:cursor-default`}
               aria-pressed={ptLatched[slot]}
             >
@@ -424,9 +445,10 @@ export default function MovementTracker() {
         </div>
         <p className="text-base font-medium text-slate-700">
           Tap once when done — stays highlighted for the day. Weather details
-          are saved with each session. When signed in, walks and PT are written
-          to your <span className="font-semibold text-slate-900">daily_logs</span>{" "}
-          feed in Supabase (same pipeline as food and other activity).
+          are saved with each session. When signed in, entries also go to{" "}
+          <span className="font-semibold text-slate-900">activity_logs</span>{" "}
+          (movement/PT) alongside your{" "}
+          <span className="font-semibold text-slate-900">daily_logs</span> feed.
         </p>
       </div>
 

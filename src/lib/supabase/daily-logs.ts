@@ -61,7 +61,7 @@ export async function persistDailyLogToSupabase(
     sketch_brush_preset: entry.sketchBrushPreset ?? null,
   });
   if (error) {
-    console.warn("daily_logs insert:", error.message);
+    console.warn("daily_logs insert:", error.message, error.code ?? "");
     return false;
   }
   return true;

@@ -90,7 +90,6 @@ export default function HydrationTracker({
         row,
         ...prev,
       ]);
-      void qc.invalidateQueries({ queryKey: qk.dailyLogs });
       setToast(toastWaterLogged(amountOz));
       window.setTimeout(() => setToast(null), 4500);
     },
