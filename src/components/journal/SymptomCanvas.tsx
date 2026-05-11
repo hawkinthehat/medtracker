@@ -166,8 +166,9 @@ export default function SymptomCanvas({ side, className }: SymptomCanvasProps) {
   const persistRow = useCallback(
     async (row: DailyLogEntry) => {
       if (supabaseConfigured) {
-        const ok = await persistDailyLogToSupabase(row);
-        if (!ok) throw new Error("Could not save. Check Supabase setup.");
+        const result = await persistDailyLogToSupabase(row);
+        if (!result.ok)
+          throw new Error(result.error ?? "Could not save. Check Supabase setup.");
       }
       qc.setQueryData<DailyLogEntry[]>(qk.dailyLogs, (prev = []) => [row, ...prev]);
       void qc.invalidateQueries({ queryKey: qk.dailyLogs });

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
-import { Check, Dog, Loader2, Settings2 } from "lucide-react";
+import { Dog, Loader2, Settings2 } from "lucide-react";
 import { qk } from "@/lib/query-keys";
 import type { DailyLogEntry } from "@/lib/types";
 import { persistDailyLogToSupabase } from "@/lib/supabase/daily-logs";
@@ -30,9 +30,6 @@ import {
   type PtSlot,
 } from "@/lib/movement-tracking";
 import { FeatureHelpTrigger } from "@/components/FeatureHelpModal";
-import { TOAST_ACTIVITY, toastPtLogged } from "@/lib/educational-toasts";
-import { fireMiniConfetti } from "@/lib/confetti-lite";
-
 const PT_SLOTS: { slot: PtSlot; label: string }[] = [
   { slot: "morning", label: "Morning PT" },
   { slot: "noon", label: "Noon PT" },
@@ -127,8 +124,10 @@ export default function MovementTracker() {
   const logMovementEntry = useMutation({
     mutationFn: async (entry: DailyLogEntry) => {
       if (supabaseConfigured) {
-        const ok = await persistDailyLogToSupabase(entry);
-        if (!ok) throw new Error("Could not sync movement entry.");
+        const result = await persistDailyLogToSupabase(entry);
+        if (!result.ok) {
+          throw new Error(result.error ?? "Could not sync movement entry.");
+        }
       }
       return entry;
     },
@@ -153,15 +152,6 @@ export default function MovementTracker() {
     [],
   );
 
-  const [walkSuccessMessage, setWalkSuccessMessage] = useState<string | null>(
-    null,
-  );
-  const [ptSuccessMessage, setPtSuccessMessage] = useState<string | null>(
-    null,
-  );
-  const [walkAckFlash, setWalkAckFlash] = useState(false);
-  const [ptAckFlash, setPtAckFlash] = useState<PtSlot | null>(null);
-  const [loggedBanner, setLoggedBanner] = useState<string | null>(null);
   const [pendingWalk, setPendingWalk] = useState(false);
   const [pendingPtSlot, setPendingPtSlot] = useState<PtSlot | null>(null);
   /** Instant walk count before React Query catches up */
@@ -171,31 +161,6 @@ export default function MovementTracker() {
     () => walksToday + optimisticWalkBump,
     [walksToday, optimisticWalkBump],
   );
-
-  function triggerWalkHaptic() {
-    try {
-      if (
-        typeof navigator !== "undefined" &&
-        typeof navigator.vibrate === "function"
-      ) {
-        navigator.vibrate(12);
-      }
-    } catch {
-      /* ignore unsupported environments */
-    }
-  }
-
-  useEffect(() => {
-    if (!walkAckFlash) return;
-    const t = window.setTimeout(() => setWalkAckFlash(false), 1600);
-    return () => window.clearTimeout(t);
-  }, [walkAckFlash]);
-
-  useEffect(() => {
-    if (!ptAckFlash) return;
-    const t = window.setTimeout(() => setPtAckFlash(null), 1600);
-    return () => window.clearTimeout(t);
-  }, [ptAckFlash]);
 
   async function handleDogWalk(skipNudge = false) {
     const walksBefore = countDogWalksToday(
@@ -214,7 +179,6 @@ export default function MovementTracker() {
     }
 
     setShowHrNudge(false);
-    setWalkSuccessMessage(null);
 
     setOptimisticWalkBump((b) => b + 1);
     setPendingWalk(true);
@@ -249,16 +213,7 @@ export default function MovementTracker() {
       void qc.invalidateQueries({ queryKey: qk.dailyLogs });
       void qc.invalidateQueries({ queryKey: qk.activityToday });
       router.refresh();
-
-      setOptimisticWalkBump((b) => Math.max(0, b - 1));
-
-      triggerWalkHaptic();
-      setWalkAckFlash(true);
-      fireMiniConfetti();
-      setLoggedBanner("Logged!");
-      window.setTimeout(() => setLoggedBanner(null), 2400);
-      setWalkSuccessMessage(TOAST_ACTIVITY);
-      window.setTimeout(() => setWalkSuccessMessage(null), 4500);
+      window.location.reload();
     } catch (e) {
       setOptimisticWalkBump((b) => Math.max(0, b - 1));
       console.error("[handleDogWalk] Failed to save movement / daily_logs:", e);
@@ -305,14 +260,7 @@ export default function MovementTracker() {
       void qc.invalidateQueries({ queryKey: qk.dailyLogs });
       void qc.invalidateQueries({ queryKey: qk.activityToday });
       router.refresh();
-
-      setPtAckFlash(slot);
-      triggerWalkHaptic();
-      fireMiniConfetti();
-      setLoggedBanner("Logged!");
-      window.setTimeout(() => setLoggedBanner(null), 2400);
-      setPtSuccessMessage(toastPtLogged(humanLabel));
-      window.setTimeout(() => setPtSuccessMessage(null), 4500);
+      window.location.reload();
     } catch (e) {
       setPtLatched(rollback);
       savePtLatched(today, rollback);
@@ -402,11 +350,7 @@ export default function MovementTracker() {
         type="button"
         disabled={movementBusy}
         onClick={() => void handleDogWalk()}
-        className={`mt-5 flex min-h-[80px] w-full items-center justify-center gap-4 rounded-2xl border-4 px-5 py-6 text-2xl font-black leading-snug shadow-sm transition hover:bg-slate-50 disabled:opacity-50 ${
-          walkAckFlash
-            ? "border-emerald-600 bg-emerald-100 text-emerald-950 ring-4 ring-emerald-400"
-            : "border-black bg-white text-slate-900"
-        }`}
+        className="mt-5 flex min-h-[80px] w-full items-center justify-center gap-4 rounded-2xl border-4 border-black bg-white px-5 py-6 text-2xl font-black leading-snug text-slate-900 shadow-sm transition hover:bg-slate-50 disabled:opacity-50"
       >
         {pendingWalk ? (
           <>
@@ -416,17 +360,6 @@ export default function MovementTracker() {
               aria-hidden
             />
             <span className="text-center leading-tight">Logging…</span>
-          </>
-        ) : walkAckFlash ? (
-          <>
-            <Check
-              className="h-12 w-12 shrink-0 text-emerald-800"
-              strokeWidth={3}
-              aria-hidden
-            />
-            <span className="text-center leading-tight text-emerald-950">
-              Logged!
-            </span>
           </>
         ) : (
           <>
@@ -438,26 +371,6 @@ export default function MovementTracker() {
         )}
       </button>
       </div>
-
-      {walkSuccessMessage && (
-        <p
-          className="mt-5 rounded-2xl border-4 border-emerald-800 bg-emerald-50 px-5 py-5 text-center text-lg font-black leading-snug tracking-tight text-emerald-950 sm:text-xl"
-          role="status"
-          aria-live="polite"
-        >
-          {walkSuccessMessage}
-        </p>
-      )}
-
-      {ptSuccessMessage && (
-        <p
-          className="mt-4 rounded-2xl border-4 border-sky-800 bg-sky-50 px-5 py-4 text-center text-lg font-black leading-snug text-sky-950"
-          role="status"
-          aria-live="polite"
-        >
-          {ptSuccessMessage}
-        </p>
-      )}
 
       <p className="mt-4 text-center text-xl font-black text-slate-900">
         Daily walks today:{" "}
@@ -501,11 +414,9 @@ export default function MovementTracker() {
               disabled={ptLatched[slot] || movementBusy}
               onClick={() => void handlePt(slot, label)}
               className={`min-h-[68px] flex-1 rounded-2xl border-4 px-5 py-4 text-xl font-black transition sm:min-w-[11rem] ${
-                ptAckFlash === slot
-                  ? "border-emerald-600 bg-emerald-200 text-emerald-950 ring-4 ring-emerald-400"
-                  : ptLatched[slot]
-                    ? "border-black bg-amber-300 text-slate-950 ring-4 ring-amber-500/70"
-                    : "border-black bg-white text-slate-900 hover:bg-slate-50"
+                ptLatched[slot]
+                  ? "border-black bg-amber-300 text-slate-950 ring-4 ring-amber-500/70"
+                  : "border-black bg-white text-slate-900 hover:bg-slate-50"
               } disabled:cursor-default`}
               aria-pressed={ptLatched[slot]}
             >
@@ -516,15 +427,6 @@ export default function MovementTracker() {
                     aria-hidden
                   />
                   Logging…
-                </span>
-              ) : ptAckFlash === slot ? (
-                <span className="flex items-center justify-center gap-2">
-                  <Check
-                    className="h-7 w-7 shrink-0 text-emerald-800"
-                    strokeWidth={3}
-                    aria-hidden
-                  />
-                  Logged!
                 </span>
               ) : (
                 <>
@@ -556,16 +458,6 @@ export default function MovementTracker() {
             ? logMovementEntry.error.message
             : "Could not save entry."}
         </p>
-      )}
-
-      {loggedBanner && (
-        <div
-          className="pointer-events-none fixed bottom-[calc(5.75rem+env(safe-area-inset-bottom))] left-1/2 z-[125] max-w-[min(92vw,20rem)] -translate-x-1/2 rounded-2xl border-4 border-emerald-800 bg-emerald-100 px-6 py-4 text-center text-xl font-black text-emerald-950 shadow-xl"
-          role="status"
-          aria-live="polite"
-        >
-          {loggedBanner}
-        </div>
       )}
     </section>
   );

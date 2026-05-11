@@ -77,8 +77,9 @@ export default function DailySummaryPage() {
     mutationFn: async (row: DailyLogEntry) => {
       const sb = getSupabaseBrowserClient();
       if (sb) {
-        const ok = await persistDailyLogToSupabase(row);
-        if (!ok) throw new Error("Could not save log — check Supabase.");
+        const result = await persistDailyLogToSupabase(row);
+        if (!result.ok)
+          throw new Error(result.error ?? "Could not save log — check Supabase.");
       }
       return row;
     },

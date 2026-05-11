@@ -1,4 +1,5 @@
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser-client";
+import { requireAuthUserForSave } from "@/lib/supabase/auth-save-guard";
 
 export type SymptomLogRow = {
   id: string;
@@ -44,14 +45,13 @@ export async function insertSymptomLogRow(input: {
   const sb = getSupabaseBrowserClient();
   if (!sb) return { ok: false, error: "no_client" };
 
-  const {
-    data: { user },
-    error: userErr,
-  } = await sb.auth.getUser();
-  if (userErr || !user) return { ok: false, error: "not_signed_in" };
+  const authUser = await requireAuthUserForSave(sb);
+  if (!authUser) {
+    return { ok: false, error: "not_signed_in" };
+  }
 
   const { error } = await sb.from("symptom_logs").insert({
-    user_id: user.id,
+    user_id: authUser.id,
     symptom_name: input.symptom_name,
     category: input.category,
     recorded_at: input.recorded_at ?? new Date().toISOString(),

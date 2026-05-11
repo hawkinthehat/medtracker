@@ -148,8 +148,9 @@ export default function MinimalHomeDashboard({
       };
       const sb = getSupabaseBrowserClient();
       if (sb) {
-        const ok = await persistDailyLogToSupabase(marker);
-        if (!ok) throw new Error("Could not save episode.");
+        const result = await persistDailyLogToSupabase(marker);
+        if (!result.ok)
+          throw new Error(result.error ?? "Could not save episode.");
       }
       return { marker, episode };
     },

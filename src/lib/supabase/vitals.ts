@@ -1,10 +1,13 @@
 import type { VitalRow } from "@/lib/types";
 import { encodeVitalNotesForSupabase } from "@/lib/vital-notes";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser-client";
+import { requireAuthUserForSave } from "@/lib/supabase/auth-save-guard";
 
 export async function persistVitalToSupabase(row: VitalRow): Promise<boolean> {
   const sb = getSupabaseBrowserClient();
   if (!sb) return false;
+  const authUser = await requireAuthUserForSave(sb);
+  if (!authUser) return false;
   const notesEncoded = encodeVitalNotesForSupabase(row);
   const { error } = await sb.from("vitals_readings").insert({
     id: row.id,

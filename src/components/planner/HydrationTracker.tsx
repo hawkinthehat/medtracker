@@ -3,14 +3,13 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import { qk } from "@/lib/query-keys";
 import type { DailyLogEntry } from "@/lib/types";
 import { dailyLogsQueryFn } from "@/lib/daily-logs-query-fn";
 import {
   fetchTodayWaterValueSumForCurrentUser,
-  fetchTodayWaterValueSumUntilAtLeast,
   persistDailyLogToSupabase,
 } from "@/lib/supabase/daily-logs";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser-client";
@@ -135,16 +134,8 @@ export default function HydrationTracker({
         ? storedWaterOz
         : cacheOz;
 
-  /** Pending oz not yet confirmed after tap (optimistic UI). */
+  /** Pending oz for offline-only mode (local cache); cloud path waits for DB insert. */
   const [optimisticOz, setOptimisticOz] = useState(0);
-  const storedWaterOzRef = useRef(0);
-  const optimisticOzRef = useRef(0);
-  useEffect(() => {
-    storedWaterOzRef.current = storedWaterOz;
-  }, [storedWaterOz]);
-  useEffect(() => {
-    optimisticOzRef.current = optimisticOz;
-  }, [optimisticOz]);
   /** Which +oz button just fired — brief checkmark flash. */
   const [flashOz, setFlashOz] = useState<number | null>(null);
 
@@ -152,7 +143,8 @@ export default function HydrationTracker({
   const showWaterPlaceholder =
     supabaseConfigured && !!sessionUser && !waterBaselineLoaded;
 
-  const currentWaterIntake = baselineOz + optimisticOz;
+  const currentWaterIntake =
+    !supabaseConfigured || needsSignIn ? baselineOz + optimisticOz : baselineOz;
 
   const sodiumMgToday = useMemo(
     () => sumThermotabsSodiumMgToday(medicationLogs as MedicationLogRow[]),
@@ -173,30 +165,25 @@ export default function HydrationTracker({
         entryType: ENTRY_TYPE_WATER,
         valueOz: amountOz,
       };
-      const ok = await persistDailyLogToSupabase(row);
-      if (supabaseConfigured && !ok) {
-        throw new Error("Could not save — check Supabase.");
+      const result = await persistDailyLogToSupabase(row);
+      if (!result.ok) {
+        const msg = result.error ?? "Could not save — check Supabase.";
+        console.error("[hydration] daily_logs insert rejected:", msg);
+        throw new Error(msg);
       }
-      return row;
+      return { row, amountOz };
     },
-    onSuccess: async (row, amountOz) => {
+    onSuccess: ({ row }) => {
       qc.setQueryData<DailyLogEntry[]>(qk.dailyLogs, (prev = []) => [
         row,
         ...prev,
       ]);
       void qc.invalidateQueries({ queryKey: qk.dailyLogs });
-      const minExpected =
-        storedWaterOzRef.current + optimisticOzRef.current;
-      const oz = await fetchTodayWaterValueSumUntilAtLeast(minExpected);
-      setStoredWaterOz(oz);
-      setOptimisticOz((o) => Math.max(0, o - amountOz));
       router.refresh();
-      setToast(toastWaterLogged(amountOz));
-      window.setTimeout(() => setToast(null), 4500);
+      window.location.reload();
     },
-    onError: (err: Error, amountOz) => {
+    onError: (err: Error) => {
       console.error("[hydration] Water log failed:", err);
-      setOptimisticOz((o) => Math.max(0, o - amountOz));
       setToast(err.message);
       window.setTimeout(() => setToast(null), 3200);
     },
@@ -208,11 +195,11 @@ export default function HydrationTracker({
       return;
     }
 
-    setOptimisticOz((o) => o + amount);
-    setFlashOz(amount);
-    window.setTimeout(() => setFlashOz(null), 700);
-    setToast("Logged ✓");
     if (!supabaseConfigured) {
+      setOptimisticOz((o) => o + amount);
+      setFlashOz(amount);
+      window.setTimeout(() => setFlashOz(null), 700);
+      setToast("Logged ✓");
       const row: DailyLogEntry = {
         id: crypto.randomUUID(),
         recordedAt: new Date().toISOString(),
@@ -234,6 +221,9 @@ export default function HydrationTracker({
       router.refresh();
       return;
     }
+
+    setFlashOz(amount);
+    window.setTimeout(() => setFlashOz(null), 700);
     addOzMutation.mutate(amount);
   }
 

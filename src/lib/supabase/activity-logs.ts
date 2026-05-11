@@ -1,6 +1,6 @@
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser-client";
 import {
-  logDataNotSavedNoUser,
+  requireAuthUserForSave,
   resolveSupabaseUserId,
 } from "@/lib/supabase/auth-save-guard";
 
@@ -54,11 +54,11 @@ export async function insertActivityLogRow(input: {
   const sb = getSupabaseBrowserClient();
   if (!sb) return { ok: false, error: "no_client" };
 
-  const uid = await resolveSupabaseUserId(sb);
-  if (!uid) {
-    logDataNotSavedNoUser();
+  const authUser = await requireAuthUserForSave(sb);
+  if (!authUser) {
     return { ok: false, error: "not_signed_in" };
   }
+  const uid = authUser.id;
 
   const { error } = await sb.from("activity_logs").insert({
     activity_type: input.activity_type,

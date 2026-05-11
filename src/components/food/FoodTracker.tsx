@@ -84,8 +84,9 @@ export default function FoodTracker() {
         label: trimmed,
       };
       if (supabaseConfigured) {
-        const ok = await persistDailyLogToSupabase(row);
-        if (!ok) throw new Error("Could not save — check Supabase.");
+        const result = await persistDailyLogToSupabase(row);
+        if (!result.ok)
+          throw new Error(result.error ?? "Could not save — check Supabase.");
       }
       return row;
     },

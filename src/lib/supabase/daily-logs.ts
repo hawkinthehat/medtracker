@@ -4,7 +4,7 @@ import {
   resolveDailyLogEntryType,
 } from "@/lib/daily-log-entry-type";
 import {
-  logDataNotSavedNoUser,
+  requireAuthUserForSave,
   resolveSupabaseUserId,
 } from "@/lib/supabase/auth-save-guard";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser-client";
@@ -135,17 +135,21 @@ export async function fetchTodayWaterOzSumForCurrentUser(): Promise<{
   return fetchTodayWaterValueSumForCurrentUser();
 }
 
+export type PersistDailyLogResult =
+  | { ok: true }
+  | { ok: false; error: string };
+
 export async function persistDailyLogToSupabase(
   entry: DailyLogEntry,
-): Promise<boolean> {
+): Promise<PersistDailyLogResult> {
   const sb = getSupabaseBrowserClient();
-  if (!sb) return false;
+  if (!sb) return { ok: false, error: "Supabase is not configured." };
 
-  const uid = await resolveSupabaseUserId(sb);
-  if (!uid) {
-    logDataNotSavedNoUser();
-    return false;
+  const authUser = await requireAuthUserForSave(sb);
+  if (!authUser) {
+    return { ok: false, error: "not_signed_in" };
   }
+  const uid = authUser.id;
 
   const payload: Record<string, unknown> = {
     id: entry.id,
@@ -182,7 +186,7 @@ export async function persistDailyLogToSupabase(
       hint: error.hint,
       entry_type: payload.entry_type,
     });
-    return false;
+    return { ok: false, error: error.message };
   }
-  return true;
+  return { ok: true };
 }

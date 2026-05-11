@@ -6,6 +6,26 @@ export function logDataNotSavedNoUser(): void {
 }
 
 /**
+ * Strict auth gate for **writes only**: uses {@link SupabaseClient.auth.getUser}
+ * (no session fallback). Alerts if there is no logged-in user.
+ */
+export async function requireAuthUserForSave(
+  sb: SupabaseClient,
+): Promise<{ id: string } | null> {
+  const {
+    data: { user },
+  } = await sb.auth.getUser();
+  if (!user?.id) {
+    if (typeof window !== "undefined") {
+      window.alert("Please Log In to Save Progress");
+    }
+    logDataNotSavedNoUser();
+    return null;
+  }
+  return { id: user.id };
+}
+
+/**
  * Resolves the signed-in user id (getUser first, then session — helps mobile clients).
  */
 export async function resolveSupabaseUserId(

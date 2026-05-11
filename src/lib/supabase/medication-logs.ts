@@ -1,7 +1,7 @@
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser-client";
 import type { QuickReliefPeriod } from "@/lib/quick-relief";
 import {
-  logDataNotSavedNoUser,
+  requireAuthUserForSave,
   resolveSupabaseUserId,
 } from "@/lib/supabase/auth-save-guard";
 
@@ -83,11 +83,11 @@ export async function insertMedicationLogRow(
     return { ok: false, error: "Supabase is not configured." };
   }
 
-  const uid = await resolveSupabaseUserId(sb);
-  if (!uid) {
-    logDataNotSavedNoUser();
+  const authUser = await requireAuthUserForSave(sb);
+  if (!authUser) {
     return { ok: false, error: "not_signed_in" };
   }
+  const uid = authUser.id;
 
   const id = crypto.randomUUID();
   const recordedAt = new Date().toISOString();
@@ -127,27 +127,28 @@ export async function insertMedicationLogRow(
 }
 
 /**
- * Morning meds toggle — matches specialist expectation: name + status + user.
+ * Morning meds toggle — upsert semantics for today: update existing row or insert,
+ * so repeat taps don’t duplicate and “taken” stays locked to today.
  */
-export async function insertMorningRoutineMedicationLog(): Promise<{
+export async function upsertMorningRoutineMedicationLog(): Promise<{
   ok: boolean;
   error?: string;
 }> {
   const sb = getSupabaseBrowserClient();
   if (!sb) return { ok: false, error: "no_client" };
 
-  const uid = await resolveSupabaseUserId(sb);
-  if (!uid) {
-    logDataNotSavedNoUser();
+  const authUser = await requireAuthUserForSave(sb);
+  if (!authUser) {
     return { ok: false, error: "not_signed_in" };
   }
+  const uid = authUser.id;
 
   const start = new Date();
   start.setHours(0, 0, 0, 0);
   const end = new Date(start);
   end.setDate(end.getDate() + 1);
 
-  const { data: existing, error: existingErr } = await sb
+  const { data: existingRows, error: existingErr } = await sb
     .from("medication_logs")
     .select("id")
     .eq("user_id", uid)
@@ -157,13 +158,45 @@ export async function insertMorningRoutineMedicationLog(): Promise<{
     .limit(1);
 
   if (existingErr) {
-    console.error("[medication_logs] Morning Routine dedupe check:", existingErr.message);
-  } else if (existing && existing.length > 0) {
+    console.error(
+      "[medication_logs] Morning Routine lookup:",
+      existingErr.message,
+    );
+    return { ok: false, error: existingErr.message };
+  }
+
+  const recordedAt = new Date().toISOString();
+  const existingId =
+    existingRows &&
+    Array.isArray(existingRows) &&
+    existingRows.length > 0 &&
+    typeof (existingRows[0] as { id?: string }).id === "string"
+      ? (existingRows[0] as { id: string }).id
+      : null;
+
+  if (existingId) {
+    const { error } = await sb
+      .from("medication_logs")
+      .update({
+        recorded_at: recordedAt,
+        status: "taken",
+      })
+      .eq("id", existingId)
+      .eq("user_id", uid);
+
+    if (error) {
+      console.error("[medication_logs] Morning Routine update failed:", {
+        message: error.message,
+        code: error.code,
+        details: error.details,
+        hint: error.hint,
+      });
+      return { ok: false, error: error.message };
+    }
     return { ok: true };
   }
 
   const id = crypto.randomUUID();
-  const recordedAt = new Date().toISOString();
 
   const { error } = await sb.from("medication_logs").insert({
     id,
@@ -190,4 +223,12 @@ export async function insertMorningRoutineMedicationLog(): Promise<{
     return { ok: false, error: error.message };
   }
   return { ok: true };
+}
+
+/** @deprecated Use {@link upsertMorningRoutineMedicationLog}. */
+export async function insertMorningRoutineMedicationLog(): Promise<{
+  ok: boolean;
+  error?: string;
+}> {
+  return upsertMorningRoutineMedicationLog();
 }

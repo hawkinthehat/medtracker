@@ -7,7 +7,7 @@ import { Activity, Heart, Loader2, Scale, UtensilsCrossed } from "lucide-react";
 import { qk } from "@/lib/query-keys";
 import type { DailyLogEntry, VitalRow } from "@/lib/types";
 import { persistDailyLogToSupabase } from "@/lib/supabase/daily-logs";
-import { insertMorningRoutineMedicationLog } from "@/lib/supabase/medication-logs";
+import { upsertMorningRoutineMedicationLog } from "@/lib/supabase/medication-logs";
 import { persistVitalToSupabase } from "@/lib/supabase/vitals";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser-client";
 import { fetchAndLogWeather } from "@/lib/weather";
@@ -123,7 +123,7 @@ export default function MorningRoutine() {
         entryType: MORNING_MEDS_ENTRY_TYPE,
       };
       if (supabaseConfigured) {
-        const medOk = await insertMorningRoutineMedicationLog();
+        const medOk = await upsertMorningRoutineMedicationLog();
         if (!medOk.ok) {
           throw new Error(
             medOk.error === "not_signed_in"
@@ -131,9 +131,11 @@ export default function MorningRoutine() {
               : medOk.error ?? "Could not save medication log.",
           );
         }
-        const ok = await persistDailyLogToSupabase(row);
-        if (!ok) {
-          throw new Error("Could not save morning meds — check Supabase.");
+        const dailyResult = await persistDailyLogToSupabase(row);
+        if (!dailyResult.ok) {
+          throw new Error(
+            dailyResult.error ?? "Could not save morning meds — check Supabase.",
+          );
         }
       }
       return row;
@@ -147,8 +149,7 @@ export default function MorningRoutine() {
       void qc.invalidateQueries({ queryKey: qk.medicationLogs });
       void qc.invalidateQueries({ queryKey: qk.activityToday });
       router.refresh();
-      setToast("Morning meds logged to medication_logs & daily_logs.");
-      window.setTimeout(() => setToast(null), 3200);
+      window.location.reload();
     },
     onError: (e: Error) => {
       setToast(e.message);
@@ -208,8 +209,8 @@ export default function MorningRoutine() {
         tasks.push(
           (async () => {
             if (supabaseConfigured) {
-              const ok = await persistDailyLogToSupabase(row);
-              if (!ok) return false;
+              const result = await persistDailyLogToSupabase(row);
+              if (!result.ok) return false;
             }
             qc.setQueryData<DailyLogEntry[]>(qk.dailyLogs, (prev = []) => [
               row,
@@ -255,8 +256,8 @@ export default function MorningRoutine() {
         tasks.push(
           (async () => {
             if (supabaseConfigured) {
-              const ok = await persistDailyLogToSupabase(pulseLog);
-              if (!ok) return false;
+              const result = await persistDailyLogToSupabase(pulseLog);
+              if (!result.ok) return false;
             }
             qc.setQueryData<DailyLogEntry[]>(qk.dailyLogs, (prev = []) => [
               pulseLog,
@@ -279,8 +280,8 @@ export default function MorningRoutine() {
         tasks.push(
           (async () => {
             if (supabaseConfigured) {
-              const ok = await persistDailyLogToSupabase(food);
-              if (!ok) return false;
+              const result = await persistDailyLogToSupabase(food);
+              if (!result.ok) return false;
             }
             qc.setQueryData<DailyLogEntry[]>(qk.dailyLogs, (prev = []) => [
               food,
