@@ -1,10 +1,10 @@
 import type { DailyLogEntry } from "@/lib/types";
 import { isSameLocalCalendarDay } from "@/lib/hydration-summary";
 
-/** Legacy label before `log_entry_type` existed — still matched for older rows. */
+/** Legacy label before `entry_type` existed — still matched for older rows. */
 export const MORNING_MEDS_TAKEN_LABEL = "Morning meds taken";
 
-/** Semantic tag stored in `daily_logs.log_entry_type`. */
+/** Semantic tag stored in `daily_logs.entry_type` (legacy rows may lack it). */
 export const MORNING_MEDS_ENTRY_TYPE = "morning_meds_completed";
 
 export function findMorningMedsLogToday(

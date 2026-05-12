@@ -8,37 +8,87 @@ import { localCalendarDayRecordedAtBounds } from "@/lib/hydration-summary";
 export async function fetchTodayActivityCountsForCurrentUser(): Promise<{
   dogWalks: number;
   ptSessions: number;
+  morningMeds: number;
+  /** Latest `recorded_at` among today’s `morning_meds` rows (ISO), if any. */
+  morningMedsLastRecordedAt: string | null;
   hasSession: boolean;
 }> {
   const sb = getSupabaseBrowserClient();
-  if (!sb) return { dogWalks: 0, ptSessions: 0, hasSession: false };
+  if (!sb) {
+    return {
+      dogWalks: 0,
+      ptSessions: 0,
+      morningMeds: 0,
+      morningMedsLastRecordedAt: null,
+      hasSession: false,
+    };
+  }
 
   const uid = await resolveSupabaseUserId(sb);
-  if (!uid) return { dogWalks: 0, ptSessions: 0, hasSession: false };
+  if (!uid) {
+    return {
+      dogWalks: 0,
+      ptSessions: 0,
+      morningMeds: 0,
+      morningMedsLastRecordedAt: null,
+      hasSession: false,
+    };
+  }
 
   const { startIso, endIso } = localCalendarDayRecordedAtBounds();
 
   const { data, error } = await sb
     .from("activity_logs")
-    .select("activity_type")
+    .select("activity_type, recorded_at")
     .eq("user_id", uid)
     .gte("recorded_at", startIso)
     .lt("recorded_at", endIso);
 
   if (error) {
     console.warn("[activity_logs] today counts:", error.message);
-    return { dogWalks: 0, ptSessions: 0, hasSession: true };
+    return {
+      dogWalks: 0,
+      ptSessions: 0,
+      morningMeds: 0,
+      morningMedsLastRecordedAt: null,
+      hasSession: true,
+    };
   }
 
   let dogWalks = 0;
   let ptSessions = 0;
+  let morningMeds = 0;
+  let morningMedsLastRecordedAt: string | null = null;
   for (const row of data ?? []) {
-    const t = (row as { activity_type?: string }).activity_type;
+    const r = row as { activity_type?: string; recorded_at?: string };
+    const t = r.activity_type;
+    const ra = r.recorded_at;
     if (t === "dog_walk") dogWalks += 1;
     else if (t === "pt") ptSessions += 1;
+    else if (t === "morning_meds") {
+      morningMeds += 1;
+      if (ra && (!morningMedsLastRecordedAt || ra > morningMedsLastRecordedAt)) {
+        morningMedsLastRecordedAt = ra;
+      }
+    }
   }
 
-  return { dogWalks, ptSessions, hasSession: true };
+  return {
+    dogWalks,
+    ptSessions,
+    morningMeds,
+    morningMedsLastRecordedAt,
+    hasSession: true,
+  };
+}
+
+/** Dog walks today from `activity_logs` (`activity_type = dog_walk`). */
+export async function fetchTodayDogWalkCountForCurrentUser(): Promise<{
+  count: number;
+  hasSession: boolean;
+}> {
+  const r = await fetchTodayActivityCountsForCurrentUser();
+  return { count: r.dogWalks, hasSession: r.hasSession };
 }
 
 /**

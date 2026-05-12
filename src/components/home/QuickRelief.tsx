@@ -94,9 +94,7 @@ export default function QuickRelief() {
       for (const e of dailyLogs) {
         if (
           e.label !== "Thermotabs" ||
-          (e.entryType !== ENTRY_TYPE_SODIUM &&
-            e.entryType !== "sodium" &&
-            e.category !== "sodium")
+          (e.entryType !== ENTRY_TYPE_SODIUM && e.entryType !== "sodium")
         ) {
           continue;
         }
@@ -227,6 +225,7 @@ export default function QuickRelief() {
           ...prev.filter((x) => x.id !== data.row.id),
         ]);
         void qc.invalidateQueries({ queryKey: qk.dailyLogs });
+        void qc.refetchQueries({ queryKey: qk.dailyLogs });
         const t = formatClock(data.row.recordedAt);
         setToast(toastPrnLogged(data.def.displayName, t));
         return;

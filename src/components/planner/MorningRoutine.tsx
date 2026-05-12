@@ -8,6 +8,10 @@ import { qk } from "@/lib/query-keys";
 import type { DailyLogEntry, VitalRow } from "@/lib/types";
 import { persistDailyLogToSupabase } from "@/lib/supabase/daily-logs";
 import { upsertMorningRoutineMedicationLog } from "@/lib/supabase/medication-logs";
+import {
+  insertActivityLogRow,
+  fetchTodayActivityCountsForCurrentUser,
+} from "@/lib/supabase/activity-logs";
 import { persistVitalToSupabase } from "@/lib/supabase/vitals";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser-client";
 import { fetchAndLogWeather } from "@/lib/weather";
@@ -76,15 +80,37 @@ export default function MorningRoutine() {
     refetchOnWindowFocus: true,
   });
 
-  const morningMedsLogged = useMemo(
+  const supabaseConfigured = Boolean(getSupabaseBrowserClient());
+
+  const { data: activityToday } = useQuery({
+    queryKey: qk.activityToday,
+    queryFn: fetchTodayActivityCountsForCurrentUser,
+    enabled: supabaseConfigured,
+    staleTime: 15_000,
+    gcTime: 1000 * 60 * 60,
+    refetchOnWindowFocus: true,
+  });
+
+  const legacyMorningMedsLog = useMemo(
     () => findMorningMedsLogToday(dailyLogs),
     [dailyLogs],
   );
 
-  const [morningMedsOptimistic, setMorningMedsOptimistic] = useState(false);
+  const morningMedsCloudCount = activityToday?.morningMeds ?? 0;
+  const morningMedsLoggedAt = useMemo(() => {
+    if (supabaseConfigured && morningMedsCloudCount > 0) {
+      return activityToday?.morningMedsLastRecordedAt ?? null;
+    }
+    return legacyMorningMedsLog?.recordedAt ?? null;
+  }, [
+    supabaseConfigured,
+    morningMedsCloudCount,
+    activityToday?.morningMedsLastRecordedAt,
+    legacyMorningMedsLog?.recordedAt,
+  ]);
 
   const morningMedsToggleOn =
-    Boolean(morningMedsLogged) || morningMedsOptimistic;
+    morningMedsCloudCount > 0 || legacyMorningMedsLog != null;
 
   useEffect(() => {
     const fav = loadFavoriteBreakfast();
@@ -103,25 +129,8 @@ export default function MorningRoutine() {
     }
   }, []);
 
-  const supabaseConfigured = Boolean(getSupabaseBrowserClient());
-
   const logMorningMedsTaken = useMutation({
-    onMutate: () => {
-      setMorningMedsOptimistic(true);
-    },
-    onSettled: () => {
-      setMorningMedsOptimistic(false);
-    },
     mutationFn: async () => {
-      const recordedAt = new Date().toISOString();
-      const row: DailyLogEntry = {
-        id: crypto.randomUUID(),
-        recordedAt,
-        category: "medication",
-        label: "Morning meds",
-        notes: recordedAt,
-        entryType: MORNING_MEDS_ENTRY_TYPE,
-      };
       if (supabaseConfigured) {
         const medOk = await upsertMorningRoutineMedicationLog();
         if (!medOk.ok) {
@@ -131,23 +140,23 @@ export default function MorningRoutine() {
               : medOk.error ?? "Could not save medication log.",
           );
         }
-        const dailyResult = await persistDailyLogToSupabase(row);
-        if (!dailyResult.ok) {
+        const act = await insertActivityLogRow({
+          activity_type: "morning_meds",
+        });
+        if (!act.ok) {
           throw new Error(
-            dailyResult.error ?? "Could not save morning meds — check Supabase.",
+            act.error === "not_signed_in"
+              ? "Sign in to save morning meds."
+              : act.error ?? "Could not save activity log.",
           );
         }
       }
-      return row;
+      return true;
     },
-    onSuccess: (row) => {
-      qc.setQueryData<DailyLogEntry[]>(qk.dailyLogs, (prev = []) => [
-        row,
-        ...prev,
-      ]);
-      void qc.invalidateQueries({ queryKey: qk.dailyLogs });
+    onSuccess: async () => {
+      await qc.refetchQueries({ queryKey: qk.activityToday });
       void qc.invalidateQueries({ queryKey: qk.medicationLogs });
-      void qc.invalidateQueries({ queryKey: qk.activityToday });
+      void qc.invalidateQueries({ queryKey: qk.dailyLogs });
       router.refresh();
     },
     onError: (e: Error) => {
@@ -381,14 +390,14 @@ export default function MorningRoutine() {
                   <p className="text-xl font-black leading-tight text-slate-950 sm:text-2xl">
                     Morning Meds Taken
                   </p>
-                  {morningMedsLogged ? (
+                  {morningMedsToggleOn ? (
                     <p className="mt-1 text-sm font-semibold text-emerald-800">
                       Logged{" "}
-                      {new Date(morningMedsLogged.recordedAt).toLocaleString()}
-                    </p>
-                  ) : morningMedsOptimistic ? (
-                    <p className="mt-1 text-sm font-semibold text-sky-800">
-                      Saving…
+                      {morningMedsLoggedAt ? (
+                        <>{new Date(morningMedsLoggedAt).toLocaleString()}</>
+                      ) : (
+                        <>today</>
+                      )}
                     </p>
                   ) : (
                     <p className="mt-1 text-sm font-medium text-slate-600">
@@ -410,10 +419,10 @@ export default function MorningRoutine() {
                   aria-checked={morningMedsToggleOn}
                   aria-label="Morning meds taken"
                   disabled={
-                    Boolean(morningMedsLogged) || logMorningMedsTaken.isPending
+                    morningMedsToggleOn || logMorningMedsTaken.isPending
                   }
                   onClick={() => {
-                    if (morningMedsLogged || logMorningMedsTaken.isPending)
+                    if (morningMedsToggleOn || logMorningMedsTaken.isPending)
                       return;
                     if (!supabaseConfigured) {
                       const recordedAt = new Date().toISOString();

@@ -3,7 +3,6 @@ import {
   ENTRY_TYPE_WATER,
   ENTRY_TYPE_CAFFEINE,
   ENTRY_TYPE_SODIUM,
-  ENTRY_TYPE_ACTIVITY,
   resolveDailyLogEntryType,
 } from "@/lib/daily-log-entry-type";
 import {
@@ -12,7 +11,6 @@ import {
 } from "@/lib/supabase/auth-save-guard";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser-client";
 import { localCalendarDayRecordedAtBounds } from "@/lib/hydration-summary";
-import { DOG_WALK_DAILY_LOG_LABEL } from "@/lib/movement-tracking";
 
 type DailyLogRow = {
   id: string;
@@ -23,7 +21,8 @@ type DailyLogRow = {
   sketch_png_base64?: string | null;
   sketch_side?: string | null;
   user_id?: string | null;
-  log_entry_type?: string | null;
+  entry_type?: string | null;
+  unit?: string | null;
   value?: number | null;
 };
 
@@ -33,7 +32,7 @@ function rowToEntry(row: DailyLogRow): DailyLogEntry {
     row.value != null && Number.isFinite(Number(row.value))
       ? Number(row.value)
       : undefined;
-  const et = row.log_entry_type ?? undefined;
+  const et = row.entry_type ?? undefined;
   const base: DailyLogEntry = {
     id: row.id,
     recordedAt: row.recorded_at,
@@ -45,6 +44,7 @@ function rowToEntry(row: DailyLogRow): DailyLogEntry {
       side === "front" || side === "back" ? side : undefined,
     userId: row.user_id ?? undefined,
     entryType: et,
+    unit: row.unit ?? undefined,
   };
   if (
     et === ENTRY_TYPE_CAFFEINE ||
@@ -69,14 +69,15 @@ function rowToEntry(row: DailyLogRow): DailyLogEntry {
     : base;
 }
 
+const DAILY_LOG_ROW_SELECT =
+  "id,recorded_at,category,label,notes,sketch_png_base64,sketch_side,user_id,entry_type,unit,value";
+
 export async function fetchDailyLogsFromSupabase(): Promise<DailyLogEntry[]> {
   const sb = getSupabaseBrowserClient();
   if (!sb) return [];
   const { data, error } = await sb
     .from("daily_logs")
-    .select(
-      "id,recorded_at,category,label,notes,sketch_png_base64,sketch_side,user_id,log_entry_type,value",
-    )
+    .select(DAILY_LOG_ROW_SELECT)
     .order("recorded_at", { ascending: false })
     .limit(800);
   if (error) {
@@ -86,166 +87,128 @@ export async function fetchDailyLogsFromSupabase(): Promise<DailyLogEntry[]> {
   return ((data ?? []) as DailyLogRow[]).map(rowToEntry);
 }
 
-/**
- * Sum of `daily_logs.value` for today's rows with `log_entry_type = 'water'`.
- * Falls back to parsing `notes` when `value` is null (legacy rows).
- */
+function sumWaterOzFromEntriesToday(entries: DailyLogEntry[]): number {
+  let oz = 0;
+  for (const e of entries) {
+    if (e.entryType !== ENTRY_TYPE_WATER && e.entryType !== "water") continue;
+    const fromVal =
+      e.valueOz != null && Number.isFinite(e.valueOz) && e.valueOz > 0
+        ? Math.round(e.valueOz)
+        : Number.parseInt(String(e.notes ?? "").trim(), 10);
+    if (Number.isFinite(fromVal) && fromVal > 0) oz += fromVal;
+  }
+  return oz;
+}
+
+function sumCaffeineMgFromEntriesToday(entries: DailyLogEntry[]): number {
+  let mg = 0;
+  for (const e of entries) {
+    if (
+      e.entryType !== ENTRY_TYPE_CAFFEINE &&
+      e.entryType !== "caffeine" &&
+      e.category !== "caffeine"
+    ) {
+      continue;
+    }
+    const fromVal =
+      e.valueMg != null && Number.isFinite(e.valueMg) && e.valueMg > 0
+        ? Math.round(e.valueMg)
+        : Number.parseInt(String(e.notes ?? "").trim(), 10);
+    if (Number.isFinite(fromVal) && fromVal > 0) mg += fromVal;
+  }
+  return mg;
+}
+
+function sumSodiumMgFromEntriesToday(entries: DailyLogEntry[]): number {
+  let mg = 0;
+  for (const e of entries) {
+    if (e.entryType !== ENTRY_TYPE_SODIUM && e.entryType !== "sodium") continue;
+    const fromVal =
+      e.valueMg != null && Number.isFinite(e.valueMg) && e.valueMg > 0
+        ? Math.round(e.valueMg)
+        : Number.parseInt(String(e.notes ?? "").trim(), 10);
+    if (Number.isFinite(fromVal) && fromVal > 0) mg += fromVal;
+  }
+  return mg;
+}
+
+/** All `daily_logs` for the signed-in user’s local calendar day. */
+export async function fetchTodayDailyLogsForCurrentUser(): Promise<{
+  entries: DailyLogEntry[];
+  hasSession: boolean;
+}> {
+  const sb = getSupabaseBrowserClient();
+  if (!sb) return { entries: [], hasSession: false };
+
+  const uid = await resolveSupabaseUserId(sb);
+  if (!uid) return { entries: [], hasSession: false };
+
+  const { startIso, endIso } = localCalendarDayRecordedAtBounds();
+
+  const { data, error } = await sb
+    .from("daily_logs")
+    .select(DAILY_LOG_ROW_SELECT)
+    .eq("user_id", uid)
+    .gte("recorded_at", startIso)
+    .lt("recorded_at", endIso)
+    .order("recorded_at", { ascending: false });
+
+  if (error) {
+    console.warn("today daily_logs fetch:", error.message);
+    return { entries: [], hasSession: true };
+  }
+
+  return {
+    entries: ((data ?? []) as DailyLogRow[]).map(rowToEntry),
+    hasSession: true,
+  };
+}
+
+/** One fetch of today’s `daily_logs`, then sums for water (oz), caffeine (mg), sodium (mg). */
+export async function fetchTodayHydrationTotalsFromDailyLogs(): Promise<{
+  oz: number;
+  caffeineMg: number;
+  sodiumMg: number;
+  hasSession: boolean;
+}> {
+  const { entries, hasSession } = await fetchTodayDailyLogsForCurrentUser();
+  return {
+    oz: sumWaterOzFromEntriesToday(entries),
+    caffeineMg: sumCaffeineMgFromEntriesToday(entries),
+    sodiumMg: sumSodiumMgFromEntriesToday(entries),
+    hasSession,
+  };
+}
+
+/** @deprecated Prefer {@link fetchTodayHydrationTotalsFromDailyLogs}. */
 export async function fetchTodayWaterValueSumForCurrentUser(): Promise<{
   oz: number;
   hasSession: boolean;
 }> {
-  const sb = getSupabaseBrowserClient();
-  if (!sb) return { oz: 0, hasSession: false };
-
-  const uid = await resolveSupabaseUserId(sb);
-  if (!uid) return { oz: 0, hasSession: false };
-
-  const { startIso, endIso } = localCalendarDayRecordedAtBounds();
-
-  const { data, error } = await sb
-    .from("daily_logs")
-    .select("value,notes")
-    .eq("user_id", uid)
-    .eq("log_entry_type", ENTRY_TYPE_WATER)
-    .eq("category", "hydration")
-    .gte("recorded_at", startIso)
-    .lt("recorded_at", endIso);
-
-  if (error) {
-    console.warn("today water value sum fetch:", error.message);
-    return { oz: 0, hasSession: true };
-  }
-
-  let oz = 0;
-  for (const raw of data ?? []) {
-    const row = raw as { value?: number | null; notes?: string | null };
-    const fromVal =
-      row.value != null && Number.isFinite(Number(row.value))
-        ? Number(row.value)
-        : Number.parseInt(String(row.notes ?? "").trim(), 10);
-    if (Number.isFinite(fromVal) && fromVal > 0) oz += fromVal;
-  }
-
-  return { oz, hasSession: true };
+  const t = await fetchTodayHydrationTotalsFromDailyLogs();
+  return { oz: t.oz, hasSession: t.hasSession };
 }
 
-/** Sum of `daily_logs.value` for today where `log_entry_type` is caffeine (mg). */
+/** @deprecated Prefer {@link fetchTodayHydrationTotalsFromDailyLogs}. */
 export async function fetchTodayCaffeineMgSumForCurrentUser(): Promise<{
   mg: number;
   hasSession: boolean;
 }> {
-  const sb = getSupabaseBrowserClient();
-  if (!sb) return { mg: 0, hasSession: false };
-
-  const uid = await resolveSupabaseUserId(sb);
-  if (!uid) return { mg: 0, hasSession: false };
-
-  const { startIso, endIso } = localCalendarDayRecordedAtBounds();
-
-  const { data, error } = await sb
-    .from("daily_logs")
-    .select("value,notes")
-    .eq("user_id", uid)
-    .eq("log_entry_type", ENTRY_TYPE_CAFFEINE)
-    .eq("category", "caffeine")
-    .gte("recorded_at", startIso)
-    .lt("recorded_at", endIso);
-
-  if (error) {
-    console.warn("today caffeine sum fetch:", error.message);
-    return { mg: 0, hasSession: true };
-  }
-
-  let mg = 0;
-  for (const raw of data ?? []) {
-    const row = raw as { value?: number | null; notes?: string | null };
-    const fromVal =
-      row.value != null && Number.isFinite(Number(row.value))
-        ? Number(row.value)
-        : Number.parseInt(String(row.notes ?? "").trim(), 10);
-    if (Number.isFinite(fromVal) && fromVal > 0) mg += fromVal;
-  }
-
-  return { mg, hasSession: true };
+  const t = await fetchTodayHydrationTotalsFromDailyLogs();
+  return { mg: t.caffeineMg, hasSession: t.hasSession };
 }
 
-/** Sum of `daily_logs.value` for today where `log_entry_type` is sodium (mg). */
+/** @deprecated Prefer {@link fetchTodayHydrationTotalsFromDailyLogs}. */
 export async function fetchTodaySodiumMgSumForCurrentUser(): Promise<{
   mg: number;
   hasSession: boolean;
 }> {
-  const sb = getSupabaseBrowserClient();
-  if (!sb) return { mg: 0, hasSession: false };
-
-  const uid = await resolveSupabaseUserId(sb);
-  if (!uid) return { mg: 0, hasSession: false };
-
-  const { startIso, endIso } = localCalendarDayRecordedAtBounds();
-
-  const { data, error } = await sb
-    .from("daily_logs")
-    .select("value,notes")
-    .eq("user_id", uid)
-    .eq("log_entry_type", ENTRY_TYPE_SODIUM)
-    .eq("category", "sodium")
-    .gte("recorded_at", startIso)
-    .lt("recorded_at", endIso);
-
-  if (error) {
-    console.warn("today sodium sum fetch:", error.message);
-    return { mg: 0, hasSession: true };
-  }
-
-  let mg = 0;
-  for (const raw of data ?? []) {
-    const row = raw as { value?: number | null; notes?: string | null };
-    const fromVal =
-      row.value != null && Number.isFinite(Number(row.value))
-        ? Number(row.value)
-        : Number.parseInt(String(row.notes ?? "").trim(), 10);
-    if (Number.isFinite(fromVal) && fromVal > 0) mg += fromVal;
-  }
-
-  return { mg, hasSession: true };
+  const t = await fetchTodayHydrationTotalsFromDailyLogs();
+  return { mg: t.sodiumMg, hasSession: t.hasSession };
 }
 
 /**
- * Dog walks today: same user, local calendar day on `recorded_at`, and rows
- * matching movement + activity + label "Dog Walk".
- */
-export async function fetchTodayDogWalkCountForCurrentUser(): Promise<{
-  count: number;
-  hasSession: boolean;
-}> {
-  const sb = getSupabaseBrowserClient();
-  if (!sb) return { count: 0, hasSession: false };
-
-  const uid = await resolveSupabaseUserId(sb);
-  if (!uid) return { count: 0, hasSession: false };
-
-  const { startIso, endIso } = localCalendarDayRecordedAtBounds();
-
-  const { count, error } = await sb
-    .from("daily_logs")
-    .select("id", { count: "exact", head: true })
-    .eq("user_id", uid)
-    .eq("log_entry_type", ENTRY_TYPE_ACTIVITY)
-    .eq("category", "movement")
-    .eq("label", DOG_WALK_DAILY_LOG_LABEL)
-    .gte("recorded_at", startIso)
-    .lt("recorded_at", endIso);
-
-  if (error) {
-    console.warn("today dog walk count fetch:", error.message);
-    return { count: 0, hasSession: true };
-  }
-
-  return { count: count ?? 0, hasSession: true };
-}
-
-/**
- * After inserting water, Supabase reads can briefly lag. Poll until today's sum is at
- * least what the UI already displayed, so optimistic clears don't snap the bar backward.
+ * After inserting water, poll until today's sum catches up (no optimistic UI).
  */
 export async function fetchTodayWaterValueSumUntilAtLeast(
   minOz: number,
@@ -300,7 +263,7 @@ export async function persistDailyLogToSupabase(
       code: err.code,
       details: err.details,
       hint: err.hint,
-      log_entry_type: payload.log_entry_type,
+      entry_type: payload.entry_type,
     });
   }
 
@@ -315,7 +278,8 @@ export async function persistDailyLogToSupabase(
       id: entry.id,
       user_id: uid,
       recorded_at: recordedAtIso,
-      log_entry_type: ENTRY_TYPE_WATER,
+      entry_type: ENTRY_TYPE_WATER,
+      unit: "oz",
       category: entry.category,
       label: entry.label,
       value: oz,
@@ -339,7 +303,8 @@ export async function persistDailyLogToSupabase(
       id: entry.id,
       user_id: uid,
       recorded_at: recordedAtIso,
-      log_entry_type: ENTRY_TYPE_CAFFEINE,
+      entry_type: ENTRY_TYPE_CAFFEINE,
+      unit: "mg",
       category: entry.category,
       label: entry.label,
       value: mg,
@@ -363,50 +328,11 @@ export async function persistDailyLogToSupabase(
       id: entry.id,
       user_id: uid,
       recorded_at: recordedAtIso,
-      log_entry_type: ENTRY_TYPE_SODIUM,
+      entry_type: ENTRY_TYPE_SODIUM,
+      unit: "mg",
       category: entry.category,
       label: entry.label,
       value: mg,
-    };
-    const res = await sb.from("daily_logs").insert(payload);
-    if (res.error) {
-      logInsertFailure(payload, res.error);
-      return { ok: false, error: res.error.message };
-    }
-    return { ok: true };
-  }
-
-  if (
-    entry.category === "movement" &&
-    et === ENTRY_TYPE_ACTIVITY &&
-    entry.label === DOG_WALK_DAILY_LOG_LABEL
-  ) {
-    const payload = {
-      id: entry.id,
-      user_id: uid,
-      recorded_at: recordedAtIso,
-      log_entry_type: ENTRY_TYPE_ACTIVITY,
-      category: "movement",
-      label: DOG_WALK_DAILY_LOG_LABEL,
-      value: 1,
-    };
-    const res = await sb.from("daily_logs").insert(payload);
-    if (res.error) {
-      logInsertFailure(payload, res.error);
-      return { ok: false, error: res.error.message };
-    }
-    return { ok: true };
-  }
-
-  if (entry.category === "movement" && et === ENTRY_TYPE_ACTIVITY) {
-    const payload: Record<string, unknown> = {
-      id: entry.id,
-      user_id: uid,
-      recorded_at: recordedAtIso,
-      log_entry_type: ENTRY_TYPE_ACTIVITY,
-      category: "movement",
-      label: entry.label,
-      notes: entry.notes ?? null,
     };
     const res = await sb.from("daily_logs").insert(payload);
     if (res.error) {
@@ -420,7 +346,7 @@ export async function persistDailyLogToSupabase(
     id: entry.id,
     user_id: uid,
     recorded_at: recordedAtIso,
-    log_entry_type: et,
+    entry_type: et,
     category: entry.category,
     label: entry.label,
     notes: entry.notes ?? null,

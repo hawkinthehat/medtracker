@@ -6,7 +6,10 @@ export const qk = {
   orthostatic: ["orthostatic"] as const,
   journal: ["journal"] as const,
   dailyLogs: ["dailyLogs"] as const,
-  /** Server count: dog walks today (`daily_logs` activity + dog-walk marker). */
+  /** Server sum: sodium mg today (`daily_logs` where `entry_type` = sodium). */
+  dailyLogTodaySodiumMgSum: (userId: string) =>
+    ["dailyLogs", "todaySodiumMgSum", userId] as const,
+  /** Server count: dog walks today (`activity_logs` where `activity_type` = dog_walk). */
   dailyLogDogWalkCountToday: ["dailyLogs", "dogWalkCountToday", "v1"] as const,
   specialistNotes: ["specialistNotes"] as const,
   /** Inhibitor/substrate gate blocks when adding a medication */

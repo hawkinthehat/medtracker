@@ -1,19 +1,18 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import type { User } from "@supabase/supabase-js";
 import { Dog, Loader2, Settings2 } from "lucide-react";
 import { qk } from "@/lib/query-keys";
 import type { DailyLogEntry } from "@/lib/types";
 import {
-  persistDailyLogToSupabase,
+  insertActivityLogRow,
   fetchTodayDogWalkCountForCurrentUser,
-} from "@/lib/supabase/daily-logs";
+} from "@/lib/supabase/activity-logs";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser-client";
 import { toastMessageForPersistFailure } from "@/lib/supabase/auth-save-guard";
-import { insertActivityLogRow } from "@/lib/supabase/activity-logs";
 import { dailyLogsQueryFn } from "@/lib/daily-logs-query-fn";
 import { fetchAndLogWeather } from "@/lib/weather";
 import { getEnvironmentSnapshot } from "@/lib/environment-snapshot";
@@ -184,30 +183,6 @@ export default function MovementTracker() {
     [vitals, dailyLogs, today],
   );
 
-  const logMovementEntry = useMutation({
-    mutationFn: async (entry: DailyLogEntry) => {
-      if (supabaseConfigured) {
-        const result = await persistDailyLogToSupabase(entry);
-        if (!result.ok) {
-          throw new Error(result.error ?? "Could not sync movement entry.");
-        }
-      }
-      return entry;
-    },
-    onSuccess: (entry) => {
-      qc.setQueryData<DailyLogEntry[]>(qk.dailyLogs, (prev = []) => [
-        entry,
-        ...prev,
-      ]);
-      void qc.invalidateQueries({ queryKey: qk.dailyLogs });
-    },
-    onError: (e: unknown) => {
-      const msg = e instanceof Error ? e.message : "Save failed";
-      console.error("[movement] daily_logs save failed:", e);
-      setMovementToast(toastMessageForPersistFailure(msg));
-    },
-  });
-
   const appendWeatherNotes = useCallback(
     async (baseNotes: string, opts?: { skipWeatherFetch?: boolean }) => {
       if (!opts?.skipWeatherFetch) {
@@ -222,13 +197,6 @@ export default function MovementTracker() {
 
   const [pendingWalk, setPendingWalk] = useState(false);
   const [pendingPtSlot, setPendingPtSlot] = useState<PtSlot | null>(null);
-  /** Instant walk count before React Query catches up */
-  const [optimisticWalkBump, setOptimisticWalkBump] = useState(0);
-
-  const walksTodayDisplay = useMemo(
-    () => walksToday + optimisticWalkBump,
-    [walksToday, optimisticWalkBump],
-  );
 
   async function handleDogWalk(skipNudge = false) {
     if (supabaseConfigured && sessionResolved && !sessionUser) {
@@ -236,10 +204,7 @@ export default function MovementTracker() {
       return;
     }
 
-    const walksBefore = countDogWalksToday(
-      qc.getQueryData<DailyLogEntry[]>(qk.dailyLogs) ?? dailyLogs,
-      today,
-    );
+    const walksBefore = walksToday;
 
     if (
       !skipNudge &&
@@ -253,18 +218,23 @@ export default function MovementTracker() {
 
     setShowHrNudge(false);
 
-    setOptimisticWalkBump((b) => b + 1);
     setPendingWalk(true);
     try {
-      const row: DailyLogEntry = {
-        id: crypto.randomUUID(),
-        recordedAt: new Date().toISOString(),
-        category: "movement",
-        label: DOG_WALK_DAILY_LOG_LABEL,
-        entryType: ENTRY_TYPE_ACTIVITY,
-      };
-
-      await logMovementEntry.mutateAsync(row);
+      if (!supabaseConfigured) {
+        const row: DailyLogEntry = {
+          id: crypto.randomUUID(),
+          recordedAt: new Date().toISOString(),
+          category: "movement",
+          label: DOG_WALK_DAILY_LOG_LABEL,
+          entryType: ENTRY_TYPE_ACTIVITY,
+        };
+        qc.setQueryData<DailyLogEntry[]>(qk.dailyLogs, (prev = []) => [
+          row,
+          ...prev,
+        ]);
+        router.refresh();
+        return;
+      }
 
       const act = await insertActivityLogRow({
         activity_type: "dog_walk",
@@ -274,16 +244,14 @@ export default function MovementTracker() {
         throw new Error(act.error ?? "Could not save activity log.");
       }
 
-      void qc.invalidateQueries({ queryKey: qk.dailyLogs });
       void qc.invalidateQueries({ queryKey: qk.activityToday });
       void qc.invalidateQueries({ queryKey: qk.dailyLogDogWalkCountToday });
-      setOptimisticWalkBump(0);
+      await qc.refetchQueries({ queryKey: qk.dailyLogDogWalkCountToday });
       router.refresh();
     } catch (e) {
-      setOptimisticWalkBump((b) => Math.max(0, b - 1));
       const msg = e instanceof Error ? e.message : "Save failed";
       setMovementToast(toastMessageForPersistFailure(msg));
-      console.error("[handleDogWalk] Failed to save movement / daily_logs:", e);
+      console.error("[handleDogWalk] Failed to save activity_logs:", e);
     } finally {
       setPendingWalk(false);
     }
@@ -305,26 +273,32 @@ export default function MovementTracker() {
       const base = `${humanLabel} session${ptMarker(slot)}`;
       const notes = await appendWeatherNotes(base);
 
-      const row: DailyLogEntry = {
-        id: crypto.randomUUID(),
-        recordedAt,
-        category: "movement",
-        label: humanLabel,
-        notes,
-        entryType: ENTRY_TYPE_ACTIVITY,
-      };
-
-      await logMovementEntry.mutateAsync(row);
+      if (!supabaseConfigured) {
+        const row: DailyLogEntry = {
+          id: crypto.randomUUID(),
+          recordedAt,
+          category: "movement",
+          label: humanLabel,
+          notes,
+          entryType: ENTRY_TYPE_ACTIVITY,
+        };
+        qc.setQueryData<DailyLogEntry[]>(qk.dailyLogs, (prev = []) => [
+          row,
+          ...prev,
+        ]);
+        void qc.invalidateQueries({ queryKey: qk.activityToday });
+        router.refresh();
+        return;
+      }
 
       const act = await insertActivityLogRow({
         activity_type: "pt",
-        notes: `${humanLabel} · ${slot}`,
+        notes: `${humanLabel} · ${slot} · ${notes}`,
       });
       if (!act.ok) {
         throw new Error(act.error ?? "Could not save activity log.");
       }
 
-      void qc.invalidateQueries({ queryKey: qk.dailyLogs });
       void qc.invalidateQueries({ queryKey: qk.activityToday });
       router.refresh();
     } catch (e) {
@@ -344,8 +318,7 @@ export default function MovementTracker() {
     setSettingsOpen(false);
   }
 
-  const movementBusy =
-    pendingWalk || pendingPtSlot !== null || logMovementEntry.isPending;
+  const movementBusy = pendingWalk || pendingPtSlot !== null;
 
   return (
     <section
@@ -449,7 +422,7 @@ export default function MovementTracker() {
 
       <p className="mt-4 text-center text-xl font-black text-slate-900">
         Daily walks today:{" "}
-        <span className="tabular-nums">{walksTodayDisplay}</span>
+        <span className="tabular-nums">{walksToday}</span>
       </p>
 
       {showHrNudge && (
@@ -514,10 +487,8 @@ export default function MovementTracker() {
         </div>
         <p className="text-base font-medium text-slate-700">
           Tap once when done — stays highlighted for the day. Weather details
-          are saved with each session. When signed in, entries also go to{" "}
-          <span className="font-semibold text-slate-900">activity_logs</span>{" "}
-          (movement/PT) alongside your{" "}
-          <span className="font-semibold text-slate-900">daily_logs</span> feed.
+          are saved with each session. When signed in, entries go to{" "}
+          <span className="font-semibold text-slate-900">activity_logs</span>.
         </p>
       </div>
 

@@ -9,9 +9,7 @@ import { qk } from "@/lib/query-keys";
 import type { DailyLogEntry } from "@/lib/types";
 import { dailyLogsQueryFn } from "@/lib/daily-logs-query-fn";
 import {
-  fetchTodayWaterValueSumForCurrentUser,
-  fetchTodayCaffeineMgSumForCurrentUser,
-  fetchTodaySodiumMgSumForCurrentUser,
+  fetchTodayHydrationTotalsFromDailyLogs,
   persistDailyLogToSupabase,
 } from "@/lib/supabase/daily-logs";
 import {
@@ -65,10 +63,12 @@ export default function HydrationTracker({
 
   const [sessionUser, setSessionUser] = useState<User | null>(null);
   const [sessionResolved, setSessionResolved] = useState(false);
-  /** Today's oz from `daily_logs` (authoritative when cloud sync). */
+  /** Today's oz from summed `daily_logs` (`entry_type` = water). */
   const [storedWaterOz, setStoredWaterOz] = useState(0);
-  /** Today's caffeine mg from `daily_logs` (separate server sum). */
+  /** Today's caffeine mg from summed `daily_logs` (`entry_type` = caffeine). */
   const [storedCaffeineMg, setStoredCaffeineMg] = useState(0);
+  /** Today's sodium mg from summed `daily_logs` (`entry_type` = sodium). */
+  const [storedSodiumMg, setStoredSodiumMg] = useState(0);
   const [hydrationTotalsLoaded, setHydrationTotalsLoaded] = useState(false);
 
   const [toast, setToast] = useState<string | null>(null);
@@ -108,17 +108,16 @@ export default function HydrationTracker({
       if (!sessionUser) {
         setStoredWaterOz(0);
         setStoredCaffeineMg(0);
+        setStoredSodiumMg(0);
         setHydrationTotalsLoaded(true);
         return;
       }
       setHydrationTotalsLoaded(false);
-      const [waterRes, caffeineRes] = await Promise.all([
-        fetchTodayWaterValueSumForCurrentUser(),
-        fetchTodayCaffeineMgSumForCurrentUser(),
-      ]);
+      const totals = await fetchTodayHydrationTotalsFromDailyLogs();
       if (!cancelled) {
-        setStoredWaterOz(waterRes.oz);
-        setStoredCaffeineMg(caffeineRes.mg);
+        setStoredWaterOz(totals.oz);
+        setStoredCaffeineMg(totals.caffeineMg);
+        setStoredSodiumMg(totals.sodiumMg);
         setHydrationTotalsLoaded(true);
       }
     }
@@ -142,21 +141,6 @@ export default function HydrationTracker({
     queryFn: () => fetchMedicationLogsFromSupabase(400),
     staleTime: 15_000,
     gcTime: 1000 * 60 * 60 * 24 * 7,
-    refetchOnWindowFocus: true,
-  });
-
-  const { data: serverDailySodiumMg = 0 } = useQuery({
-    queryKey: [
-      ...qk.dailyLogs,
-      "todaySodiumMgSum",
-      sessionUser?.id ?? "none",
-    ] as const,
-    queryFn: async () => (await fetchTodaySodiumMgSumForCurrentUser()).mg,
-    enabled: Boolean(
-      supabaseConfigured && sessionResolved && sessionUser,
-    ),
-    staleTime: 15_000,
-    gcTime: 1000 * 60 * 60 * 24,
     refetchOnWindowFocus: true,
   });
 
@@ -218,7 +202,7 @@ export default function HydrationTracker({
     ? legacySodiumMedMg + cacheDailySodiumMg
     : !sessionResolved || !sessionUser
       ? 0
-      : legacySodiumMedMg + serverDailySodiumMg;
+      : legacySodiumMedMg + storedSodiumMg;
 
   const waterProgress = Math.min(1, currentWaterIntake / waterGoalOz);
   const sodiumProgress = Math.min(1, sodiumMgToday / sodiumGoalMg);
@@ -240,24 +224,21 @@ export default function HydrationTracker({
         console.error("[hydration] daily_logs insert rejected:", msg);
         throw new Error(msg);
       }
-      return { row };
+      return amountOz;
     },
-    onSuccess: async ({ row }) => {
+    onSuccess: async (amountOz) => {
       addOzMutation.reset();
       setToast(null);
-      qc.setQueryData<DailyLogEntry[]>(qk.dailyLogs, (prev = []) => [
-        row,
-        ...prev,
-      ]);
       await qc.invalidateQueries({ queryKey: qk.dailyLogs });
+      await qc.refetchQueries({ queryKey: qk.dailyLogs });
       if (supabaseConfigured) {
-        const { oz } = await fetchTodayWaterValueSumForCurrentUser();
-        setStoredWaterOz(oz);
-        const { mg } = await fetchTodayCaffeineMgSumForCurrentUser();
-        setStoredCaffeineMg(mg);
+        const totals = await fetchTodayHydrationTotalsFromDailyLogs();
+        setStoredWaterOz(totals.oz);
+        setStoredCaffeineMg(totals.caffeineMg);
+        setStoredSodiumMg(totals.sodiumMg);
       }
       router.refresh();
-      setToast(toastWaterLogged(row.valueOz ?? 0));
+      setToast(toastWaterLogged(amountOz));
       window.setTimeout(() => setToast(null), 4500);
     },
     onError: (err: Error) => {
@@ -288,19 +269,18 @@ export default function HydrationTracker({
         console.error("[hydration] caffeine insert rejected:", msg);
         throw new Error(msg);
       }
-      return { row, preset };
+      return preset;
     },
-    onSuccess: async ({ row, preset }) => {
+    onSuccess: async (preset) => {
       addCaffeineMutation.reset();
       setToast(null);
-      qc.setQueryData<DailyLogEntry[]>(qk.dailyLogs, (prev = []) => [
-        row,
-        ...prev,
-      ]);
       await qc.invalidateQueries({ queryKey: qk.dailyLogs });
+      await qc.refetchQueries({ queryKey: qk.dailyLogs });
       if (supabaseConfigured) {
-        const { mg: totalMg } = await fetchTodayCaffeineMgSumForCurrentUser();
-        setStoredCaffeineMg(totalMg);
+        const totals = await fetchTodayHydrationTotalsFromDailyLogs();
+        setStoredWaterOz(totals.oz);
+        setStoredCaffeineMg(totals.caffeineMg);
+        setStoredSodiumMg(totals.sodiumMg);
       }
       router.refresh();
       const mg =

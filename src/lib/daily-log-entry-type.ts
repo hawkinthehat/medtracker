@@ -4,16 +4,16 @@ import {
   MORNING_MEDS_TAKEN_LABEL,
 } from "@/lib/morning-meds-log";
 
-/** Supabase `daily_logs.log_entry_type` enum value for fluid ounces. */
+/** Supabase `daily_logs.entry_type` for fluid ounces (`value` + `unit` = oz). */
 export const ENTRY_TYPE_WATER = "water";
 
-/** Supabase `daily_logs.log_entry_type` enum value for caffeine mg (`daily_logs.value` = mg). */
+/** Supabase `daily_logs.entry_type` for caffeine (`value` + `unit` = mg). */
 export const ENTRY_TYPE_CAFFEINE = "caffeine";
 
-/** Thermotabs sodium tap — `daily_logs.value` = mg NaCl equivalent per tablet. */
+/** Thermotabs sodium tap — `daily_logs.value` + `unit` = mg. */
 export const ENTRY_TYPE_SODIUM = "sodium";
 
-/** Walks / PT rows use `category: movement` with this `log_entry_type`. */
+/** Legacy / generic movement-tagged rows (dog walk + PT use `activity_logs` now). */
 export const ENTRY_TYPE_ACTIVITY = "activity";
 
 /**

@@ -5,6 +5,8 @@ alter table public.daily_logs
 alter table public.daily_logs
   add column if not exists entry_type text;
 
+-- Renamed to `log_entry_type` in 20260525100000_daily_logs_entry_type_to_log_entry_type.sql (matches app).
+
 comment on column public.daily_logs.user_id is 'Authenticated author; null for legacy anon rows.';
 comment on column public.daily_logs.entry_type is 'Semantic tag, e.g. morning_meds_completed.';
 

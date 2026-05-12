@@ -145,11 +145,7 @@ export function sumThermotabsSodiumMgFromDailyLogsLastDays(
   let mg = 0;
   for (const e of dailyLogs) {
     if (!isWithinLastDays(e.recordedAt, days)) continue;
-    if (
-      e.entryType !== ENTRY_TYPE_SODIUM &&
-      e.entryType !== "sodium" &&
-      e.category !== "sodium"
-    ) {
+    if (e.entryType !== ENTRY_TYPE_SODIUM && e.entryType !== "sodium") {
       continue;
     }
     const v =
@@ -183,11 +179,7 @@ export function sumThermotabsSodiumMgTodayFromDailyLogs(
   let mg = 0;
   for (const e of dailyLogs) {
     if (!isSameLocalCalendarDay(e.recordedAt, ref)) continue;
-    if (
-      e.entryType !== ENTRY_TYPE_SODIUM &&
-      e.entryType !== "sodium" &&
-      e.category !== "sodium"
-    ) {
+    if (e.entryType !== ENTRY_TYPE_SODIUM && e.entryType !== "sodium") {
       continue;
     }
     const v =

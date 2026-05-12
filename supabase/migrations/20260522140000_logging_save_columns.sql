@@ -2,7 +2,7 @@
 alter table public.daily_logs
   add column if not exists value double precision;
 
-comment on column public.daily_logs.value is 'Numeric payload when entry_type=water (fluid ounces).';
+comment on column public.daily_logs.value is 'Numeric payload when log_entry_type=water (fluid ounces), caffeine/sodium mg when applicable.';
 
 alter table public.medication_logs
   add column if not exists user_id uuid references auth.users (id) on delete set null;
