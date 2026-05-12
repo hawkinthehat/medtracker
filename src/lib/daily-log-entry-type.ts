@@ -16,12 +16,24 @@ export const ENTRY_TYPE_CAFFEINE = "caffeine";
  */
 export function resolveDailyLogEntryType(entry: DailyLogEntry): string {
   if (entry.entryType) return entry.entryType;
+  if (entry.category === "caffeine") {
+    return ENTRY_TYPE_CAFFEINE;
+  }
   if (entry.category === "hydration") {
     return ENTRY_TYPE_WATER;
   }
   if (entry.category === "food") return "food";
   if (entry.category === "sleep") return "sleep";
   if (entry.category === "activity") return "activity";
+  if (entry.category === "medication") {
+    if (
+      entry.label === MORNING_MEDS_TAKEN_LABEL ||
+      entry.label === "Morning meds"
+    ) {
+      return MORNING_MEDS_ENTRY_TYPE;
+    }
+    return "medication";
+  }
   if (entry.category === "other") {
     if (
       entry.label === MORNING_MEDS_TAKEN_LABEL ||

@@ -157,7 +157,6 @@ export default function QuickRelief() {
     onError: (e) => {
       const msg =
         e instanceof Error ? e.message : "Could not log. Check Supabase.";
-      window.alert(msg);
       setErrorToast(msg);
     },
   });

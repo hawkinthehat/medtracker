@@ -117,7 +117,7 @@ export default function MorningRoutine() {
       const row: DailyLogEntry = {
         id: crypto.randomUUID(),
         recordedAt,
-        category: "other",
+        category: "medication",
         label: "Morning meds",
         notes: recordedAt,
         entryType: MORNING_MEDS_ENTRY_TYPE,
@@ -151,7 +151,6 @@ export default function MorningRoutine() {
       router.refresh();
     },
     onError: (e: Error) => {
-      window.alert(e.message);
       setToast(e.message);
       window.setTimeout(() => setToast(null), 4200);
     },
@@ -421,7 +420,7 @@ export default function MorningRoutine() {
                       const row: DailyLogEntry = {
                         id: crypto.randomUUID(),
                         recordedAt,
-                        category: "other",
+                        category: "medication",
                         label: "Morning meds",
                         notes: recordedAt,
                         entryType: MORNING_MEDS_ENTRY_TYPE,

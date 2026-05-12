@@ -70,6 +70,8 @@ export type JournalEntry = {
 export type DailyLogCategory =
   | "food"
   | "hydration"
+  | "caffeine"
+  | "medication"
   | "sleep"
   | "activity"
   | "other";

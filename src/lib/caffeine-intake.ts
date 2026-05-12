@@ -13,8 +13,11 @@ export const CAFFEINE_COFFEE_LABEL = "Coffee (≈95 mg caffeine)";
 export const CAFFEINE_ENERGY_LABEL = "Energy drink / tea (≈160 mg caffeine)";
 
 export function caffeineMgFromEntry(e: DailyLogEntry): number {
-  if (e.entryType !== ENTRY_TYPE_CAFFEINE && e.entryType !== "caffeine")
-    return 0;
+  const isCaffeine =
+    e.entryType === ENTRY_TYPE_CAFFEINE ||
+    e.entryType === "caffeine" ||
+    e.category === "caffeine";
+  if (!isCaffeine) return 0;
   if (
     e.valueMg != null &&
     Number.isFinite(e.valueMg) &&
@@ -84,7 +87,9 @@ export function recentCaffeineLogRows(
   return [...dailyLogs]
     .filter(
       (e) =>
-        e.entryType === ENTRY_TYPE_CAFFEINE || e.entryType === "caffeine",
+        e.entryType === ENTRY_TYPE_CAFFEINE ||
+        e.entryType === "caffeine" ||
+        e.category === "caffeine",
     )
     .sort(
       (a, b) =>

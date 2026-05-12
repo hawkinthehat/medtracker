@@ -21,6 +21,8 @@ import { TOAST_DAILY_LOG } from "@/lib/educational-toasts";
 const CATEGORIES: { value: DailyLogCategory; label: string }[] = [
   { value: "food", label: "Food" },
   { value: "hydration", label: "Hydration" },
+  { value: "caffeine", label: "Caffeine" },
+  { value: "medication", label: "Medication" },
   { value: "sleep", label: "Sleep" },
   { value: "activity", label: "Activity" },
   { value: "other", label: "Other" },

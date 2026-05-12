@@ -45,7 +45,11 @@ function rowToEntry(row: DailyLogRow): DailyLogEntry {
     userId: row.user_id ?? undefined,
     entryType: et,
   };
-  if (et === ENTRY_TYPE_CAFFEINE || et === "caffeine") {
+  if (
+    et === ENTRY_TYPE_CAFFEINE ||
+    et === "caffeine" ||
+    row.category === "caffeine"
+  ) {
     return v != null && Number.isFinite(v) && v > 0
       ? { ...base, valueMg: Math.round(v) }
       : base;
@@ -117,6 +121,48 @@ export async function fetchTodayWaterValueSumForCurrentUser(): Promise<{
   return { oz, hasSession: true };
 }
 
+/** Sum of `daily_logs.value` for today where `entry_type` is caffeine (mg). */
+export async function fetchTodayCaffeineMgSumForCurrentUser(): Promise<{
+  mg: number;
+  hasSession: boolean;
+}> {
+  const sb = getSupabaseBrowserClient();
+  if (!sb) return { mg: 0, hasSession: false };
+
+  const uid = await resolveSupabaseUserId(sb);
+  if (!uid) return { mg: 0, hasSession: false };
+
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+  const end = new Date(start);
+  end.setDate(end.getDate() + 1);
+
+  const { data, error } = await sb
+    .from("daily_logs")
+    .select("value,notes")
+    .eq("user_id", uid)
+    .eq("entry_type", ENTRY_TYPE_CAFFEINE)
+    .gte("recorded_at", start.toISOString())
+    .lt("recorded_at", end.toISOString());
+
+  if (error) {
+    console.warn("today caffeine sum fetch:", error.message);
+    return { mg: 0, hasSession: true };
+  }
+
+  let mg = 0;
+  for (const raw of data ?? []) {
+    const row = raw as { value?: number | null; notes?: string | null };
+    const fromVal =
+      row.value != null && Number.isFinite(Number(row.value))
+        ? Number(row.value)
+        : Number.parseInt(String(row.notes ?? "").trim(), 10);
+    if (Number.isFinite(fromVal) && fromVal > 0) mg += fromVal;
+  }
+
+  return { mg, hasSession: true };
+}
+
 /**
  * After inserting water, Supabase reads can briefly lag. Poll until today's sum is at
  * least what the UI already displayed, so optimistic clears don't snap the bar backward.
@@ -181,7 +227,7 @@ export async function persistDailyLogToSupabase(
     if (Number.isFinite(mg) && mg > 0) {
       payload.value = mg;
     }
-  } else if (et === ENTRY_TYPE_WATER || entry.category === "hydration") {
+  } else if (et === ENTRY_TYPE_WATER) {
     const oz =
       entry.valueOz ??
       Number.parseInt(String(entry.notes ?? "").trim(), 10);

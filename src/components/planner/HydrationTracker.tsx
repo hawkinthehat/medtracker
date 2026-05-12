@@ -10,6 +10,7 @@ import type { DailyLogEntry } from "@/lib/types";
 import { dailyLogsQueryFn } from "@/lib/daily-logs-query-fn";
 import {
   fetchTodayWaterValueSumForCurrentUser,
+  fetchTodayCaffeineMgSumForCurrentUser,
   persistDailyLogToSupabase,
 } from "@/lib/supabase/daily-logs";
 import {
@@ -58,9 +59,11 @@ export default function HydrationTracker({
 
   const [sessionUser, setSessionUser] = useState<User | null>(null);
   const [sessionResolved, setSessionResolved] = useState(false);
-  /** Today's oz from `daily_logs` for the signed-in user (authoritative when cloud sync). */
+  /** Today's oz from `daily_logs` (authoritative when cloud sync). */
   const [storedWaterOz, setStoredWaterOz] = useState(0);
-  const [waterBaselineLoaded, setWaterBaselineLoaded] = useState(false);
+  /** Today's caffeine mg from `daily_logs` (separate server sum). */
+  const [storedCaffeineMg, setStoredCaffeineMg] = useState(0);
+  const [hydrationTotalsLoaded, setHydrationTotalsLoaded] = useState(false);
 
   const [toast, setToast] = useState<string | null>(null);
 
@@ -88,24 +91,29 @@ export default function HydrationTracker({
 
   useEffect(() => {
     let cancelled = false;
-    async function loadTodayWaterFromDb() {
+    async function loadTodayHydrationTotalsFromDb() {
       if (!supabaseConfigured) {
-        setWaterBaselineLoaded(true);
+        setHydrationTotalsLoaded(true);
         return;
       }
       if (!sessionUser) {
         setStoredWaterOz(0);
-        setWaterBaselineLoaded(true);
+        setStoredCaffeineMg(0);
+        setHydrationTotalsLoaded(true);
         return;
       }
-      setWaterBaselineLoaded(false);
-      const { oz } = await fetchTodayWaterValueSumForCurrentUser();
+      setHydrationTotalsLoaded(false);
+      const [waterRes, caffeineRes] = await Promise.all([
+        fetchTodayWaterValueSumForCurrentUser(),
+        fetchTodayCaffeineMgSumForCurrentUser(),
+      ]);
       if (!cancelled) {
-        setStoredWaterOz(oz);
-        setWaterBaselineLoaded(true);
+        setStoredWaterOz(waterRes.oz);
+        setStoredCaffeineMg(caffeineRes.mg);
+        setHydrationTotalsLoaded(true);
       }
     }
-    void loadTodayWaterFromDb();
+    void loadTodayHydrationTotalsFromDb();
     return () => {
       cancelled = true;
     };
@@ -137,9 +145,24 @@ export default function HydrationTracker({
     ? cacheOz
     : !sessionResolved || !sessionUser
       ? 0
-      : waterBaselineLoaded
+      : hydrationTotalsLoaded
         ? storedWaterOz
         : cacheOz;
+
+  const cacheCaffeineMg = useMemo(
+    () => sumCaffeineMgToday(dailyLogs),
+    [dailyLogs],
+  );
+
+  const baselineCaffeineMg = !supabaseConfigured
+    ? cacheCaffeineMg
+    : !sessionResolved || !sessionUser
+      ? 0
+      : hydrationTotalsLoaded
+        ? storedCaffeineMg
+        : cacheCaffeineMg;
+
+  const currentCaffeineMg = baselineCaffeineMg;
 
   /** Pending oz for offline-only mode (local cache); cloud path waits for DB insert. */
   const [optimisticOz, setOptimisticOz] = useState(0);
@@ -151,8 +174,8 @@ export default function HydrationTracker({
   >(null);
 
   const needsSignIn = supabaseConfigured && sessionResolved && !sessionUser;
-  const showWaterPlaceholder =
-    supabaseConfigured && !!sessionUser && !waterBaselineLoaded;
+  const showTotalsPlaceholder =
+    supabaseConfigured && !!sessionUser && !hydrationTotalsLoaded;
 
   const currentWaterIntake =
     !supabaseConfigured || needsSignIn ? baselineOz + optimisticOz : baselineOz;
@@ -160,11 +183,6 @@ export default function HydrationTracker({
   const sodiumMgToday = useMemo(
     () => sumThermotabsSodiumMgToday(medicationLogs as MedicationLogRow[]),
     [medicationLogs],
-  );
-
-  const caffeineMgToday = useMemo(
-    () => sumCaffeineMgToday(dailyLogs),
-    [dailyLogs],
   );
 
   const waterProgress = Math.min(1, currentWaterIntake / waterGoalOz);
@@ -198,6 +216,8 @@ export default function HydrationTracker({
       if (supabaseConfigured) {
         const { oz } = await fetchTodayWaterValueSumForCurrentUser();
         setStoredWaterOz(oz);
+        const { mg } = await fetchTodayCaffeineMgSumForCurrentUser();
+        setStoredCaffeineMg(mg);
       }
       router.refresh();
       setToast(toastWaterLogged(row.valueOz ?? 0));
@@ -205,7 +225,6 @@ export default function HydrationTracker({
     },
     onError: (err: Error) => {
       console.error("[hydration] Water log failed:", err);
-      window.alert(err.message);
       setToast(err.message);
       window.setTimeout(() => setToast(null), 3200);
     },
@@ -220,7 +239,7 @@ export default function HydrationTracker({
       const row: DailyLogEntry = {
         id: crypto.randomUUID(),
         recordedAt: new Date().toISOString(),
-        category: "hydration",
+        category: "caffeine",
         label,
         notes: String(mg),
         entryType: ENTRY_TYPE_CAFFEINE,
@@ -240,6 +259,10 @@ export default function HydrationTracker({
         ...prev,
       ]);
       await qc.invalidateQueries({ queryKey: qk.dailyLogs });
+      if (supabaseConfigured) {
+        const { mg: totalMg } = await fetchTodayCaffeineMgSumForCurrentUser();
+        setStoredCaffeineMg(totalMg);
+      }
       router.refresh();
       const mg =
         preset === "coffee" ? CAFFEINE_COFFEE_MG : CAFFEINE_ENERGY_OR_TEA_MG;
@@ -248,7 +271,6 @@ export default function HydrationTracker({
     },
     onError: (err: Error) => {
       console.error("[hydration] Caffeine log failed:", err);
-      window.alert(err.message);
       setToast(err.message);
       window.setTimeout(() => setToast(null), 3200);
     },
@@ -305,7 +327,7 @@ export default function HydrationTracker({
       const row: DailyLogEntry = {
         id: crypto.randomUUID(),
         recordedAt: new Date().toISOString(),
-        category: "hydration",
+        category: "caffeine",
         label,
         notes: String(mg),
         entryType: ENTRY_TYPE_CAFFEINE,
@@ -437,7 +459,7 @@ export default function HydrationTracker({
 
       <div className={compact ? "mt-1" : "mt-5"}>
         <p className="text-center font-mono text-4xl font-black tabular-nums text-slate-900">
-          {showWaterPlaceholder ? (
+          {showTotalsPlaceholder ? (
             <span className="text-slate-400">…</span>
           ) : (
             <>
@@ -451,7 +473,7 @@ export default function HydrationTracker({
             <button
               key={oz}
               type="button"
-              disabled={caffeineBusy || showWaterPlaceholder}
+              disabled={caffeineBusy || showTotalsPlaceholder}
               onClick={() => quickAddOz(oz)}
               className={`relative flex min-h-[56px] min-w-[5.5rem] flex-col items-center justify-center rounded-2xl border-4 border-black px-4 text-xl font-black text-white shadow-md transition hover:bg-sky-700 disabled:opacity-50 ${
                 flashOz === oz ? "bg-emerald-600 ring-2 ring-emerald-300" : "bg-sky-600"
@@ -480,13 +502,13 @@ export default function HydrationTracker({
             Caffeine (approx.)
           </p>
           <p className="mt-1 text-center font-mono text-2xl font-black tabular-nums text-amber-950">
-            {showWaterPlaceholder ? "…" : `${caffeineMgToday}`}
+            {showTotalsPlaceholder ? "…" : `${currentCaffeineMg}`}
             <span className="text-base font-bold text-amber-900/90"> mg today</span>
           </p>
           <div className="mt-3 flex flex-wrap justify-center gap-3">
             <button
               type="button"
-              disabled={caffeineBusy || showWaterPlaceholder}
+              disabled={caffeineBusy || showTotalsPlaceholder}
               onClick={() => logCaffeine("coffee")}
               className={`relative flex min-h-[56px] min-w-[10rem] max-w-full flex-col items-center justify-center rounded-2xl border-4 border-amber-900 px-3 py-2 text-base font-black text-amber-950 shadow-md transition hover:bg-amber-100 disabled:opacity-50 ${
                 flashCaffeine === "coffee"
@@ -504,7 +526,7 @@ export default function HydrationTracker({
             </button>
             <button
               type="button"
-              disabled={caffeineBusy || showWaterPlaceholder}
+              disabled={caffeineBusy || showTotalsPlaceholder}
               onClick={() => logCaffeine("energy")}
               className={`relative flex min-h-[56px] min-w-[10rem] max-w-full flex-col items-center justify-center rounded-2xl border-4 border-orange-800 px-3 py-2 text-base font-black text-orange-950 shadow-md transition hover:bg-orange-100 disabled:opacity-50 ${
                 flashCaffeine === "energy"
@@ -530,7 +552,7 @@ export default function HydrationTracker({
         <div className="mb-1 flex items-center justify-between text-xs font-semibold uppercase tracking-wide text-slate-600">
           <span>Water goal</span>
           <span className="tabular-nums text-slate-900">
-            {showWaterPlaceholder ? "…" : currentWaterIntake} / {waterGoalOz} oz
+            {showTotalsPlaceholder ? "…" : currentWaterIntake} / {waterGoalOz} oz
           </span>
         </div>
         <div

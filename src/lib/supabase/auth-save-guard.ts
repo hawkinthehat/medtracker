@@ -16,9 +16,6 @@ export async function requireAuthUserForSave(
     data: { user },
   } = await sb.auth.getUser();
   if (!user?.id) {
-    if (typeof window !== "undefined") {
-      window.alert("Please Log In to Save Progress");
-    }
     logDataNotSavedNoUser();
     return null;
   }

@@ -1,6 +1,9 @@
 import type { DailyLogEntry } from "@/lib/types";
 import type { MedicationLogRow } from "@/lib/supabase/medication-logs";
-import { ENTRY_TYPE_WATER } from "@/lib/daily-log-entry-type";
+import {
+  ENTRY_TYPE_CAFFEINE,
+  ENTRY_TYPE_WATER,
+} from "@/lib/daily-log-entry-type";
 import { isWithinLastDays } from "@/lib/clinical-summary-stats";
 
 export const WATER_OZ_LABEL = "Water (oz)";
@@ -34,6 +37,14 @@ export function sumWaterOzToday(
   let oz = 0;
   for (const e of dailyLogs) {
     if (!isSameLocalCalendarDay(e.recordedAt, ref)) continue;
+
+    if (
+      e.entryType === ENTRY_TYPE_CAFFEINE ||
+      e.entryType === "caffeine" ||
+      e.category === "caffeine"
+    ) {
+      continue;
+    }
 
     if (e.entryType === ENTRY_TYPE_WATER || e.entryType === "water") {
       if (e.label === LEGACY_GLASS_LABEL) {
