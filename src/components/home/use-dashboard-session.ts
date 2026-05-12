@@ -38,6 +38,7 @@ export function useDashboardSession() {
       if (event === "SIGNED_IN") {
         router.refresh();
         void qc.invalidateQueries({ queryKey: qk.dailyLogs });
+        void qc.invalidateQueries({ queryKey: qk.hydrationTotalsTodayRoot });
         void qc.invalidateQueries({ queryKey: qk.dailyLogDogWalkCountToday });
         void qc.invalidateQueries({ queryKey: qk.medicationLogs });
         void qc.invalidateQueries({ queryKey: qk.activityToday });
@@ -52,5 +53,9 @@ export function useDashboardSession() {
   const countersEnabled =
     sessionResolved && supabaseConfigured && sessionUser !== null;
 
-  return { showAuthGate, countersEnabled };
+  return {
+    showAuthGate,
+    countersEnabled,
+    sessionUserId: sessionUser?.id ?? null,
+  };
 }

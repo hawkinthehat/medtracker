@@ -63,15 +63,25 @@ export default function HydrationTracker({
 
   const [sessionUser, setSessionUser] = useState<User | null>(null);
   const [sessionResolved, setSessionResolved] = useState(false);
-  /** Today's oz from summed `daily_logs` (`entry_type` = water). */
-  const [storedWaterOz, setStoredWaterOz] = useState(0);
-  /** Today's caffeine mg from summed `daily_logs` (`entry_type` = caffeine). */
-  const [storedCaffeineMg, setStoredCaffeineMg] = useState(0);
-  /** Today's sodium mg from summed `daily_logs` (`entry_type` = sodium). */
-  const [storedSodiumMg, setStoredSodiumMg] = useState(0);
-  const [hydrationTotalsLoaded, setHydrationTotalsLoaded] = useState(false);
 
-  const [toast, setToast] = useState<string | null>(null);
+  const hydrationTotalsQuery = useQuery({
+    queryKey: [
+      ...qk.hydrationTotalsTodayRoot,
+      sessionUser?.id ?? "none",
+      homeTotalsRefreshKey,
+    ],
+    queryFn: fetchTodayHydrationTotalsFromDailyLogs,
+    enabled: Boolean(
+      supabaseConfigured && sessionResolved && sessionUser,
+    ),
+    staleTime: 30_000,
+    gcTime: 1000 * 60 * 60 * 24,
+    refetchOnWindowFocus: true,
+  });
+
+  const storedWaterOz = hydrationTotalsQuery.data?.oz ?? 0;
+  const storedCaffeineMg = hydrationTotalsQuery.data?.caffeineMg ?? 0;
+  const storedSodiumMg = hydrationTotalsQuery.data?.sodiumMg ?? 0;
 
   useEffect(() => {
     const sb = getSupabaseBrowserClient();
@@ -98,34 +108,17 @@ export default function HydrationTracker({
     };
   }, []);
 
-  useEffect(() => {
-    let cancelled = false;
-    async function loadTodayHydrationTotalsFromDb() {
-      if (!supabaseConfigured) {
-        setHydrationTotalsLoaded(true);
-        return;
-      }
-      if (!sessionUser) {
-        setStoredWaterOz(0);
-        setStoredCaffeineMg(0);
-        setStoredSodiumMg(0);
-        setHydrationTotalsLoaded(true);
-        return;
-      }
-      setHydrationTotalsLoaded(false);
-      const totals = await fetchTodayHydrationTotalsFromDailyLogs();
-      if (!cancelled) {
-        setStoredWaterOz(totals.oz);
-        setStoredCaffeineMg(totals.caffeineMg);
-        setStoredSodiumMg(totals.sodiumMg);
-        setHydrationTotalsLoaded(true);
-      }
-    }
-    void loadTodayHydrationTotalsFromDb();
-    return () => {
-      cancelled = true;
-    };
-  }, [supabaseConfigured, sessionUser, homeTotalsRefreshKey]);
+  const hydrationTotalsLoaded =
+    !supabaseConfigured ||
+    !sessionUser ||
+    hydrationTotalsQuery.data != null ||
+    hydrationTotalsQuery.isError;
+
+  const needsSignIn = supabaseConfigured && sessionResolved && !sessionUser;
+  const showTotalsPlaceholder =
+    supabaseConfigured && !!sessionUser && !hydrationTotalsLoaded;
+
+  const [toast, setToast] = useState<string | null>(null);
 
   const { data: dailyLogs = [] } = useQuery({
     queryKey: qk.dailyLogs,
@@ -181,10 +174,6 @@ export default function HydrationTracker({
     "coffee" | "energy" | null
   >(null);
 
-  const needsSignIn = supabaseConfigured && sessionResolved && !sessionUser;
-  const showTotalsPlaceholder =
-    supabaseConfigured && !!sessionUser && !hydrationTotalsLoaded;
-
   const currentWaterIntake =
     !supabaseConfigured || needsSignIn ? baselineOz + optimisticOz : baselineOz;
 
@@ -217,6 +206,7 @@ export default function HydrationTracker({
         notes: String(amountOz),
         entryType: ENTRY_TYPE_WATER,
         valueOz: amountOz,
+        unit: "oz",
       };
       const result = await persistDailyLogToSupabase(row);
       if (!result.ok) {
@@ -231,12 +221,8 @@ export default function HydrationTracker({
       setToast(null);
       await qc.invalidateQueries({ queryKey: qk.dailyLogs });
       await qc.refetchQueries({ queryKey: qk.dailyLogs });
-      if (supabaseConfigured) {
-        const totals = await fetchTodayHydrationTotalsFromDailyLogs();
-        setStoredWaterOz(totals.oz);
-        setStoredCaffeineMg(totals.caffeineMg);
-        setStoredSodiumMg(totals.sodiumMg);
-      }
+      void qc.invalidateQueries({ queryKey: qk.hydrationTotalsTodayRoot });
+      await qc.refetchQueries({ queryKey: qk.hydrationTotalsTodayRoot });
       router.refresh();
       setToast(toastWaterLogged(amountOz));
       window.setTimeout(() => setToast(null), 4500);
@@ -262,6 +248,7 @@ export default function HydrationTracker({
         notes: String(mg),
         entryType: ENTRY_TYPE_CAFFEINE,
         valueMg: mg,
+        unit: "mg",
       };
       const result = await persistDailyLogToSupabase(row);
       if (!result.ok) {
@@ -276,12 +263,8 @@ export default function HydrationTracker({
       setToast(null);
       await qc.invalidateQueries({ queryKey: qk.dailyLogs });
       await qc.refetchQueries({ queryKey: qk.dailyLogs });
-      if (supabaseConfigured) {
-        const totals = await fetchTodayHydrationTotalsFromDailyLogs();
-        setStoredWaterOz(totals.oz);
-        setStoredCaffeineMg(totals.caffeineMg);
-        setStoredSodiumMg(totals.sodiumMg);
-      }
+      void qc.invalidateQueries({ queryKey: qk.hydrationTotalsTodayRoot });
+      await qc.refetchQueries({ queryKey: qk.hydrationTotalsTodayRoot });
       router.refresh();
       const mg =
         preset === "coffee" ? CAFFEINE_COFFEE_MG : CAFFEINE_ENERGY_OR_TEA_MG;
@@ -314,6 +297,7 @@ export default function HydrationTracker({
         notes: String(amount),
         entryType: ENTRY_TYPE_WATER,
         valueOz: amount,
+        unit: "oz",
       };
       qc.setQueryData<DailyLogEntry[]>(qk.dailyLogs, (prev = []) => [
         row,
@@ -351,6 +335,7 @@ export default function HydrationTracker({
         notes: String(mg),
         entryType: ENTRY_TYPE_CAFFEINE,
         valueMg: mg,
+        unit: "mg",
       };
       qc.setQueryData<DailyLogEntry[]>(qk.dailyLogs, (prev = []) => [
         row,

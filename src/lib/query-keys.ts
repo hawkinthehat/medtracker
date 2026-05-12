@@ -6,6 +6,11 @@ export const qk = {
   orthostatic: ["orthostatic"] as const,
   journal: ["journal"] as const,
   dailyLogs: ["dailyLogs"] as const,
+  /**
+   * Prefix for today’s hydration totals from `daily_logs` — each series uses
+   * `.eq("entry_type", "water" | "caffeine" | "sodium")` so bars never mix.
+   */
+  hydrationTotalsTodayRoot: ["dailyLogs", "hydrationTotalsToday"] as const,
   /** Server sum: sodium mg today (`daily_logs` where `entry_type` = sodium). */
   dailyLogTodaySodiumMgSum: (userId: string) =>
     ["dailyLogs", "todaySodiumMgSum", userId] as const,

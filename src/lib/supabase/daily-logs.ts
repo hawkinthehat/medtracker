@@ -87,49 +87,18 @@ export async function fetchDailyLogsFromSupabase(): Promise<DailyLogEntry[]> {
   return ((data ?? []) as DailyLogRow[]).map(rowToEntry);
 }
 
-function sumWaterOzFromEntriesToday(entries: DailyLogEntry[]): number {
-  let oz = 0;
-  for (const e of entries) {
-    if (e.entryType !== ENTRY_TYPE_WATER && e.entryType !== "water") continue;
+function sumNumericColumnFromRows(
+  data: { value?: number | null; notes?: string | null }[] | null,
+): number {
+  let total = 0;
+  for (const row of data ?? []) {
     const fromVal =
-      e.valueOz != null && Number.isFinite(e.valueOz) && e.valueOz > 0
-        ? Math.round(e.valueOz)
-        : Number.parseInt(String(e.notes ?? "").trim(), 10);
-    if (Number.isFinite(fromVal) && fromVal > 0) oz += fromVal;
+      row.value != null && Number.isFinite(Number(row.value))
+        ? Number(row.value)
+        : Number.parseInt(String(row.notes ?? "").trim(), 10);
+    if (Number.isFinite(fromVal) && fromVal > 0) total += fromVal;
   }
-  return oz;
-}
-
-function sumCaffeineMgFromEntriesToday(entries: DailyLogEntry[]): number {
-  let mg = 0;
-  for (const e of entries) {
-    if (
-      e.entryType !== ENTRY_TYPE_CAFFEINE &&
-      e.entryType !== "caffeine" &&
-      e.category !== "caffeine"
-    ) {
-      continue;
-    }
-    const fromVal =
-      e.valueMg != null && Number.isFinite(e.valueMg) && e.valueMg > 0
-        ? Math.round(e.valueMg)
-        : Number.parseInt(String(e.notes ?? "").trim(), 10);
-    if (Number.isFinite(fromVal) && fromVal > 0) mg += fromVal;
-  }
-  return mg;
-}
-
-function sumSodiumMgFromEntriesToday(entries: DailyLogEntry[]): number {
-  let mg = 0;
-  for (const e of entries) {
-    if (e.entryType !== ENTRY_TYPE_SODIUM && e.entryType !== "sodium") continue;
-    const fromVal =
-      e.valueMg != null && Number.isFinite(e.valueMg) && e.valueMg > 0
-        ? Math.round(e.valueMg)
-        : Number.parseInt(String(e.notes ?? "").trim(), 10);
-    if (Number.isFinite(fromVal) && fromVal > 0) mg += fromVal;
-  }
-  return mg;
+  return total;
 }
 
 /** All `daily_logs` for the signed-in user’s local calendar day. */
@@ -164,19 +133,55 @@ export async function fetchTodayDailyLogsForCurrentUser(): Promise<{
   };
 }
 
-/** One fetch of today’s `daily_logs`, then sums for water (oz), caffeine (mg), sodium (mg). */
+/** Three parallel reads of `daily_logs` for today, each filtered by `entry_type`. */
 export async function fetchTodayHydrationTotalsFromDailyLogs(): Promise<{
   oz: number;
   caffeineMg: number;
   sodiumMg: number;
   hasSession: boolean;
 }> {
-  const { entries, hasSession } = await fetchTodayDailyLogsForCurrentUser();
+  const sb = getSupabaseBrowserClient();
+  if (!sb) {
+    return { oz: 0, caffeineMg: 0, sodiumMg: 0, hasSession: false };
+  }
+
+  const uid = await resolveSupabaseUserId(sb);
+  if (!uid) {
+    return { oz: 0, caffeineMg: 0, sodiumMg: 0, hasSession: false };
+  }
+
+  const { startIso, endIso } = localCalendarDayRecordedAtBounds();
+
+  const forEntryType = (entryType: string) =>
+    sb
+      .from("daily_logs")
+      .select("value,notes")
+      .eq("user_id", uid)
+      .eq("entry_type", entryType)
+      .gte("recorded_at", startIso)
+      .lt("recorded_at", endIso);
+
+  const [wRes, cRes, sRes] = await Promise.all([
+    forEntryType(ENTRY_TYPE_WATER),
+    forEntryType(ENTRY_TYPE_CAFFEINE),
+    forEntryType(ENTRY_TYPE_SODIUM),
+  ]);
+
+  if (wRes.error) {
+    console.warn("today daily_logs water sum:", wRes.error.message);
+  }
+  if (cRes.error) {
+    console.warn("today daily_logs caffeine sum:", cRes.error.message);
+  }
+  if (sRes.error) {
+    console.warn("today daily_logs sodium sum:", sRes.error.message);
+  }
+
   return {
-    oz: sumWaterOzFromEntriesToday(entries),
-    caffeineMg: sumCaffeineMgFromEntriesToday(entries),
-    sodiumMg: sumSodiumMgFromEntriesToday(entries),
-    hasSession,
+    oz: wRes.error ? 0 : sumNumericColumnFromRows(wRes.data),
+    caffeineMg: cRes.error ? 0 : sumNumericColumnFromRows(cRes.data),
+    sodiumMg: sRes.error ? 0 : sumNumericColumnFromRows(sRes.data),
+    hasSession: true,
   };
 }
 
@@ -279,7 +284,7 @@ export async function persistDailyLogToSupabase(
       user_id: uid,
       recorded_at: recordedAtIso,
       entry_type: ENTRY_TYPE_WATER,
-      unit: "oz",
+      unit: entry.unit ?? "oz",
       category: entry.category,
       label: entry.label,
       value: oz,
@@ -304,7 +309,7 @@ export async function persistDailyLogToSupabase(
       user_id: uid,
       recorded_at: recordedAtIso,
       entry_type: ENTRY_TYPE_CAFFEINE,
-      unit: "mg",
+      unit: entry.unit ?? "mg",
       category: entry.category,
       label: entry.label,
       value: mg,
@@ -329,7 +334,7 @@ export async function persistDailyLogToSupabase(
       user_id: uid,
       recorded_at: recordedAtIso,
       entry_type: ENTRY_TYPE_SODIUM,
-      unit: "mg",
+      unit: entry.unit ?? "mg",
       category: entry.category,
       label: entry.label,
       value: mg,

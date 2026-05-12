@@ -161,6 +161,7 @@ export default function QuickRelief() {
           notes: String(THERMOTABS_SODIUM_MG),
           entryType: ENTRY_TYPE_SODIUM,
           valueMg: THERMOTABS_SODIUM_MG,
+          unit: "mg",
         };
         const result = await persistDailyLogToSupabase(row);
         if (!result.ok) {
@@ -226,6 +227,8 @@ export default function QuickRelief() {
         ]);
         void qc.invalidateQueries({ queryKey: qk.dailyLogs });
         void qc.refetchQueries({ queryKey: qk.dailyLogs });
+        void qc.invalidateQueries({ queryKey: qk.hydrationTotalsTodayRoot });
+        void qc.refetchQueries({ queryKey: qk.hydrationTotalsTodayRoot });
         const t = formatClock(data.row.recordedAt);
         setToast(toastPrnLogged(data.def.displayName, t));
         return;

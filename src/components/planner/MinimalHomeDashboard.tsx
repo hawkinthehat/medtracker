@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { ChevronDown, ClipboardList } from "lucide-react";
 import PulseStrip from "@/components/planner/PulseStrip";
@@ -33,7 +33,10 @@ import {
 } from "@/components/ui/sheet";
 import { qk } from "@/lib/query-keys";
 import type { DailyLogEntry, EpisodeEntry } from "@/lib/types";
-import { persistDailyLogToSupabase } from "@/lib/supabase/daily-logs";
+import {
+  fetchTodayHydrationTotalsFromDailyLogs,
+  persistDailyLogToSupabase,
+} from "@/lib/supabase/daily-logs";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser-client";
 import {
   atmosphericPressureFooter,
@@ -71,7 +74,7 @@ export default function MinimalHomeDashboard({
   bypassBarometerAdvisory = false,
 }: MinimalHomeDashboardProps) {
   const qc = useQueryClient();
-  const { showAuthGate, countersEnabled } = useDashboardSession();
+  const { showAuthGate, countersEnabled, sessionUserId } = useDashboardSession();
   const [homeTotalsRefreshKey, setHomeTotalsRefreshKey] = useState(0);
   const [displayFirstName, setDisplayFirstName] = useState("");
   const [episodeSketchOpen, setEpisodeSketchOpen] = useState(false);
@@ -113,10 +116,24 @@ export default function MinimalHomeDashboard({
   useEffect(() => {
     if (!countersEnabled) return;
     void qc.invalidateQueries({ queryKey: qk.dailyLogs });
+    void qc.invalidateQueries({ queryKey: qk.hydrationTotalsTodayRoot });
     void qc.invalidateQueries({ queryKey: qk.dailyLogDogWalkCountToday });
     void qc.invalidateQueries({ queryKey: qk.activityToday });
     setHomeTotalsRefreshKey((k) => k + 1);
   }, [countersEnabled, qc]);
+
+  useQuery({
+    queryKey: [
+      ...qk.hydrationTotalsTodayRoot,
+      sessionUserId ?? "none",
+      homeTotalsRefreshKey,
+    ],
+    queryFn: fetchTodayHydrationTotalsFromDailyLogs,
+    enabled: Boolean(countersEnabled && sessionUserId),
+    staleTime: 30_000,
+    gcTime: 1000 * 60 * 60 * 24,
+    refetchOnWindowFocus: true,
+  });
 
   function openDoseModal(m: SavedMedication, tab: DoseModalTab) {
     setDoseModalTab(tab);
