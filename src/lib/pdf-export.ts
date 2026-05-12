@@ -879,7 +879,7 @@ export async function generateDoctorSpecialistPdf(
     doc.setFontSize(9);
     doc.setTextColor(71, 85, 105);
     doc.text(
-      `${s.sketchSide ?? "?"} · ${s.sketchBrushPreset ?? "?"} · ${new Date(s.recordedAt).toLocaleString()}`,
+      `${s.sketchSide ?? "?"} · ${new Date(s.recordedAt).toLocaleString()}`,
       imgX,
       imgY - 2
     );

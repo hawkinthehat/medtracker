@@ -84,7 +84,6 @@ function buildSketchRow(
     ].join("\n"),
     sketchPngBase64: pngBase64,
     sketchSide: side,
-    sketchBrushPreset: brush,
   };
 }
 

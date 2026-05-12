@@ -11,7 +11,7 @@ import {
 } from "@/lib/supabase/auth-save-guard";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser-client";
 import { localCalendarDayRecordedAtBounds } from "@/lib/hydration-summary";
-import { DOG_WALK_MARKER } from "@/lib/movement-tracking";
+import { DOG_WALK_DAILY_LOG_LABEL } from "@/lib/movement-tracking";
 
 type DailyLogRow = {
   id: string;
@@ -21,7 +21,6 @@ type DailyLogRow = {
   notes: string | null;
   sketch_png_base64?: string | null;
   sketch_side?: string | null;
-  sketch_brush_preset?: string | null;
   user_id?: string | null;
   entry_type?: string | null;
   value?: number | null;
@@ -29,7 +28,6 @@ type DailyLogRow = {
 
 function rowToEntry(row: DailyLogRow): DailyLogEntry {
   const side = row.sketch_side;
-  const brush = row.sketch_brush_preset;
   const v =
     row.value != null && Number.isFinite(Number(row.value))
       ? Number(row.value)
@@ -44,7 +42,6 @@ function rowToEntry(row: DailyLogRow): DailyLogEntry {
     sketchPngBase64: row.sketch_png_base64 ?? undefined,
     sketchSide:
       side === "front" || side === "back" ? side : undefined,
-    sketchBrushPreset: brush ?? undefined,
     userId: row.user_id ?? undefined,
     entryType: et,
   };
@@ -68,7 +65,7 @@ export async function fetchDailyLogsFromSupabase(): Promise<DailyLogEntry[]> {
   const { data, error } = await sb
     .from("daily_logs")
     .select(
-      "id,recorded_at,category,label,notes,sketch_png_base64,sketch_side,sketch_brush_preset,user_id,entry_type,value",
+      "id,recorded_at,category,label,notes,sketch_png_base64,sketch_side,user_id,entry_type,value",
     )
     .order("recorded_at", { ascending: false })
     .limit(800);
@@ -100,6 +97,7 @@ export async function fetchTodayWaterValueSumForCurrentUser(): Promise<{
     .select("value,notes")
     .eq("user_id", uid)
     .eq("entry_type", ENTRY_TYPE_WATER)
+    .eq("category", "hydration")
     .gte("recorded_at", startIso)
     .lt("recorded_at", endIso);
 
@@ -139,6 +137,7 @@ export async function fetchTodayCaffeineMgSumForCurrentUser(): Promise<{
     .select("value,notes")
     .eq("user_id", uid)
     .eq("entry_type", ENTRY_TYPE_CAFFEINE)
+    .eq("category", "caffeine")
     .gte("recorded_at", startIso)
     .lt("recorded_at", endIso);
 
@@ -161,9 +160,8 @@ export async function fetchTodayCaffeineMgSumForCurrentUser(): Promise<{
 }
 
 /**
- * Dog walks logged today: `entry_type = activity`, local calendar day, and
- * `notes` containing the dog-walk marker (PT uses the same entry type but a
- * different marker, so it is not counted here).
+ * Dog walks today: same user, local calendar day on `recorded_at`, and rows
+ * matching movement + activity + label "Dog Walk".
  */
 export async function fetchTodayDogWalkCountForCurrentUser(): Promise<{
   count: number;
@@ -177,17 +175,15 @@ export async function fetchTodayDogWalkCountForCurrentUser(): Promise<{
 
   const { startIso, endIso } = localCalendarDayRecordedAtBounds();
 
-  const escaped = DOG_WALK_MARKER.replace(/%/g, "\\%").replace(/_/g, "\\_");
-  const likePattern = `%${escaped}%`;
-
   const { count, error } = await sb
     .from("daily_logs")
     .select("id", { count: "exact", head: true })
     .eq("user_id", uid)
     .eq("entry_type", ENTRY_TYPE_ACTIVITY)
+    .eq("category", "movement")
+    .eq("label", DOG_WALK_DAILY_LOG_LABEL)
     .gte("recorded_at", startIso)
-    .lt("recorded_at", endIso)
-    .like("notes", likePattern);
+    .lt("recorded_at", endIso);
 
   if (error) {
     console.warn("today dog walk count fetch:", error.message);
@@ -239,48 +235,126 @@ export async function persistDailyLogToSupabase(
     return { ok: false, error: "not_signed_in" };
   }
   const uid = authUser.id;
-
-  // Wall-clock insert time for `daily_logs.recorded_at` (column name in Supabase).
   const recordedAtIso = new Date().toISOString();
-  const payload: Record<string, unknown> = {
-    id: entry.id,
-    recorded_at: recordedAtIso,
-    category: entry.category,
-    label: entry.label,
-    notes: entry.notes ?? null,
-    sketch_png_base64: entry.sketchPngBase64 ?? null,
-    sketch_side: entry.sketchSide ?? null,
-    sketch_brush_preset: entry.sketchBrushPreset ?? null,
-    entry_type: resolveDailyLogEntryType(entry),
-    user_id: uid,
-  };
-
   const et = resolveDailyLogEntryType(entry);
+
+  function logInsertFailure(
+    payload: Record<string, unknown>,
+    err: { message: string; code?: string; details?: string; hint?: string },
+  ) {
+    console.error("[daily_logs] insert failed:", {
+      message: err.message,
+      code: err.code,
+      details: err.details,
+      hint: err.hint,
+      entry_type: payload.entry_type,
+    });
+  }
+
+  if (et === ENTRY_TYPE_WATER) {
+    const oz =
+      entry.valueOz ??
+      Number.parseInt(String(entry.notes ?? "").trim(), 10);
+    if (!Number.isFinite(oz) || oz <= 0) {
+      return { ok: false, error: "invalid_water_value" };
+    }
+    const payload = {
+      id: entry.id,
+      user_id: uid,
+      recorded_at: recordedAtIso,
+      entry_type: et,
+      category: entry.category,
+      value: oz,
+    };
+    const res = await sb.from("daily_logs").insert(payload);
+    if (res.error) {
+      logInsertFailure(payload, res.error);
+      return { ok: false, error: res.error.message };
+    }
+    return { ok: true };
+  }
+
   if (et === ENTRY_TYPE_CAFFEINE) {
     const mg =
       entry.valueMg ??
       Number.parseInt(String(entry.notes ?? "").trim(), 10);
-    if (Number.isFinite(mg) && mg > 0) {
-      payload.value = mg;
+    if (!Number.isFinite(mg) || mg <= 0) {
+      return { ok: false, error: "invalid_caffeine_value" };
     }
-  } else if (et === ENTRY_TYPE_WATER) {
-    const oz =
-      entry.valueOz ??
-      Number.parseInt(String(entry.notes ?? "").trim(), 10);
-    if (Number.isFinite(oz) && oz > 0) {
-      payload.value = oz;
+    const payload = {
+      id: entry.id,
+      user_id: uid,
+      recorded_at: recordedAtIso,
+      entry_type: et,
+      category: entry.category,
+      value: mg,
+    };
+    const res = await sb.from("daily_logs").insert(payload);
+    if (res.error) {
+      logInsertFailure(payload, res.error);
+      return { ok: false, error: res.error.message };
     }
+    return { ok: true };
+  }
+
+  if (
+    entry.category === "movement" &&
+    et === ENTRY_TYPE_ACTIVITY &&
+    entry.label === DOG_WALK_DAILY_LOG_LABEL
+  ) {
+    const payload = {
+      id: entry.id,
+      user_id: uid,
+      recorded_at: recordedAtIso,
+      entry_type: ENTRY_TYPE_ACTIVITY,
+      category: "movement",
+      label: DOG_WALK_DAILY_LOG_LABEL,
+    };
+    const res = await sb.from("daily_logs").insert(payload);
+    if (res.error) {
+      logInsertFailure(payload, res.error);
+      return { ok: false, error: res.error.message };
+    }
+    return { ok: true };
+  }
+
+  if (entry.category === "movement" && et === ENTRY_TYPE_ACTIVITY) {
+    const payload: Record<string, unknown> = {
+      id: entry.id,
+      user_id: uid,
+      recorded_at: recordedAtIso,
+      entry_type: ENTRY_TYPE_ACTIVITY,
+      category: "movement",
+      label: entry.label,
+      notes: entry.notes ?? null,
+    };
+    const res = await sb.from("daily_logs").insert(payload);
+    if (res.error) {
+      logInsertFailure(payload, res.error);
+      return { ok: false, error: res.error.message };
+    }
+    return { ok: true };
+  }
+
+  const payload: Record<string, unknown> = {
+    id: entry.id,
+    user_id: uid,
+    recorded_at: recordedAtIso,
+    entry_type: et,
+    category: entry.category,
+    label: entry.label,
+    notes: entry.notes ?? null,
+  };
+  if (entry.sketchPngBase64) {
+    payload.sketch_png_base64 = entry.sketchPngBase64;
+  }
+  if (entry.sketchSide) {
+    payload.sketch_side = entry.sketchSide;
   }
 
   const res = await sb.from("daily_logs").insert(payload);
   if (res.error) {
-    console.error("[daily_logs] insert failed:", {
-      message: res.error.message,
-      code: res.error.code,
-      details: res.error.details,
-      hint: res.error.hint,
-      entry_type: payload.entry_type,
-    });
+    logInsertFailure(payload, res.error);
     return { ok: false, error: res.error.message };
   }
   return { ok: true };

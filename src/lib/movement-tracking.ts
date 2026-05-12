@@ -1,4 +1,5 @@
 import type { DailyLogEntry, VitalRow } from "@/lib/types";
+import { ENTRY_TYPE_ACTIVITY } from "@/lib/daily-log-entry-type";
 import type { EnvironmentSnapshot } from "@/lib/environment-snapshot";
 
 /** Embedded in `daily_logs.notes` for analytics / counting across label changes. */
@@ -25,16 +26,21 @@ export function isSameLocalDay(iso: string, day: string): boolean {
   return calendarDayLocal(t) === day;
 }
 
-/** Dog walk rows: `entry_type` activity (or legacy unset) + dog-walk marker in notes. */
+/** Dog walks today: `movement` + `activity` + label "Dog Walk", or legacy notes marker. */
 export function countDogWalksToday(
   logs: DailyLogEntry[],
   day = calendarDayLocal(),
 ): number {
   return logs.filter((e) => {
     if (!isSameLocalDay(e.recordedAt, day)) return false;
-    if (!e.notes?.includes(DOG_WALK_MARKER)) return false;
-    if (e.entryType && e.entryType !== "activity") return false;
-    return true;
+    const modern =
+      e.entryType === ENTRY_TYPE_ACTIVITY &&
+      e.category === "movement" &&
+      e.label === DOG_WALK_DAILY_LOG_LABEL;
+    const legacy =
+      Boolean(e.notes?.includes(DOG_WALK_MARKER)) &&
+      (!e.entryType || e.entryType === ENTRY_TYPE_ACTIVITY);
+    return modern || legacy;
   }).length;
 }
 

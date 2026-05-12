@@ -30,7 +30,6 @@ import {
   calendarDayLocal,
   countDogWalksToday,
   DOG_WALK_DAILY_LOG_LABEL,
-  DOG_WALK_MARKER,
   getMorningHeartRateBpmToday,
   ptMarker,
   type PtSlot,
@@ -239,19 +238,11 @@ export default function MovementTracker() {
     setOptimisticWalkBump((b) => b + 1);
     setPendingWalk(true);
     try {
-      await fetchAndLogWeather().catch(() => {});
-
-      const recordedAt = new Date().toISOString();
-      const base =
-        `${getWalkNotesDefault().trim()}\n${DOG_WALK_MARKER}`.trim();
-      const notes = await appendWeatherNotes(base, { skipWeatherFetch: true });
-
       const row: DailyLogEntry = {
         id: crypto.randomUUID(),
-        recordedAt,
+        recordedAt: new Date().toISOString(),
         category: "movement",
         label: DOG_WALK_DAILY_LOG_LABEL,
-        notes,
         entryType: ENTRY_TYPE_ACTIVITY,
       };
 

@@ -95,7 +95,6 @@ export type DailyLogEntry = {
   /** Body symptom sketch (PNG base64, no data URL prefix) when saved from SymptomCanvas */
   sketchPngBase64?: string;
   sketchSide?: "front" | "back";
-  sketchBrushPreset?: string;
 };
 
 export type SpecialistFacility = "KU Medical Center" | "WashU";

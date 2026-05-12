@@ -8,9 +8,11 @@ import type {
 } from "@/lib/types";
 import {
   DOG_WALK_MARKER,
+  DOG_WALK_DAILY_LOG_LABEL,
   PT_MARKER_PREFIX,
   extractAmbientFromMovementNotes,
 } from "@/lib/movement-tracking";
+import { ENTRY_TYPE_ACTIVITY } from "@/lib/daily-log-entry-type";
 
 const ACTIVITY_LOOKBACK_MS = 6 * 60 * 60 * 1000;
 const MEAL_SYMPTOM_WINDOW_MS = 4 * 60 * 60 * 1000;
@@ -144,7 +146,10 @@ export function computeMovementWeatherNarrative(
       (e.category === "activity" || e.category === "movement") &&
       Boolean(
         e.notes?.includes(DOG_WALK_MARKER) ||
-          e.notes?.includes(PT_MARKER_PREFIX),
+          e.notes?.includes(PT_MARKER_PREFIX) ||
+          (e.category === "movement" &&
+            e.entryType === ENTRY_TYPE_ACTIVITY &&
+            e.label === DOG_WALK_DAILY_LOG_LABEL),
       ),
   );
   if (day.length === 0) return null;
