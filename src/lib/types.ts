@@ -71,6 +71,7 @@ export type DailyLogCategory =
   | "food"
   | "hydration"
   | "caffeine"
+  | "sodium"
   | "medication"
   | "sleep"
   | "movement"
@@ -84,11 +85,11 @@ export type DailyLogEntry = {
   /** Short label, e.g. meal or activity name */
   label: string;
   notes?: string;
-  /** Optional semantic tag (matches Supabase `entry_type`). */
+  /** Optional semantic tag (maps to Supabase `daily_logs.log_entry_type`). */
   entryType?: string;
   /** Fluid ounces when logging water (`daily_logs.value`). */
   valueOz?: number;
-  /** Caffeine milligrams when `entry_type` is `caffeine` (`daily_logs.value`). */
+  /** Caffeine milligrams when `log_entry_type` is `caffeine` (`daily_logs.value`). */
   valueMg?: number;
   /** Owner when row was inserted authenticated (matches Supabase `user_id`). */
   userId?: string;

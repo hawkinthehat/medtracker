@@ -200,6 +200,15 @@ export default function MinimalHomeDashboard({
           >
             Sign in
           </Link>
+          <p className="text-sm font-medium text-slate-600">
+            New here?{" "}
+            <Link
+              href="/auth?next=/"
+              className="font-bold text-sky-700 underline underline-offset-2"
+            >
+              Create an account
+            </Link>
+          </p>
         </div>
       </div>
     );

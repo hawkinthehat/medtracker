@@ -23,14 +23,17 @@ export function useDashboardSession() {
       setSessionResolved(true);
       return;
     }
-    void sb.auth.getSession().then(({ data: { session } }) => {
-      setSessionUser(session?.user ?? null);
+    void sb.auth.getUser().then(({ data: { user } }) => {
+      setSessionUser(user ?? null);
       setSessionResolved(true);
     });
     const {
       data: { subscription },
-    } = sb.auth.onAuthStateChange((event, session) => {
-      setSessionUser(session?.user ?? null);
+    } = sb.auth.onAuthStateChange(async (event) => {
+      const {
+        data: { user },
+      } = await sb.auth.getUser();
+      setSessionUser(user ?? null);
       setSessionResolved(true);
       if (event === "SIGNED_IN") {
         router.refresh();

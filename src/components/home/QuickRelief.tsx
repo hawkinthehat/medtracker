@@ -15,6 +15,7 @@ import {
 } from "@/lib/quick-relief";
 import type { PainMapSymptomCategory } from "@/lib/symptom-map";
 import type { SavedMedication } from "@/lib/seed-medications";
+import type { DailyLogEntry } from "@/lib/types";
 import { fetchMedicationsQuery } from "@/lib/medications-query";
 import { fetchMedicationProfilesFromSupabase } from "@/lib/supabase/medication-history";
 import {
@@ -22,6 +23,11 @@ import {
   insertMedicationLogRow,
   type MedicationLogRow,
 } from "@/lib/supabase/medication-logs";
+import { persistDailyLogToSupabase } from "@/lib/supabase/daily-logs";
+import { dailyLogsQueryFn } from "@/lib/daily-logs-query-fn";
+import { ENTRY_TYPE_SODIUM } from "@/lib/daily-log-entry-type";
+import { THERMOTABS_SODIUM_MG } from "@/lib/hydration-summary";
+import { toastMessageForPersistFailure } from "@/lib/supabase/auth-save-guard";
 import { fetchMostRecentPainMapTouchSince } from "@/lib/pain-map-db";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser-client";
 import { FeatureHelpTrigger } from "@/components/FeatureHelpModal";
@@ -68,14 +74,58 @@ export default function QuickRelief() {
     refetchOnWindowFocus: true,
   });
 
+  const { data: dailyLogs = [] } = useQuery({
+    queryKey: qk.dailyLogs,
+    queryFn: dailyLogsQueryFn,
+    staleTime: 60_000,
+    gcTime: 1000 * 60 * 60 * 24 * 30,
+    refetchOnWindowFocus: true,
+  });
+
   const lastByDef = useMemo(() => {
     const map = new Map<string, MedicationLogRow>();
     for (const def of QUICK_RELIEF_DEFS) {
       const hit = logs.find((l) => l.medicationName === def.displayName);
-      if (hit) map.set(def.displayName, hit);
+      if (def.displayName !== "Thermotabs") {
+        if (hit) map.set(def.displayName, hit);
+        continue;
+      }
+      let best = hit ?? null;
+      for (const e of dailyLogs) {
+        if (
+          e.label !== "Thermotabs" ||
+          (e.entryType !== ENTRY_TYPE_SODIUM &&
+            e.entryType !== "sodium" &&
+            e.category !== "sodium")
+        ) {
+          continue;
+        }
+        const synthetic: MedicationLogRow = {
+          id: e.id,
+          recordedAt: e.recordedAt,
+          medicationName: "Thermotabs",
+          dosageLabel: "—",
+          period: "AM",
+          medicationId: null,
+          linkedBodyPartId: null,
+          linkedPainCategory: null,
+          linkedPainIntensity: null,
+          linkSummary: null,
+          status: null,
+          userId: e.userId ?? null,
+        };
+        if (
+          !best ||
+          new Date(synthetic.recordedAt).getTime() >
+            new Date(best.recordedAt).getTime()
+        ) {
+          best = synthetic;
+        }
+      }
+      if (best) map.set(def.displayName, best);
     }
     return map;
-  }, [logs]);
+  }, [logs, dailyLogs]);
 
   useEffect(() => {
     if (!toast) return;
@@ -91,11 +141,36 @@ export default function QuickRelief() {
 
   const logMutation = useMutation({
     mutationFn: async (def: QuickReliefDef) => {
-      if (!getSupabaseBrowserClient()) {
+      const sb = getSupabaseBrowserClient();
+      if (!sb) {
         throw new Error(
           "Connect Supabase in your environment to save PRN logs to your chart.",
         );
       }
+      const {
+        data: { user },
+      } = await sb.auth.getUser();
+      if (!user?.id) {
+        throw new Error("not_signed_in");
+      }
+
+      if (def.displayName === "Thermotabs") {
+        const row: DailyLogEntry = {
+          id: crypto.randomUUID(),
+          recordedAt: new Date().toISOString(),
+          category: "sodium",
+          label: "Thermotabs",
+          notes: String(THERMOTABS_SODIUM_MG),
+          entryType: ENTRY_TYPE_SODIUM,
+          valueMg: THERMOTABS_SODIUM_MG,
+        };
+        const result = await persistDailyLogToSupabase(row);
+        if (!result.ok) {
+          throw new Error(result.error ?? "Could not save log.");
+        }
+        return { kind: "daily_sodium" as const, row, def };
+      }
+
       const meds =
         qc.getQueryData<SavedMedication[]>(qk.medications) ?? medications;
       const profs =
@@ -143,22 +218,32 @@ export default function QuickRelief() {
       if (!res.ok) {
         throw new Error(res.error ?? "Could not save log.");
       }
-      return { row: res.row!, def };
+      return { kind: "medication" as const, row: res.row!, def };
     },
-    onSuccess: ({ row, def }) => {
+    onSuccess: (data) => {
+      if (data.kind === "daily_sodium") {
+        qc.setQueryData<DailyLogEntry[]>(qk.dailyLogs, (prev = []) => [
+          data.row,
+          ...prev.filter((x) => x.id !== data.row.id),
+        ]);
+        void qc.invalidateQueries({ queryKey: qk.dailyLogs });
+        const t = formatClock(data.row.recordedAt);
+        setToast(toastPrnLogged(data.def.displayName, t));
+        return;
+      }
       qc.setQueryData<MedicationLogRow[]>(qk.medicationLogs, (prev = []) => {
-        const next = [row, ...prev.filter((x) => x.id !== row.id)];
+        const next = [data.row, ...prev.filter((x) => x.id !== data.row.id)];
         return next;
       });
       void qc.invalidateQueries({ queryKey: qk.medicationLogs });
-      const t = formatClock(row.recordedAt);
-      setToast(toastPrnLogged(def.displayName, t));
+      const t = formatClock(data.row.recordedAt);
+      setToast(toastPrnLogged(data.def.displayName, t));
     },
     onError: (e) => {
-      const msg =
+      const raw =
         e instanceof Error ? e.message : "Could not log. Check Supabase.";
       console.error("[quick-relief] log failed:", e);
-      setErrorToast(msg);
+      setErrorToast(toastMessageForPersistFailure(raw));
     },
   });
 
@@ -192,7 +277,9 @@ export default function QuickRelief() {
             tappable if your doctor said to override spacing. When you are
             signed in, each tap is stored in your{" "}
             <span className="font-semibold text-slate-800">medication_logs</span>{" "}
-            table for your doctor report.
+            table (Thermotabs uses{" "}
+            <span className="font-semibold text-slate-800">daily_logs</span> with
+            sodium totals) for your doctor report.
           </p>
         </div>
       </div>

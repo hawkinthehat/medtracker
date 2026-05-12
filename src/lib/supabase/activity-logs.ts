@@ -1,6 +1,6 @@
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser-client";
 import {
-  requireAuthUserForSave,
+  logDataNotSavedNoUser,
   resolveSupabaseUserId,
 } from "@/lib/supabase/auth-save-guard";
 import { localCalendarDayRecordedAtBounds } from "@/lib/hydration-summary";
@@ -51,11 +51,14 @@ export async function insertActivityLogRow(input: {
   const sb = getSupabaseBrowserClient();
   if (!sb) return { ok: false, error: "no_client" };
 
-  const authUser = await requireAuthUserForSave(sb);
-  if (!authUser) {
+  const {
+    data: { user },
+  } = await sb.auth.getUser();
+  if (!user?.id) {
+    logDataNotSavedNoUser();
     return { ok: false, error: "not_signed_in" };
   }
-  const uid = authUser.id;
+  const uid = user.id;
 
   const recorded_at = new Date().toISOString();
   const { error } = await sb.from("activity_logs").insert({

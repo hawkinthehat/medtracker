@@ -1,7 +1,7 @@
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser-client";
 import type { QuickReliefPeriod } from "@/lib/quick-relief";
 import {
-  requireAuthUserForSave,
+  logDataNotSavedNoUser,
   resolveSupabaseUserId,
 } from "@/lib/supabase/auth-save-guard";
 
@@ -83,11 +83,14 @@ export async function insertMedicationLogRow(
     return { ok: false, error: "Supabase is not configured." };
   }
 
-  const authUser = await requireAuthUserForSave(sb);
-  if (!authUser) {
+  const {
+    data: { user },
+  } = await sb.auth.getUser();
+  if (!user?.id) {
+    logDataNotSavedNoUser();
     return { ok: false, error: "not_signed_in" };
   }
-  const uid = authUser.id;
+  const uid = user.id;
 
   const id = crypto.randomUUID();
   const recordedAt = new Date().toISOString();
@@ -137,11 +140,14 @@ export async function upsertMorningRoutineMedicationLog(): Promise<{
   const sb = getSupabaseBrowserClient();
   if (!sb) return { ok: false, error: "no_client" };
 
-  const authUser = await requireAuthUserForSave(sb);
-  if (!authUser) {
+  const {
+    data: { user },
+  } = await sb.auth.getUser();
+  if (!user?.id) {
+    logDataNotSavedNoUser();
     return { ok: false, error: "not_signed_in" };
   }
-  const uid = authUser.id;
+  const uid = user.id;
 
   const start = new Date();
   start.setHours(0, 0, 0, 0);

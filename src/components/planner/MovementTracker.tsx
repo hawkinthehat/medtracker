@@ -12,6 +12,7 @@ import {
   fetchTodayDogWalkCountForCurrentUser,
 } from "@/lib/supabase/daily-logs";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser-client";
+import { toastMessageForPersistFailure } from "@/lib/supabase/auth-save-guard";
 import { insertActivityLogRow } from "@/lib/supabase/activity-logs";
 import { dailyLogsQueryFn } from "@/lib/daily-logs-query-fn";
 import { fetchAndLogWeather } from "@/lib/weather";
@@ -84,14 +85,17 @@ export default function MovementTracker() {
       setSessionResolved(true);
       return;
     }
-    void sb.auth.getSession().then(({ data: { session } }) => {
-      setSessionUser(session?.user ?? null);
+    void sb.auth.getUser().then(({ data: { user } }) => {
+      setSessionUser(user ?? null);
       setSessionResolved(true);
     });
     const {
       data: { subscription },
-    } = sb.auth.onAuthStateChange((_event, session) => {
-      setSessionUser(session?.user ?? null);
+    } = sb.auth.onAuthStateChange(async () => {
+      const {
+        data: { user },
+      } = await sb.auth.getUser();
+      setSessionUser(user ?? null);
       setSessionResolved(true);
     });
     return () => {
@@ -129,6 +133,13 @@ export default function MovementTracker() {
   });
 
   const [showHrNudge, setShowHrNudge] = useState(false);
+  const [movementToast, setMovementToast] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!movementToast) return;
+    const t = window.setTimeout(() => setMovementToast(null), 4500);
+    return () => window.clearTimeout(t);
+  }, [movementToast]);
 
   useEffect(() => {
     setWalkLabelDraft(getWalkButtonLabel());
@@ -190,8 +201,10 @@ export default function MovementTracker() {
       ]);
       void qc.invalidateQueries({ queryKey: qk.dailyLogs });
     },
-    onError: (e) => {
+    onError: (e: unknown) => {
+      const msg = e instanceof Error ? e.message : "Save failed";
       console.error("[movement] daily_logs save failed:", e);
+      setMovementToast(toastMessageForPersistFailure(msg));
     },
   });
 
@@ -218,6 +231,11 @@ export default function MovementTracker() {
   );
 
   async function handleDogWalk(skipNudge = false) {
+    if (supabaseConfigured && sessionResolved && !sessionUser) {
+      setMovementToast(toastMessageForPersistFailure("not_signed_in"));
+      return;
+    }
+
     const walksBefore = countDogWalksToday(
       qc.getQueryData<DailyLogEntry[]>(qk.dailyLogs) ?? dailyLogs,
       today,
@@ -263,8 +281,9 @@ export default function MovementTracker() {
       router.refresh();
     } catch (e) {
       setOptimisticWalkBump((b) => Math.max(0, b - 1));
+      const msg = e instanceof Error ? e.message : "Save failed";
+      setMovementToast(toastMessageForPersistFailure(msg));
       console.error("[handleDogWalk] Failed to save movement / daily_logs:", e);
-      throw e;
     } finally {
       setPendingWalk(false);
     }
@@ -390,6 +409,15 @@ export default function MovementTracker() {
             Save movement labels
           </button>
         </div>
+      )}
+
+      {movementToast && (
+        <p
+          className="mt-4 rounded-xl border-2 border-amber-800 bg-amber-50 px-3 py-3 text-center text-base font-semibold text-amber-950"
+          role="alert"
+        >
+          {movementToast}
+        </p>
       )}
 
       <div id="home-movement-walk">

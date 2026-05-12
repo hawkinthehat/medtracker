@@ -4,6 +4,7 @@ import type { WeatherLogRow } from "@/lib/supabase/weather-logs";
 import { isWithinLastDays } from "@/lib/clinical-summary-stats";
 import { standing3mReading, standingPhaseReading } from "@/lib/orthostatic-utils";
 import {
+  sumThermotabsSodiumMgFromDailyLogsLastDays,
   sumThermotabsSodiumMgLastDays,
   sumWaterOzLastDays,
 } from "@/lib/hydration-summary";
@@ -79,7 +80,9 @@ export function buildSpecialistReportHtmlDocument(
     );
 
   const waterOz7 = sumWaterOzLastDays(input.dailyLogs, 7);
-  const sodiumMg7 = sumThermotabsSodiumMgLastDays(input.medicationLogs, 7);
+  const sodiumMg7 =
+    sumThermotabsSodiumMgLastDays(input.medicationLogs, 7) +
+    sumThermotabsSodiumMgFromDailyLogsLastDays(input.dailyLogs, 7);
 
   const episodes = episodeLogsLast7d(input.dailyLogs).sort(
     (a, b) =>

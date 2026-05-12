@@ -2,6 +2,7 @@ import type { DailyLogEntry } from "@/lib/types";
 import type { MedicationLogRow } from "@/lib/supabase/medication-logs";
 import {
   ENTRY_TYPE_CAFFEINE,
+  ENTRY_TYPE_SODIUM,
   ENTRY_TYPE_WATER,
 } from "@/lib/daily-log-entry-type";
 import { isWithinLastDays } from "@/lib/clinical-summary-stats";
@@ -136,6 +137,30 @@ export function sumWaterOzLastDays(
   return oz;
 }
 
+/** Sodium from Thermotabs rows in `daily_logs` (same window as medication PRN). */
+export function sumThermotabsSodiumMgFromDailyLogsLastDays(
+  dailyLogs: DailyLogEntry[],
+  days: number,
+): number {
+  let mg = 0;
+  for (const e of dailyLogs) {
+    if (!isWithinLastDays(e.recordedAt, days)) continue;
+    if (
+      e.entryType !== ENTRY_TYPE_SODIUM &&
+      e.entryType !== "sodium" &&
+      e.category !== "sodium"
+    ) {
+      continue;
+    }
+    const v =
+      e.valueMg != null && Number.isFinite(e.valueMg) && e.valueMg > 0
+        ? Math.round(e.valueMg)
+        : Number.parseInt(String(e.notes ?? "").trim(), 10);
+    if (Number.isFinite(v) && v > 0) mg += v;
+  }
+  return mg;
+}
+
 /** Sodium from Thermotabs PRN logs in the rolling `days` window (mg). */
 export function sumThermotabsSodiumMgLastDays(
   logs: MedicationLogRow[],
@@ -150,6 +175,30 @@ export function sumThermotabsSodiumMgLastDays(
   return tablets * THERMOTABS_SODIUM_MG;
 }
 
+/** Sodium from Thermotabs `daily_logs` today (mg). */
+export function sumThermotabsSodiumMgTodayFromDailyLogs(
+  dailyLogs: DailyLogEntry[],
+  ref = new Date(),
+): number {
+  let mg = 0;
+  for (const e of dailyLogs) {
+    if (!isSameLocalCalendarDay(e.recordedAt, ref)) continue;
+    if (
+      e.entryType !== ENTRY_TYPE_SODIUM &&
+      e.entryType !== "sodium" &&
+      e.category !== "sodium"
+    ) {
+      continue;
+    }
+    const v =
+      e.valueMg != null && Number.isFinite(e.valueMg) && e.valueMg > 0
+        ? Math.round(e.valueMg)
+        : Number.parseInt(String(e.notes ?? "").trim(), 10);
+    if (Number.isFinite(v) && v > 0) mg += v;
+  }
+  return mg;
+}
+
 /** Sodium from Thermotabs PRN logs today (mg). */
 export function sumThermotabsSodiumMgToday(
   logs: MedicationLogRow[],
@@ -162,4 +211,16 @@ export function sumThermotabsSodiumMgToday(
     n += 1;
   }
   return n * THERMOTABS_SODIUM_MG;
+}
+
+/** Legacy medication_logs Thermotabs + `daily_logs` sodium rows (today, mg). */
+export function sumThermotabsSodiumMgTodayCombined(
+  medicationLogs: MedicationLogRow[],
+  dailyLogs: DailyLogEntry[],
+  ref = new Date(),
+): number {
+  return (
+    sumThermotabsSodiumMgToday(medicationLogs, ref) +
+    sumThermotabsSodiumMgTodayFromDailyLogs(dailyLogs, ref)
+  );
 }

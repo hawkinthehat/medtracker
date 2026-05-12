@@ -11,6 +11,7 @@ import { dailyLogsQueryFn } from "@/lib/daily-logs-query-fn";
 import {
   fetchTodayWaterValueSumForCurrentUser,
   fetchTodayCaffeineMgSumForCurrentUser,
+  fetchTodaySodiumMgSumForCurrentUser,
   persistDailyLogToSupabase,
 } from "@/lib/supabase/daily-logs";
 import {
@@ -31,8 +32,10 @@ import {
   THERMOTABS_SODIUM_MG,
   WATER_OZ_LABEL,
   sumThermotabsSodiumMgToday,
+  sumThermotabsSodiumMgTodayFromDailyLogs,
   sumWaterOzToday,
 } from "@/lib/hydration-summary";
+import { toastMessageForPersistFailure } from "@/lib/supabase/auth-save-guard";
 import { Check, Droplets, Pill } from "lucide-react";
 import { FeatureHelpTrigger } from "@/components/FeatureHelpModal";
 import { toastWaterLogged } from "@/lib/educational-toasts";
@@ -77,14 +80,17 @@ export default function HydrationTracker({
       setSessionResolved(true);
       return;
     }
-    void sb.auth.getSession().then(({ data: { session } }) => {
-      setSessionUser(session?.user ?? null);
+    void sb.auth.getUser().then(({ data: { user } }) => {
+      setSessionUser(user ?? null);
       setSessionResolved(true);
     });
     const {
       data: { subscription },
-    } = sb.auth.onAuthStateChange((_event, session) => {
-      setSessionUser(session?.user ?? null);
+    } = sb.auth.onAuthStateChange(async () => {
+      const {
+        data: { user },
+      } = await sb.auth.getUser();
+      setSessionUser(user ?? null);
       setSessionResolved(true);
     });
     return () => {
@@ -139,6 +145,21 @@ export default function HydrationTracker({
     refetchOnWindowFocus: true,
   });
 
+  const { data: serverDailySodiumMg = 0 } = useQuery({
+    queryKey: [
+      ...qk.dailyLogs,
+      "todaySodiumMgSum",
+      sessionUser?.id ?? "none",
+    ] as const,
+    queryFn: async () => (await fetchTodaySodiumMgSumForCurrentUser()).mg,
+    enabled: Boolean(
+      supabaseConfigured && sessionResolved && sessionUser,
+    ),
+    staleTime: 15_000,
+    gcTime: 1000 * 60 * 60 * 24,
+    refetchOnWindowFocus: true,
+  });
+
   const cacheOz = useMemo(
     () => sumWaterOzToday(dailyLogs),
     [dailyLogs],
@@ -183,10 +204,21 @@ export default function HydrationTracker({
   const currentWaterIntake =
     !supabaseConfigured || needsSignIn ? baselineOz + optimisticOz : baselineOz;
 
-  const sodiumMgToday = useMemo(
+  const legacySodiumMedMg = useMemo(
     () => sumThermotabsSodiumMgToday(medicationLogs as MedicationLogRow[]),
     [medicationLogs],
   );
+
+  const cacheDailySodiumMg = useMemo(
+    () => sumThermotabsSodiumMgTodayFromDailyLogs(dailyLogs),
+    [dailyLogs],
+  );
+
+  const sodiumMgToday = !supabaseConfigured
+    ? legacySodiumMedMg + cacheDailySodiumMg
+    : !sessionResolved || !sessionUser
+      ? 0
+      : legacySodiumMedMg + serverDailySodiumMg;
 
   const waterProgress = Math.min(1, currentWaterIntake / waterGoalOz);
   const sodiumProgress = Math.min(1, sodiumMgToday / sodiumGoalMg);
@@ -211,6 +243,8 @@ export default function HydrationTracker({
       return { row };
     },
     onSuccess: async ({ row }) => {
+      addOzMutation.reset();
+      setToast(null);
       qc.setQueryData<DailyLogEntry[]>(qk.dailyLogs, (prev = []) => [
         row,
         ...prev,
@@ -228,7 +262,7 @@ export default function HydrationTracker({
     },
     onError: (err: Error) => {
       console.error("[hydration] Water log failed:", err);
-      setToast(err.message);
+      setToast(toastMessageForPersistFailure(err.message));
       window.setTimeout(() => setToast(null), 3200);
     },
   });
@@ -257,6 +291,8 @@ export default function HydrationTracker({
       return { row, preset };
     },
     onSuccess: async ({ row, preset }) => {
+      addCaffeineMutation.reset();
+      setToast(null);
       qc.setQueryData<DailyLogEntry[]>(qk.dailyLogs, (prev = []) => [
         row,
         ...prev,
@@ -274,7 +310,7 @@ export default function HydrationTracker({
     },
     onError: (err: Error) => {
       console.error("[hydration] Caffeine log failed:", err);
-      setToast(err.message);
+      setToast(toastMessageForPersistFailure(err.message));
       window.setTimeout(() => setToast(null), 3200);
     },
   });
@@ -354,21 +390,9 @@ export default function HydrationTracker({
     supabaseConfigured && (addOzMutation.isPending || addCaffeineMutation.isPending);
 
   const thermotabsCountToday = useMemo(() => {
-    const ref = new Date();
-    let n = 0;
-    for (const row of medicationLogs as MedicationLogRow[]) {
-      if (row.medicationName !== "Thermotabs") continue;
-      const t = new Date(row.recordedAt);
-      if (
-        t.getFullYear() === ref.getFullYear() &&
-        t.getMonth() === ref.getMonth() &&
-        t.getDate() === ref.getDate()
-      ) {
-        n += 1;
-      }
-    }
-    return n;
-  }, [medicationLogs]);
+    if (THERMOTABS_SODIUM_MG <= 0) return 0;
+    return Math.max(0, Math.round(sodiumMgToday / THERMOTABS_SODIUM_MG));
+  }, [sodiumMgToday]);
 
   return (
     <section
@@ -393,8 +417,9 @@ export default function HydrationTracker({
                 </h2>
                 <p className="mt-1 text-sm text-slate-600">
                   Fluid in ounces; caffeine estimates (mg); sodium tally from
-                  Thermotabs taps in Quick relief (≈{THERMOTABS_SODIUM_MG} mg
-                  each).
+                  Thermotabs taps in Quick relief save to{" "}
+                  <span className="font-semibold text-slate-800">daily_logs</span>{" "}
+                  (≈{THERMOTABS_SODIUM_MG} mg each).
                 </p>
               </div>
               <FeatureHelpTrigger ariaLabel="Hydration help" title="Water & salt">
