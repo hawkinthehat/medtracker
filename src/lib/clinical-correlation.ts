@@ -70,7 +70,8 @@ export function computeBpDropAfterActivityNarrative(
   const dayOrtho = filterByLocalDate(orthostatic, dateKey);
   const dayActs = dailyLogs.filter(
     (a) =>
-      localDateKeyFromIso(a.recordedAt) === dateKey && a.category === "activity"
+      localDateKeyFromIso(a.recordedAt) === dateKey &&
+      (a.category === "activity" || a.category === "movement"),
   );
   if (dayOrtho.length === 0) return null;
 
@@ -103,7 +104,8 @@ export function computeSpotBpDropAfterActivityNarrative(
   );
   const dayActs = dailyLogs.filter(
     (a) =>
-      localDateKeyFromIso(a.recordedAt) === dateKey && a.category === "activity"
+      localDateKeyFromIso(a.recordedAt) === dateKey &&
+      (a.category === "activity" || a.category === "movement"),
   );
   if (v.length < 2) return null;
   v.sort(
@@ -139,7 +141,7 @@ export function computeMovementWeatherNarrative(
   const day = dailyLogs.filter(
     (e) =>
       localDateKeyFromIso(e.recordedAt) === dateKey &&
-      e.category === "activity" &&
+      (e.category === "activity" || e.category === "movement") &&
       Boolean(
         e.notes?.includes(DOG_WALK_MARKER) ||
           e.notes?.includes(PT_MARKER_PREFIX),

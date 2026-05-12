@@ -73,6 +73,7 @@ export type DailyLogCategory =
   | "caffeine"
   | "medication"
   | "sleep"
+  | "movement"
   | "activity"
   | "other";
 

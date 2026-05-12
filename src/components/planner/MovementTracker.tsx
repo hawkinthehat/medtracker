@@ -3,10 +3,14 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
+import type { User } from "@supabase/supabase-js";
 import { Dog, Loader2, Settings2 } from "lucide-react";
 import { qk } from "@/lib/query-keys";
 import type { DailyLogEntry } from "@/lib/types";
-import { persistDailyLogToSupabase } from "@/lib/supabase/daily-logs";
+import {
+  persistDailyLogToSupabase,
+  fetchTodayDogWalkCountForCurrentUser,
+} from "@/lib/supabase/daily-logs";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser-client";
 import { insertActivityLogRow } from "@/lib/supabase/activity-logs";
 import { dailyLogsQueryFn } from "@/lib/daily-logs-query-fn";
@@ -20,10 +24,12 @@ import {
   DEFAULT_WALK_BUTTON_LABEL,
   DEFAULT_WALK_NOTES,
 } from "@/lib/movement-settings";
+import { ENTRY_TYPE_ACTIVITY } from "@/lib/daily-log-entry-type";
 import {
   appendAmbientContext,
   calendarDayLocal,
   countDogWalksToday,
+  DOG_WALK_DAILY_LOG_LABEL,
   DOG_WALK_MARKER,
   getMorningHeartRateBpmToday,
   ptMarker,
@@ -67,6 +73,32 @@ export default function MovementTracker() {
   const router = useRouter();
   const qc = useQueryClient();
   const today = calendarDayLocal();
+  const supabaseConfigured = Boolean(getSupabaseBrowserClient());
+
+  const [sessionUser, setSessionUser] = useState<User | null>(null);
+  const [sessionResolved, setSessionResolved] = useState(false);
+
+  useEffect(() => {
+    const sb = getSupabaseBrowserClient();
+    if (!sb) {
+      setSessionUser(null);
+      setSessionResolved(true);
+      return;
+    }
+    void sb.auth.getSession().then(({ data: { session } }) => {
+      setSessionUser(session?.user ?? null);
+      setSessionResolved(true);
+    });
+    const {
+      data: { subscription },
+    } = sb.auth.onAuthStateChange((_event, session) => {
+      setSessionUser(session?.user ?? null);
+      setSessionResolved(true);
+    });
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, []);
 
   const { data: dailyLogs = [] } = useQuery({
     queryKey: qk.dailyLogs,
@@ -109,17 +141,38 @@ export default function MovementTracker() {
     setPtLatched(loadPtLatched(today));
   }, [today]);
 
-  const walksToday = useMemo(
+  const walksFromCache = useMemo(
     () => countDogWalksToday(dailyLogs, today),
     [dailyLogs, today],
   );
+
+  const { data: serverDogWalkCount } = useQuery({
+    queryKey: [...qk.dailyLogDogWalkCountToday, sessionUser?.id ?? "none"],
+    queryFn: async () =>
+      (await fetchTodayDogWalkCountForCurrentUser()).count,
+    enabled: Boolean(
+      supabaseConfigured && sessionResolved && sessionUser,
+    ),
+    staleTime: 30_000,
+    gcTime: 1000 * 60 * 60 * 24,
+    refetchOnWindowFocus: true,
+  });
+
+  const walksToday = useMemo(() => {
+    if (!supabaseConfigured || !sessionUser) return walksFromCache;
+    if (typeof serverDogWalkCount !== "number") return walksFromCache;
+    return serverDogWalkCount;
+  }, [
+    supabaseConfigured,
+    sessionUser,
+    walksFromCache,
+    serverDogWalkCount,
+  ]);
 
   const morningHr = useMemo(
     () => getMorningHeartRateBpmToday(vitals, dailyLogs, today),
     [vitals, dailyLogs, today],
   );
-
-  const supabaseConfigured = Boolean(getSupabaseBrowserClient());
 
   const logMovementEntry = useMutation({
     mutationFn: async (entry: DailyLogEntry) => {
@@ -186,7 +239,6 @@ export default function MovementTracker() {
       await fetchAndLogWeather().catch(() => {});
 
       const recordedAt = new Date().toISOString();
-      const label = getWalkButtonLabel();
       const base =
         `${getWalkNotesDefault().trim()}\n${DOG_WALK_MARKER}`.trim();
       const notes = await appendWeatherNotes(base, { skipWeatherFetch: true });
@@ -194,9 +246,10 @@ export default function MovementTracker() {
       const row: DailyLogEntry = {
         id: crypto.randomUUID(),
         recordedAt,
-        category: "activity",
-        label,
+        category: "movement",
+        label: DOG_WALK_DAILY_LOG_LABEL,
         notes,
+        entryType: ENTRY_TYPE_ACTIVITY,
       };
 
       await logMovementEntry.mutateAsync(row);
@@ -212,8 +265,9 @@ export default function MovementTracker() {
 
       void qc.invalidateQueries({ queryKey: qk.dailyLogs });
       void qc.invalidateQueries({ queryKey: qk.activityToday });
+      void qc.invalidateQueries({ queryKey: qk.dailyLogDogWalkCountToday });
+      setOptimisticWalkBump(0);
       router.refresh();
-      window.location.reload();
     } catch (e) {
       setOptimisticWalkBump((b) => Math.max(0, b - 1));
       console.error("[handleDogWalk] Failed to save movement / daily_logs:", e);
@@ -235,15 +289,17 @@ export default function MovementTracker() {
 
     setPendingPtSlot(slot);
     try {
+      const recordedAt = new Date().toISOString();
       const base = `${humanLabel} session${ptMarker(slot)}`;
       const notes = await appendWeatherNotes(base);
 
       const row: DailyLogEntry = {
         id: crypto.randomUUID(),
-        recordedAt: new Date().toISOString(),
-        category: "activity",
+        recordedAt,
+        category: "movement",
         label: humanLabel,
         notes,
+        entryType: ENTRY_TYPE_ACTIVITY,
       };
 
       await logMovementEntry.mutateAsync(row);
@@ -251,7 +307,7 @@ export default function MovementTracker() {
       const act = await insertActivityLogRow({
         activity_type: "pt",
         notes: `${humanLabel} · ${slot}`,
-        recorded_at: row.recordedAt,
+        recorded_at: recordedAt,
       });
       if (!act.ok) {
         throw new Error(act.error ?? "Could not save activity log.");
@@ -260,7 +316,6 @@ export default function MovementTracker() {
       void qc.invalidateQueries({ queryKey: qk.dailyLogs });
       void qc.invalidateQueries({ queryKey: qk.activityToday });
       router.refresh();
-      window.location.reload();
     } catch (e) {
       setPtLatched(rollback);
       savePtLatched(today, rollback);

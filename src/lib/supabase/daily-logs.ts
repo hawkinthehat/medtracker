@@ -2,6 +2,7 @@ import type { DailyLogEntry } from "@/lib/types";
 import {
   ENTRY_TYPE_WATER,
   ENTRY_TYPE_CAFFEINE,
+  ENTRY_TYPE_ACTIVITY,
   resolveDailyLogEntryType,
 } from "@/lib/daily-log-entry-type";
 import {
@@ -9,6 +10,7 @@ import {
   resolveSupabaseUserId,
 } from "@/lib/supabase/auth-save-guard";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser-client";
+import { DOG_WALK_MARKER } from "@/lib/movement-tracking";
 
 type DailyLogRow = {
   id: string;
@@ -161,6 +163,46 @@ export async function fetchTodayCaffeineMgSumForCurrentUser(): Promise<{
   }
 
   return { mg, hasSession: true };
+}
+
+/**
+ * Dog walks logged today: `entry_type = activity`, local calendar day, and
+ * `notes` containing the dog-walk marker (PT uses the same entry type but a
+ * different marker, so it is not counted here).
+ */
+export async function fetchTodayDogWalkCountForCurrentUser(): Promise<{
+  count: number;
+  hasSession: boolean;
+}> {
+  const sb = getSupabaseBrowserClient();
+  if (!sb) return { count: 0, hasSession: false };
+
+  const uid = await resolveSupabaseUserId(sb);
+  if (!uid) return { count: 0, hasSession: false };
+
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+  const end = new Date(start);
+  end.setDate(end.getDate() + 1);
+
+  const escaped = DOG_WALK_MARKER.replace(/%/g, "\\%").replace(/_/g, "\\_");
+  const likePattern = `%${escaped}%`;
+
+  const { count, error } = await sb
+    .from("daily_logs")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", uid)
+    .eq("entry_type", ENTRY_TYPE_ACTIVITY)
+    .gte("recorded_at", start.toISOString())
+    .lt("recorded_at", end.toISOString())
+    .like("notes", likePattern);
+
+  if (error) {
+    console.warn("today dog walk count fetch:", error.message);
+    return { count: 0, hasSession: true };
+  }
+
+  return { count: count ?? 0, hasSession: true };
 }
 
 /**

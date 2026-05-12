@@ -3,6 +3,8 @@ import type { EnvironmentSnapshot } from "@/lib/environment-snapshot";
 
 /** Embedded in `daily_logs.notes` for analytics / counting across label changes. */
 export const DOG_WALK_MARKER = "[Tiaki movement:dog-walk]";
+/** Stored `daily_logs.label` for dog walk rows (button text may differ). */
+export const DOG_WALK_DAILY_LOG_LABEL = "Dog Walk";
 export const PT_MARKER_PREFIX = "[Tiaki movement:pt:";
 
 export type PtSlot = "morning" | "noon" | "night";
@@ -23,16 +25,17 @@ export function isSameLocalDay(iso: string, day: string): boolean {
   return calendarDayLocal(t) === day;
 }
 
+/** Dog walk rows: `entry_type` activity (or legacy unset) + dog-walk marker in notes. */
 export function countDogWalksToday(
   logs: DailyLogEntry[],
   day = calendarDayLocal(),
 ): number {
-  return logs.filter(
-    (e) =>
-      isSameLocalDay(e.recordedAt, day) &&
-      e.category === "activity" &&
-      Boolean(e.notes?.includes(DOG_WALK_MARKER)),
-  ).length;
+  return logs.filter((e) => {
+    if (!isSameLocalDay(e.recordedAt, day)) return false;
+    if (!e.notes?.includes(DOG_WALK_MARKER)) return false;
+    if (e.entryType && e.entryType !== "activity") return false;
+    return true;
+  }).length;
 }
 
 /**

@@ -24,6 +24,7 @@ const CATEGORIES: { value: DailyLogCategory; label: string }[] = [
   { value: "caffeine", label: "Caffeine" },
   { value: "medication", label: "Medication" },
   { value: "sleep", label: "Sleep" },
+  { value: "movement", label: "Movement" },
   { value: "activity", label: "Activity" },
   { value: "other", label: "Other" },
 ];

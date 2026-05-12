@@ -110,7 +110,10 @@ export default function VaultPlannerSections() {
   const foodExercise = useMemo(
     () =>
       dailyLogs.filter(
-        (d) => d.category === "food" || d.category === "activity"
+        (d) =>
+          d.category === "food" ||
+          d.category === "activity" ||
+          d.category === "movement"
       ),
     [dailyLogs]
   );
