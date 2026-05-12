@@ -3,6 +3,7 @@ import {
   requireAuthUserForSave,
   resolveSupabaseUserId,
 } from "@/lib/supabase/auth-save-guard";
+import { localCalendarDayRecordedAtBounds } from "@/lib/hydration-summary";
 
 export async function fetchTodayActivityCountsForCurrentUser(): Promise<{
   dogWalks: number;
@@ -15,17 +16,14 @@ export async function fetchTodayActivityCountsForCurrentUser(): Promise<{
   const uid = await resolveSupabaseUserId(sb);
   if (!uid) return { dogWalks: 0, ptSessions: 0, hasSession: false };
 
-  const start = new Date();
-  start.setHours(0, 0, 0, 0);
-  const end = new Date(start);
-  end.setDate(end.getDate() + 1);
+  const { startIso, endIso } = localCalendarDayRecordedAtBounds();
 
   const { data, error } = await sb
     .from("activity_logs")
     .select("activity_type")
     .eq("user_id", uid)
-    .gte("recorded_at", start.toISOString())
-    .lt("recorded_at", end.toISOString());
+    .gte("recorded_at", startIso)
+    .lt("recorded_at", endIso);
 
   if (error) {
     console.warn("[activity_logs] today counts:", error.message);
@@ -49,7 +47,6 @@ export async function fetchTodayActivityCountsForCurrentUser(): Promise<{
 export async function insertActivityLogRow(input: {
   activity_type: string;
   notes?: string | null;
-  recorded_at?: string;
 }): Promise<{ ok: boolean; error?: string }> {
   const sb = getSupabaseBrowserClient();
   if (!sb) return { ok: false, error: "no_client" };
@@ -60,10 +57,11 @@ export async function insertActivityLogRow(input: {
   }
   const uid = authUser.id;
 
+  const recorded_at = new Date().toISOString();
   const { error } = await sb.from("activity_logs").insert({
     activity_type: input.activity_type,
     notes: input.notes ?? null,
-    recorded_at: input.recorded_at ?? new Date().toISOString(),
+    recorded_at,
     user_id: uid,
   });
 

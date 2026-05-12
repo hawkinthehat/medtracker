@@ -50,6 +50,9 @@ export default function ShowerTracker() {
       setAfterToast(toastShowerCheck(feeling));
       window.setTimeout(() => setAfterToast(null), 4500);
     },
+    onError: (e) => {
+      console.error("[shower] daily_logs save failed:", e);
+    },
   });
 
   const modal =
@@ -89,11 +92,6 @@ export default function ShowerTracker() {
           >
             Cancel
           </button>
-          {saveFeeling.isError && saveFeeling.error instanceof Error && (
-            <p className="mt-4 text-lg font-bold text-red-700" role="alert">
-              {saveFeeling.error.message}
-            </p>
-          )}
         </div>
       </div>,
       document.body,

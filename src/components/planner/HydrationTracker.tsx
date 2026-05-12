@@ -45,12 +45,15 @@ type HydrationTrackerProps = {
   sodiumGoalMg?: number;
   /** Hide large header — for embedding under Pulse on home. */
   compact?: boolean;
+  /** Bumped from home after sign-in so water/caffeine totals re-fetch today’s `recorded_at` window. */
+  homeTotalsRefreshKey?: number;
 };
 
 export default function HydrationTracker({
   waterGoalOz = DEFAULT_WATER_GOAL_OZ,
   sodiumGoalMg = DEFAULT_SODIUM_GOAL_MG,
   compact = false,
+  homeTotalsRefreshKey = 0,
 }: HydrationTrackerProps) {
   const router = useRouter();
   const pathname = usePathname();
@@ -117,7 +120,7 @@ export default function HydrationTracker({
     return () => {
       cancelled = true;
     };
-  }, [supabaseConfigured, sessionUser]);
+  }, [supabaseConfigured, sessionUser, homeTotalsRefreshKey]);
 
   const { data: dailyLogs = [] } = useQuery({
     queryKey: qk.dailyLogs,

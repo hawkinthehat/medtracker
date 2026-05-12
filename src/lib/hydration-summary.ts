@@ -29,6 +29,21 @@ export function isSameLocalCalendarDay(iso: string, ref = new Date()) {
   return x.y === r.y && x.m === r.m && x.day === r.day;
 }
 
+/**
+ * Half-open interval for the device’s local calendar day, for filtering
+ * `recorded_at` on `daily_logs` / `activity_logs` (`startIso` inclusive, `endIso` exclusive).
+ */
+export function localCalendarDayRecordedAtBounds(ref = new Date()): {
+  startIso: string;
+  endIso: string;
+} {
+  const start = new Date(ref);
+  start.setHours(0, 0, 0, 0);
+  const end = new Date(start);
+  end.setDate(end.getDate() + 1);
+  return { startIso: start.toISOString(), endIso: end.toISOString() };
+}
+
 /** Sum fluid ounces from hydration logs (`valueOz` / `daily_logs.value`, else legacy `notes`). */
 export function sumWaterOzToday(
   dailyLogs: DailyLogEntry[],

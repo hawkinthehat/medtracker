@@ -72,6 +72,7 @@ export default function MinimalHomeDashboard({
 }: MinimalHomeDashboardProps) {
   const qc = useQueryClient();
   const { showAuthGate, countersEnabled } = useDashboardSession();
+  const [homeTotalsRefreshKey, setHomeTotalsRefreshKey] = useState(0);
   const [displayFirstName, setDisplayFirstName] = useState("");
   const [episodeSketchOpen, setEpisodeSketchOpen] = useState(false);
   const [episodeFabOpen, setEpisodeFabOpen] = useState(false);
@@ -108,6 +109,14 @@ export default function MinimalHomeDashboard({
   useEffect(() => {
     setWelcomeOpen(!isWelcomeWizardComplete());
   }, []);
+
+  useEffect(() => {
+    if (!countersEnabled) return;
+    void qc.invalidateQueries({ queryKey: qk.dailyLogs });
+    void qc.invalidateQueries({ queryKey: qk.dailyLogDogWalkCountToday });
+    void qc.invalidateQueries({ queryKey: qk.activityToday });
+    setHomeTotalsRefreshKey((k) => k + 1);
+  }, [countersEnabled, qc]);
 
   function openDoseModal(m: SavedMedication, tab: DoseModalTab) {
     setDoseModalTab(tab);
@@ -165,6 +174,9 @@ export default function MinimalHomeDashboard({
       ]);
       void qc.invalidateQueries({ queryKey: qk.dailyLogs });
       setEpisodeSketchOpen(true);
+    },
+    onError: (e) => {
+      console.error("[home] episode log failed:", e);
     },
   });
 
@@ -246,6 +258,7 @@ export default function MinimalHomeDashboard({
             compact
             waterGoalOz={baselines.targetWaterOz}
             sodiumGoalMg={baselines.targetSodiumMg}
+            homeTotalsRefreshKey={homeTotalsRefreshKey}
           />
         </div>
         <Link
@@ -280,15 +293,6 @@ export default function MinimalHomeDashboard({
           Describe what happened, note compression gear, then save — opens the
           body map with barometric context when available.
         </p>
-        {logEpisodeAndOpenSketch.isError &&
-          logEpisodeAndOpenSketch.error instanceof Error && (
-            <p
-              className="text-center text-base font-bold text-red-700"
-              role="alert"
-            >
-              {logEpisodeAndOpenSketch.error.message}
-            </p>
-          )}
       </section>
 
       <details className="group rounded-2xl border-4 border-black bg-white [&_summary::-webkit-details-marker]:hidden">

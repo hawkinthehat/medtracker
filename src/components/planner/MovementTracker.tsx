@@ -191,6 +191,9 @@ export default function MovementTracker() {
       ]);
       void qc.invalidateQueries({ queryKey: qk.dailyLogs });
     },
+    onError: (e) => {
+      console.error("[movement] daily_logs save failed:", e);
+    },
   });
 
   const appendWeatherNotes = useCallback(
@@ -257,7 +260,6 @@ export default function MovementTracker() {
       const act = await insertActivityLogRow({
         activity_type: "dog_walk",
         notes: getWalkNotesDefault().trim() || DEFAULT_WALK_NOTES,
-        recorded_at: recordedAt,
       });
       if (!act.ok) {
         throw new Error(act.error ?? "Could not save activity log.");
@@ -307,7 +309,6 @@ export default function MovementTracker() {
       const act = await insertActivityLogRow({
         activity_type: "pt",
         notes: `${humanLabel} · ${slot}`,
-        recorded_at: recordedAt,
       });
       if (!act.ok) {
         throw new Error(act.error ?? "Could not save activity log.");
@@ -504,14 +505,6 @@ export default function MovementTracker() {
       {morningHr != null && (
         <p className="mt-4 text-base font-semibold text-slate-600">
           Morning HR logged today: {morningHr} BPM
-        </p>
-      )}
-
-      {logMovementEntry.isError && (
-        <p className="mt-3 text-lg font-bold text-red-700" role="alert">
-          {logMovementEntry.error instanceof Error
-            ? logMovementEntry.error.message
-            : "Could not save entry."}
         </p>
       )}
     </section>

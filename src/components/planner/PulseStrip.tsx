@@ -127,6 +127,7 @@ export default function PulseStrip() {
       }
     },
     onError: (e: unknown) => {
+      console.error("[pulse] mood save failed:", e);
       setErrorToast(e instanceof Error ? e.message : "Could not save mood.");
       window.setTimeout(() => setErrorToast(null), 4200);
     },
@@ -167,6 +168,7 @@ export default function PulseStrip() {
       window.setTimeout(() => setToast(null), 4000);
     },
     onError: (e: unknown) => {
+      console.error("[pulse] side-effect link failed:", e);
       setErrorToast(
         e instanceof Error ? e.message : "Could not save side-effect link.",
       );
@@ -229,8 +231,8 @@ export default function PulseStrip() {
 
       {errorToast && (
         <p
-          className="mt-4 rounded-lg border-2 border-red-800 bg-red-50 px-3 py-3 text-center text-base font-bold leading-snug text-red-950"
-          role="alert"
+          className="mt-4 rounded-lg border-2 border-slate-400 bg-slate-50 px-3 py-3 text-center text-base font-medium leading-snug text-slate-800"
+          role="status"
         >
           {errorToast}
         </p>

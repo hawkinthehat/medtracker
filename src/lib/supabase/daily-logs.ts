@@ -10,6 +10,7 @@ import {
   resolveSupabaseUserId,
 } from "@/lib/supabase/auth-save-guard";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser-client";
+import { localCalendarDayRecordedAtBounds } from "@/lib/hydration-summary";
 import { DOG_WALK_MARKER } from "@/lib/movement-tracking";
 
 type DailyLogRow = {
@@ -92,18 +93,15 @@ export async function fetchTodayWaterValueSumForCurrentUser(): Promise<{
   const uid = await resolveSupabaseUserId(sb);
   if (!uid) return { oz: 0, hasSession: false };
 
-  const start = new Date();
-  start.setHours(0, 0, 0, 0);
-  const end = new Date(start);
-  end.setDate(end.getDate() + 1);
+  const { startIso, endIso } = localCalendarDayRecordedAtBounds();
 
   const { data, error } = await sb
     .from("daily_logs")
     .select("value,notes")
     .eq("user_id", uid)
     .eq("entry_type", ENTRY_TYPE_WATER)
-    .gte("recorded_at", start.toISOString())
-    .lt("recorded_at", end.toISOString());
+    .gte("recorded_at", startIso)
+    .lt("recorded_at", endIso);
 
   if (error) {
     console.warn("today water value sum fetch:", error.message);
@@ -134,18 +132,15 @@ export async function fetchTodayCaffeineMgSumForCurrentUser(): Promise<{
   const uid = await resolveSupabaseUserId(sb);
   if (!uid) return { mg: 0, hasSession: false };
 
-  const start = new Date();
-  start.setHours(0, 0, 0, 0);
-  const end = new Date(start);
-  end.setDate(end.getDate() + 1);
+  const { startIso, endIso } = localCalendarDayRecordedAtBounds();
 
   const { data, error } = await sb
     .from("daily_logs")
     .select("value,notes")
     .eq("user_id", uid)
     .eq("entry_type", ENTRY_TYPE_CAFFEINE)
-    .gte("recorded_at", start.toISOString())
-    .lt("recorded_at", end.toISOString());
+    .gte("recorded_at", startIso)
+    .lt("recorded_at", endIso);
 
   if (error) {
     console.warn("today caffeine sum fetch:", error.message);
@@ -180,10 +175,7 @@ export async function fetchTodayDogWalkCountForCurrentUser(): Promise<{
   const uid = await resolveSupabaseUserId(sb);
   if (!uid) return { count: 0, hasSession: false };
 
-  const start = new Date();
-  start.setHours(0, 0, 0, 0);
-  const end = new Date(start);
-  end.setDate(end.getDate() + 1);
+  const { startIso, endIso } = localCalendarDayRecordedAtBounds();
 
   const escaped = DOG_WALK_MARKER.replace(/%/g, "\\%").replace(/_/g, "\\_");
   const likePattern = `%${escaped}%`;
@@ -193,8 +185,8 @@ export async function fetchTodayDogWalkCountForCurrentUser(): Promise<{
     .select("id", { count: "exact", head: true })
     .eq("user_id", uid)
     .eq("entry_type", ENTRY_TYPE_ACTIVITY)
-    .gte("recorded_at", start.toISOString())
-    .lt("recorded_at", end.toISOString())
+    .gte("recorded_at", startIso)
+    .lt("recorded_at", endIso)
     .like("notes", likePattern);
 
   if (error) {
@@ -248,9 +240,11 @@ export async function persistDailyLogToSupabase(
   }
   const uid = authUser.id;
 
+  // Wall-clock insert time for `daily_logs.recorded_at` (column name in Supabase).
+  const recordedAtIso = new Date().toISOString();
   const payload: Record<string, unknown> = {
     id: entry.id,
-    recorded_at: entry.recordedAt,
+    recorded_at: recordedAtIso,
     category: entry.category,
     label: entry.label,
     notes: entry.notes ?? null,
