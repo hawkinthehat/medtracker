@@ -91,7 +91,7 @@ export async function insertMedicationLogRow(
 
   const id = crypto.randomUUID();
   const recordedAt = new Date().toISOString();
-  const { error } = await sb.from("medication_logs").insert({
+  const res = await sb.from("medication_logs").insert({
     id,
     recorded_at: recordedAt,
     medication_name: input.medicationName,
@@ -106,8 +106,8 @@ export async function insertMedicationLogRow(
     user_id: uid,
   });
 
-  if (error) {
-    return { ok: false, error: error.message };
+  if (res.error) {
+    return { ok: false, error: res.error.message };
   }
   const row: MedicationLogRow = {
     id,

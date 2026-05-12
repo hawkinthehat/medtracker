@@ -1,6 +1,7 @@
 import type { DailyLogEntry } from "@/lib/types";
 import {
   ENTRY_TYPE_WATER,
+  ENTRY_TYPE_CAFFEINE,
   resolveDailyLogEntryType,
 } from "@/lib/daily-log-entry-type";
 import {
@@ -30,7 +31,8 @@ function rowToEntry(row: DailyLogRow): DailyLogEntry {
     row.value != null && Number.isFinite(Number(row.value))
       ? Number(row.value)
       : undefined;
-  return {
+  const et = row.entry_type ?? undefined;
+  const base: DailyLogEntry = {
     id: row.id,
     recordedAt: row.recorded_at,
     category: row.category,
@@ -41,9 +43,16 @@ function rowToEntry(row: DailyLogRow): DailyLogEntry {
       side === "front" || side === "back" ? side : undefined,
     sketchBrushPreset: brush ?? undefined,
     userId: row.user_id ?? undefined,
-    entryType: row.entry_type ?? undefined,
-    valueOz: v,
+    entryType: et,
   };
+  if (et === ENTRY_TYPE_CAFFEINE || et === "caffeine") {
+    return v != null && Number.isFinite(v) && v > 0
+      ? { ...base, valueMg: Math.round(v) }
+      : base;
+  }
+  return v != null && Number.isFinite(v) && v > 0
+    ? { ...base, valueOz: Math.round(v) }
+    : base;
 }
 
 export async function fetchDailyLogsFromSupabase(): Promise<DailyLogEntry[]> {
@@ -165,10 +174,14 @@ export async function persistDailyLogToSupabase(
   };
 
   const et = resolveDailyLogEntryType(entry);
-  if (
-    et === ENTRY_TYPE_WATER ||
-    entry.category === "hydration"
-  ) {
+  if (et === ENTRY_TYPE_CAFFEINE) {
+    const mg =
+      entry.valueMg ??
+      Number.parseInt(String(entry.notes ?? "").trim(), 10);
+    if (Number.isFinite(mg) && mg > 0) {
+      payload.value = mg;
+    }
+  } else if (et === ENTRY_TYPE_WATER || entry.category === "hydration") {
     const oz =
       entry.valueOz ??
       Number.parseInt(String(entry.notes ?? "").trim(), 10);
@@ -177,16 +190,16 @@ export async function persistDailyLogToSupabase(
     }
   }
 
-  const { error } = await sb.from("daily_logs").insert(payload);
-  if (error) {
+  const res = await sb.from("daily_logs").insert(payload);
+  if (res.error) {
     console.error("[daily_logs] insert failed:", {
-      message: error.message,
-      code: error.code,
-      details: error.details,
-      hint: error.hint,
+      message: res.error.message,
+      code: res.error.code,
+      details: res.error.details,
+      hint: res.error.hint,
       entry_type: payload.entry_type,
     });
-    return { ok: false, error: error.message };
+    return { ok: false, error: res.error.message };
   }
   return { ok: true };
 }

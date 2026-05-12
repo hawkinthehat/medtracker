@@ -155,9 +155,10 @@ export default function QuickRelief() {
       setToast(toastPrnLogged(def.displayName, t));
     },
     onError: (e) => {
-      setErrorToast(
-        e instanceof Error ? e.message : "Could not log. Check Supabase.",
-      );
+      const msg =
+        e instanceof Error ? e.message : "Could not log. Check Supabase.";
+      window.alert(msg);
+      setErrorToast(msg);
     },
   });
 

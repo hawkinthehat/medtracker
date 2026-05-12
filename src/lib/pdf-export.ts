@@ -6,6 +6,11 @@ import {
   buildSymptomMatrixRollingSevenDaySummary,
 } from "@/lib/symptom-matrix-report";
 import {
+  caffeineMgFromEntry,
+  formatCaffeineReportSummary,
+  recentCaffeineLogRows,
+} from "@/lib/caffeine-intake";
+import {
   calendarDayKeyLocal,
   getActiveMedications,
   getRecentlyCompletedTemporaryMedications,
@@ -664,6 +669,44 @@ export async function generateDoctorSpecialistPdf(
   });
   doc.setFont("helvetica", "normal");
   nextY = fibroY + 6;
+
+  doc.setFontSize(12);
+  doc.setTextColor(120, 53, 15);
+  doc.text("Caffeine intake", 14, nextY + 12);
+  doc.setFontSize(9);
+  doc.setTextColor(71, 85, 105);
+  const caffeineSummary = formatCaffeineReportSummary(
+    bundle.dailyLogs,
+    new Date(bundle.compiledAt),
+  );
+  const caffeineLines = doc.splitTextToSize(caffeineSummary, pageW - 28);
+  let cafeY = nextY + 18;
+  caffeineLines.forEach((line: string) => {
+    doc.text(line, 14, cafeY);
+    cafeY += 4.8;
+  });
+  nextY = cafeY + 4;
+
+  const caffeineRows = recentCaffeineLogRows(bundle.dailyLogs, 35);
+  if (caffeineRows.length > 0) {
+    autoTable(doc, {
+      startY: nextY + 4,
+      head: [["Time", "Source", "Caffeine (mg)"]],
+      body: caffeineRows.map((r) => [
+        new Date(r.recordedAt).toLocaleString(),
+        r.label,
+        String(caffeineMgFromEntry(r)),
+      ]),
+      styles: { fontSize: 8, cellPadding: 1.8, textColor: [15, 23, 42] },
+      headStyles: {
+        fillColor: [254, 243, 199],
+        textColor: [120, 53, 15],
+        fontStyle: "bold",
+      },
+      theme: "plain",
+    });
+    nextY = (doc as PdfWithAutoTable).lastAutoTable.finalY;
+  }
 
   doc.setFontSize(12);
   doc.setTextColor(127, 29, 29);

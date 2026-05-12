@@ -12,6 +12,13 @@ import {
   fetchTodayWaterValueSumForCurrentUser,
   persistDailyLogToSupabase,
 } from "@/lib/supabase/daily-logs";
+import {
+  CAFFEINE_COFFEE_LABEL,
+  CAFFEINE_COFFEE_MG,
+  CAFFEINE_ENERGY_LABEL,
+  CAFFEINE_ENERGY_OR_TEA_MG,
+  sumCaffeineMgToday,
+} from "@/lib/caffeine-intake";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser-client";
 import {
   fetchMedicationLogsFromSupabase,
@@ -28,7 +35,7 @@ import {
 import { Check, Droplets, Pill } from "lucide-react";
 import { FeatureHelpTrigger } from "@/components/FeatureHelpModal";
 import { toastWaterLogged } from "@/lib/educational-toasts";
-import { ENTRY_TYPE_WATER } from "@/lib/daily-log-entry-type";
+import { ENTRY_TYPE_CAFFEINE, ENTRY_TYPE_WATER } from "@/lib/daily-log-entry-type";
 
 type HydrationTrackerProps = {
   /** Daily fluid goal in fluid ounces (default 100). */
@@ -138,6 +145,10 @@ export default function HydrationTracker({
   const [optimisticOz, setOptimisticOz] = useState(0);
   /** Which +oz button just fired — brief checkmark flash. */
   const [flashOz, setFlashOz] = useState<number | null>(null);
+  /** Which caffeine preset just saved (cloud) — brief flash. */
+  const [flashCaffeine, setFlashCaffeine] = useState<
+    "coffee" | "energy" | null
+  >(null);
 
   const needsSignIn = supabaseConfigured && sessionResolved && !sessionUser;
   const showWaterPlaceholder =
@@ -149,6 +160,11 @@ export default function HydrationTracker({
   const sodiumMgToday = useMemo(
     () => sumThermotabsSodiumMgToday(medicationLogs as MedicationLogRow[]),
     [medicationLogs],
+  );
+
+  const caffeineMgToday = useMemo(
+    () => sumCaffeineMgToday(dailyLogs),
+    [dailyLogs],
   );
 
   const waterProgress = Math.min(1, currentWaterIntake / waterGoalOz);
@@ -171,19 +187,68 @@ export default function HydrationTracker({
         console.error("[hydration] daily_logs insert rejected:", msg);
         throw new Error(msg);
       }
-      return { row, amountOz };
+      return { row };
     },
-    onSuccess: ({ row }) => {
+    onSuccess: async ({ row }) => {
       qc.setQueryData<DailyLogEntry[]>(qk.dailyLogs, (prev = []) => [
         row,
         ...prev,
       ]);
-      void qc.invalidateQueries({ queryKey: qk.dailyLogs });
+      await qc.invalidateQueries({ queryKey: qk.dailyLogs });
+      if (supabaseConfigured) {
+        const { oz } = await fetchTodayWaterValueSumForCurrentUser();
+        setStoredWaterOz(oz);
+      }
       router.refresh();
-      window.location.reload();
+      setToast(toastWaterLogged(row.valueOz ?? 0));
+      window.setTimeout(() => setToast(null), 4500);
     },
     onError: (err: Error) => {
       console.error("[hydration] Water log failed:", err);
+      window.alert(err.message);
+      setToast(err.message);
+      window.setTimeout(() => setToast(null), 3200);
+    },
+  });
+
+  const addCaffeineMutation = useMutation({
+    mutationFn: async (preset: "coffee" | "energy") => {
+      const mg =
+        preset === "coffee" ? CAFFEINE_COFFEE_MG : CAFFEINE_ENERGY_OR_TEA_MG;
+      const label =
+        preset === "coffee" ? CAFFEINE_COFFEE_LABEL : CAFFEINE_ENERGY_LABEL;
+      const row: DailyLogEntry = {
+        id: crypto.randomUUID(),
+        recordedAt: new Date().toISOString(),
+        category: "hydration",
+        label,
+        notes: String(mg),
+        entryType: ENTRY_TYPE_CAFFEINE,
+        valueMg: mg,
+      };
+      const result = await persistDailyLogToSupabase(row);
+      if (!result.ok) {
+        const msg = result.error ?? "Could not save caffeine log.";
+        console.error("[hydration] caffeine insert rejected:", msg);
+        throw new Error(msg);
+      }
+      return { row, preset };
+    },
+    onSuccess: async ({ row, preset }) => {
+      qc.setQueryData<DailyLogEntry[]>(qk.dailyLogs, (prev = []) => [
+        row,
+        ...prev,
+      ]);
+      await qc.invalidateQueries({ queryKey: qk.dailyLogs });
+      router.refresh();
+      const mg =
+        preset === "coffee" ? CAFFEINE_COFFEE_MG : CAFFEINE_ENERGY_OR_TEA_MG;
+      setToast(`Logged ${mg} mg caffeine.`);
+      window.setTimeout(() => setToast(null), 3200);
+    },
+    onError: (err: Error) => {
+      console.error("[hydration] Caffeine log failed:", err);
+      window.alert(err.message);
       setToast(err.message);
       window.setTimeout(() => setToast(null), 3200);
     },
@@ -227,6 +292,42 @@ export default function HydrationTracker({
     addOzMutation.mutate(amount);
   }
 
+  function logCaffeine(preset: "coffee" | "energy") {
+    if (needsSignIn) {
+      router.push(`/auth?next=${encodeURIComponent(pathname || "/")}`);
+      return;
+    }
+    if (!supabaseConfigured) {
+      const mg =
+        preset === "coffee" ? CAFFEINE_COFFEE_MG : CAFFEINE_ENERGY_OR_TEA_MG;
+      const label =
+        preset === "coffee" ? CAFFEINE_COFFEE_LABEL : CAFFEINE_ENERGY_LABEL;
+      const row: DailyLogEntry = {
+        id: crypto.randomUUID(),
+        recordedAt: new Date().toISOString(),
+        category: "hydration",
+        label,
+        notes: String(mg),
+        entryType: ENTRY_TYPE_CAFFEINE,
+        valueMg: mg,
+      };
+      qc.setQueryData<DailyLogEntry[]>(qk.dailyLogs, (prev = []) => [
+        row,
+        ...prev,
+      ]);
+      setToast(`Logged ${mg} mg (this device only).`);
+      window.setTimeout(() => setToast(null), 3200);
+      router.refresh();
+      return;
+    }
+    setFlashCaffeine(preset);
+    window.setTimeout(() => setFlashCaffeine(null), 700);
+    addCaffeineMutation.mutate(preset);
+  }
+
+  const caffeineBusy =
+    supabaseConfigured && (addOzMutation.isPending || addCaffeineMutation.isPending);
+
   const thermotabsCountToday = useMemo(() => {
     const ref = new Date();
     let n = 0;
@@ -263,11 +364,12 @@ export default function HydrationTracker({
                   id="hydration-heading"
                   className="text-lg font-bold tracking-tight text-slate-900"
                 >
-                  Water &amp; salt today
+                  Water, caffeine &amp; salt today
                 </h2>
                 <p className="mt-1 text-sm text-slate-600">
-                  Fluid in ounces; sodium tally from Thermotabs taps in Quick
-                  relief (≈{THERMOTABS_SODIUM_MG} mg each).
+                  Fluid in ounces; caffeine estimates (mg); sodium tally from
+                  Thermotabs taps in Quick relief (≈{THERMOTABS_SODIUM_MG} mg
+                  each).
                 </p>
               </div>
               <FeatureHelpTrigger ariaLabel="Hydration help" title="Water & salt">
@@ -321,8 +423,8 @@ export default function HydrationTracker({
           }`}
         >
           <p className="text-lg font-bold leading-snug text-black">
-            Please sign in to track water and salt. Your logs need an account so
-            they save under the correct user.
+            Please sign in to track water, caffeine, and salt. Your logs need an
+            account so they save under the correct user.
           </p>
           <Link
             href={`/auth?next=${encodeURIComponent(pathname || "/")}`}
@@ -349,10 +451,7 @@ export default function HydrationTracker({
             <button
               key={oz}
               type="button"
-              disabled={
-                (addOzMutation.isPending && supabaseConfigured) ||
-                showWaterPlaceholder
-              }
+              disabled={caffeineBusy || showWaterPlaceholder}
               onClick={() => quickAddOz(oz)}
               className={`relative flex min-h-[56px] min-w-[5.5rem] flex-col items-center justify-center rounded-2xl border-4 border-black px-4 text-xl font-black text-white shadow-md transition hover:bg-sky-700 disabled:opacity-50 ${
                 flashOz === oz ? "bg-emerald-600 ring-2 ring-emerald-300" : "bg-sky-600"
@@ -370,6 +469,60 @@ export default function HydrationTracker({
               )}
             </button>
           ))}
+        </div>
+
+        <div
+          className={`mt-5 rounded-2xl border-2 border-amber-900/25 bg-gradient-to-br from-amber-50 to-orange-50/90 px-3 py-4 ${
+            compact ? "mt-4" : ""
+          }`}
+        >
+          <p className="text-center text-xs font-black uppercase tracking-[0.12em] text-amber-950">
+            Caffeine (approx.)
+          </p>
+          <p className="mt-1 text-center font-mono text-2xl font-black tabular-nums text-amber-950">
+            {showWaterPlaceholder ? "…" : `${caffeineMgToday}`}
+            <span className="text-base font-bold text-amber-900/90"> mg today</span>
+          </p>
+          <div className="mt-3 flex flex-wrap justify-center gap-3">
+            <button
+              type="button"
+              disabled={caffeineBusy || showWaterPlaceholder}
+              onClick={() => logCaffeine("coffee")}
+              className={`relative flex min-h-[56px] min-w-[10rem] max-w-full flex-col items-center justify-center rounded-2xl border-4 border-amber-900 px-3 py-2 text-base font-black text-amber-950 shadow-md transition hover:bg-amber-100 disabled:opacity-50 ${
+                flashCaffeine === "coffee"
+                  ? "bg-emerald-200 ring-2 ring-emerald-500"
+                  : "bg-amber-200/90"
+              }`}
+            >
+              <span className="text-lg" aria-hidden>
+                ☕
+              </span>
+              <span>Coffee</span>
+              <span className="mt-0.5 text-xs font-bold text-amber-900/90">
+                ≈{CAFFEINE_COFFEE_MG} mg
+              </span>
+            </button>
+            <button
+              type="button"
+              disabled={caffeineBusy || showWaterPlaceholder}
+              onClick={() => logCaffeine("energy")}
+              className={`relative flex min-h-[56px] min-w-[10rem] max-w-full flex-col items-center justify-center rounded-2xl border-4 border-orange-800 px-3 py-2 text-base font-black text-orange-950 shadow-md transition hover:bg-orange-100 disabled:opacity-50 ${
+                flashCaffeine === "energy"
+                  ? "bg-emerald-200 ring-2 ring-emerald-500"
+                  : "bg-orange-200/90"
+              }`}
+            >
+              <span className="text-lg" aria-hidden>
+                ⚡
+              </span>
+              <span className="text-center leading-tight">
+                Energy drink / tea
+              </span>
+              <span className="mt-0.5 text-xs font-bold text-orange-900/90">
+                ≈{CAFFEINE_ENERGY_OR_TEA_MG} mg
+              </span>
+            </button>
+          </div>
         </div>
       </div>
 

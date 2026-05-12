@@ -85,6 +85,8 @@ export type DailyLogEntry = {
   entryType?: string;
   /** Fluid ounces when logging water (`daily_logs.value`). */
   valueOz?: number;
+  /** Caffeine milligrams when `entry_type` is `caffeine` (`daily_logs.value`). */
+  valueMg?: number;
   /** Owner when row was inserted authenticated (matches Supabase `user_id`). */
   userId?: string;
   /** Body symptom sketch (PNG base64, no data URL prefix) when saved from SymptomCanvas */

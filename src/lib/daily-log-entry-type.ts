@@ -7,6 +7,9 @@ import {
 /** Stored in `daily_logs.entry_type` for fluid ounces rows. */
 export const ENTRY_TYPE_WATER = "water";
 
+/** Stored in `daily_logs.entry_type` for caffeine mg (`daily_logs.value` = mg). */
+export const ENTRY_TYPE_CAFFEINE = "caffeine";
+
 /**
  * Semantic tag for every `daily_logs` insert — explicit `entry.entryType` wins,
  * otherwise inferred from category / label.

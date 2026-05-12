@@ -149,9 +149,9 @@ export default function DoctorReportPage() {
       </h1>
       <p className="text-sm leading-relaxed text-slate-600">
         Compile medications, dose history, positional BP deltas, metabolic gate
-        blocks, side-effect logs, Symptom Matrix flare counts (with Fibromyalgia
-        pain/stiffness trends), and body sketches into one printable PDF for a new
-        specialist.
+        blocks, side-effect logs, caffeine intake summary, Symptom Matrix flare
+        counts (with Fibromyalgia pain/stiffness trends), and body sketches into
+        one printable PDF for a new specialist.
       </p>
       <button
         type="button"

@@ -149,9 +149,9 @@ export default function MorningRoutine() {
       void qc.invalidateQueries({ queryKey: qk.medicationLogs });
       void qc.invalidateQueries({ queryKey: qk.activityToday });
       router.refresh();
-      window.location.reload();
     },
     onError: (e: Error) => {
+      window.alert(e.message);
       setToast(e.message);
       window.setTimeout(() => setToast(null), 4200);
     },
