@@ -7,8 +7,8 @@ export const qk = {
   journal: ["journal"] as const,
   dailyLogs: ["dailyLogs"] as const,
   /**
-   * Prefix for today’s hydration totals from `daily_logs` — each series uses
-   * `.eq("entry_type", "water" | "caffeine" | "sodium")` so bars never mix.
+   * Prefix for today’s hydration + nutrition totals from `daily_logs` — each series uses
+   * `.eq("entry_type", "water" | "caffeine" | "sodium" | "food")` so bars never mix.
    */
   hydrationTotalsTodayRoot: ["dailyLogs", "hydrationTotalsToday"] as const,
   /** Server sum: sodium mg today (`daily_logs` where `entry_type` = sodium). */

@@ -18,6 +18,7 @@ import HomeDailyActionGrid from "@/components/home/HomeDailyActionGrid";
 import QuickRelief from "@/components/home/QuickRelief";
 import SymptomMatrix from "@/components/home/SymptomMatrix";
 import DashboardTodayCounters from "@/components/home/DashboardTodayCounters";
+import QuickBpHomeButton from "@/components/home/QuickBpHomeButton";
 import { useDashboardSession } from "@/components/home/use-dashboard-session";
 import WelcomeWizard from "@/components/WelcomeWizard";
 import DoseAdjustmentModal, {
@@ -136,12 +137,13 @@ export default function MinimalHomeDashboard({
   });
 
   // Today's totals are summed from `daily_logs.value`, grouped by `entry_type`
-  // (`water`, `caffeine`, `sodium`). The `unit` column is intentionally ignored
+  // (`water`, `caffeine`, `sodium`, `food`). The `unit` column is intentionally ignored
   // for the math — it's only the visible suffix on the label ("oz" / "mg").
   // Source of truth: `fetchTodayHydrationTotalsFromDailyLogs` in `lib/supabase/daily-logs`.
   const todayWaterOz = hydrationTotalsQuery.data?.oz ?? 0;
   const todayCaffeineMg = hydrationTotalsQuery.data?.caffeineMg ?? 0;
   const todaySodiumMg = hydrationTotalsQuery.data?.sodiumMg ?? 0;
+  const todayCaloriesKcal = hydrationTotalsQuery.data?.caloriesKcal ?? 0;
 
   // Hard-cap the "…" placeholder at 2s — if Supabase hangs, we'd rather show
   // zeros and let optimistic taps populate the strip than freeze on a spinner.
@@ -279,13 +281,18 @@ export default function MinimalHomeDashboard({
         </p>
       </div>
 
-      <header className="space-y-1 border-b-2 border-slate-900 pb-4">
-        <h1 className="text-3xl font-bold tracking-tight text-slate-900">
-          {displayFirstName
-            ? `${greeting()}, ${displayFirstName}`
-            : greeting()}
-        </h1>
-        <p className="text-lg font-medium text-slate-700">{formatLongDate()}</p>
+      <header className="flex flex-col gap-3 border-b-2 border-slate-900 pb-4 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+        <div className="min-w-0 flex-1 space-y-1">
+          <h1 className="text-3xl font-bold tracking-tight text-slate-900">
+            {displayFirstName
+              ? `${greeting()}, ${displayFirstName}`
+              : greeting()}
+          </h1>
+          <p className="text-lg font-medium text-slate-700">
+            {formatLongDate()}
+          </p>
+        </div>
+        <QuickBpHomeButton canSave={countersEnabled} />
       </header>
 
       <DashboardTodayCounters enabled={countersEnabled} />
@@ -308,7 +315,7 @@ export default function MinimalHomeDashboard({
           <dl
             aria-label="Today's logged totals"
             aria-live="polite"
-            className="grid grid-cols-3 gap-2 rounded-2xl border-2 border-slate-300 bg-white px-3 py-3 text-center shadow-sm"
+            className="grid grid-cols-2 gap-2 rounded-2xl border-2 border-slate-300 bg-white px-3 py-3 text-center shadow-sm sm:grid-cols-4"
           >
             <div>
               <dt className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-600">
@@ -356,6 +363,23 @@ export default function MinimalHomeDashboard({
                     {todaySodiumMg}
                     <span className="ml-1 text-xs font-bold text-amber-900/80">
                       mg
+                    </span>
+                  </>
+                )}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-600">
+                Calories
+              </dt>
+              <dd className="mt-1 font-mono text-lg font-black tabular-nums text-emerald-950">
+                {todayTotalsLoading ? (
+                  <span className="text-slate-400">…</span>
+                ) : (
+                  <>
+                    {todayCaloriesKcal}
+                    <span className="ml-1 text-xs font-bold text-emerald-900/80">
+                      kcal
                     </span>
                   </>
                 )}

@@ -14,6 +14,7 @@ import {
 import { dailyLogsQueryFn } from "@/lib/daily-logs-query-fn";
 import type {
   DailyLogEntry,
+  JournalEntry,
   OrthostaticSession,
   SafetyGateBlockEvent,
   SideEffectLog,
@@ -68,6 +69,14 @@ export default function DoctorReportPage() {
   });
 
   useQuery({
+    queryKey: qk.journal,
+    queryFn: async (): Promise<JournalEntry[]> => [],
+    staleTime: Infinity,
+    gcTime: 1000 * 60 * 60 * 24 * 30,
+    refetchOnWindowFocus: false,
+  });
+
+  useQuery({
     queryKey: qk.safetyGateBlocks,
     queryFn: async (): Promise<SafetyGateBlockEvent[]> => [],
     staleTime: Infinity,
@@ -114,6 +123,7 @@ export default function DoctorReportPage() {
       const vitals = qc.getQueryData<VitalRow[]>(qk.vitals) ?? [];
       const dailyLogs =
         qc.getQueryData<DailyLogEntry[]>(qk.dailyLogs) ?? [];
+      const journal = qc.getQueryData<JournalEntry[]>(qk.journal) ?? [];
       const safetyGateBlocks =
         qc.getQueryData<SafetyGateBlockEvent[]>(qk.safetyGateBlocks) ?? [];
       const sideEffectLogs =
@@ -134,6 +144,7 @@ export default function DoctorReportPage() {
         orthostatic,
         vitals,
         dailyLogs,
+        journal,
         safetyGateBlocks,
         sideEffectLogs,
         medicationLogs,
@@ -149,9 +160,10 @@ export default function DoctorReportPage() {
       </h1>
       <p className="text-sm leading-relaxed text-slate-600">
         Compile medications, dose history, positional BP deltas, metabolic gate
-        blocks, side-effect logs, caffeine intake summary, Symptom Matrix flare
-        counts (with Fibromyalgia pain/stiffness trends), and body sketches into
-        one printable PDF for a new specialist.
+        blocks, side-effect logs, caffeine intake summary, smart nutrition log with
+        flare-adjacent meals highlighted, Symptom Matrix flare counts (with
+        Fibromyalgia pain/stiffness trends), and body sketches into one printable PDF
+        for a new specialist.
       </p>
       <button
         type="button"

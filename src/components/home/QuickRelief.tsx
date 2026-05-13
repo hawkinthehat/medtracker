@@ -38,6 +38,7 @@ type HydrationTotalsCache = {
   oz: number;
   caffeineMg: number;
   sodiumMg: number;
+  caloriesKcal: number;
   hasSession: boolean;
 };
 
@@ -159,6 +160,7 @@ export default function QuickRelief() {
         oz: old?.oz ?? 0,
         caffeineMg: old?.caffeineMg ?? 0,
         sodiumMg: (old?.sodiumMg ?? 0) + delta,
+        caloriesKcal: old?.caloriesKcal ?? 0,
         hasSession: old?.hasSession ?? true,
       }),
     );

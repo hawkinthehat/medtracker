@@ -52,7 +52,10 @@ export function findSuspectedFoodTriggerFoodIds(
     symptomLogs,
     windowMs,
   );
-  return new Set([...fromJournal, ...fromSymptoms]);
+  const merged = new Set<string>();
+  fromJournal.forEach((id) => merged.add(id));
+  fromSymptoms.forEach((id) => merged.add(id));
+  return merged;
 }
 
 /**
@@ -81,4 +84,9 @@ export function findSuspectedHistamineTriggerFoodIds(
       ) {
         ids.add(food.id);
         break;
-   
+      }
+    }
+  }
+
+  return ids;
+}

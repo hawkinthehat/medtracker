@@ -27,6 +27,7 @@ import type {
 } from "@/lib/types";
 import { labelJournalSetting } from "@/lib/journal-setting";
 import { standing3mReading } from "@/lib/orthostatic-utils";
+import { findSuspectedFoodTriggerFoodIds } from "@/lib/trigger-finder";
 import { localDateKeyFromIso } from "@/lib/clinical-correlation";
 import type { jsPDF } from "jspdf";
 
@@ -444,6 +445,8 @@ export type DoctorReportInput = {
   orthostatic: OrthostaticSession[];
   vitals: VitalRow[];
   dailyLogs: DailyLogEntry[];
+  /** Optional same-day symptom journal — combined with Symptom Matrix for food timing. */
+  journal?: JournalEntry[];
   safetyGateBlocks: SafetyGateBlockEvent[];
   sideEffectLogs: SideEffectLog[];
   medicationLogs: MedicationLogRow[];
@@ -704,6 +707,67 @@ export async function generateDoctorSpecialistPdf(
         fontStyle: "bold",
       },
       theme: "plain",
+    });
+    nextY = (doc as PdfWithAutoTable).lastAutoTable.finalY;
+  }
+
+  const suspectedFoodIds = findSuspectedFoodTriggerFoodIds(
+    bundle.dailyLogs,
+    bundle.journal ?? [],
+    bundle.symptomLogs,
+  );
+  const foodRows = [...bundle.dailyLogs]
+    .filter((l) => l.category === "food")
+    .sort(
+      (a, b) =>
+        new Date(b.recordedAt).getTime() - new Date(a.recordedAt).getTime(),
+    )
+    .slice(0, 45);
+  if (foodRows.length > 0) {
+    doc.setFontSize(12);
+    doc.setTextColor(22, 101, 52);
+    doc.text("Smart nutrition log (recent)", 14, nextY + 12);
+    doc.setFontSize(9);
+    doc.setTextColor(71, 85, 105);
+    doc.text(
+      "kcal values are estimates. Amber rows: a symptom journal entry or Symptom Matrix tap occurred within 2 hours after that meal (timing only, not a diagnosis).",
+      14,
+      nextY + 17,
+      { maxWidth: pageW - 28 },
+    );
+    autoTable(doc, {
+      startY: nextY + 22,
+      head: [["Time", "What you ate", "kcal", "Flare timing"]],
+      body: foodRows.map((r) => {
+        const desc = (r.notes ?? r.label ?? "").trim() || "—";
+        const kcal =
+          r.valueKcal != null && r.valueKcal > 0
+            ? String(Math.round(r.valueKcal))
+            : "—";
+        const flagged = suspectedFoodIds.has(r.id);
+        return [
+          new Date(r.recordedAt).toLocaleString(),
+          desc.length > 140 ? `${desc.slice(0, 137)}…` : desc,
+          kcal,
+          flagged ? "Symptom within 2h — review" : "—",
+        ];
+      }),
+      styles: { fontSize: 8, cellPadding: 1.8, textColor: [15, 23, 42] },
+      headStyles: {
+        fillColor: [220, 252, 231],
+        textColor: [22, 101, 52],
+        fontStyle: "bold",
+      },
+      columnStyles: { 1: { cellWidth: 72 } },
+      theme: "plain",
+      didParseCell: (data) => {
+        if (data.section !== "body") return;
+        const row = foodRows[data.row.index];
+        if (!row || !suspectedFoodIds.has(row.id)) return;
+        data.cell.styles.fillColor = [254, 243, 199];
+        data.cell.styles.textColor = [120, 53, 15];
+        if (data.column.index === 3) data.cell.styles.fontStyle = "bold";
+      },
     });
     nextY = (doc as PdfWithAutoTable).lastAutoTable.finalY;
   }

@@ -27,8 +27,10 @@ import {
 import {
   DEFAULT_SODIUM_GOAL_MG,
   DEFAULT_WATER_GOAL_OZ,
+  DEFAULT_CALORIE_GOAL_KCAL,
   THERMOTABS_SODIUM_MG,
   WATER_OZ_LABEL,
+  sumFoodKcalToday,
   sumThermotabsSodiumMgToday,
   sumThermotabsSodiumMgTodayFromDailyLogs,
   sumWaterOzToday,
@@ -44,6 +46,7 @@ type HydrationTotalsCache = {
   oz: number;
   caffeineMg: number;
   sodiumMg: number;
+  caloriesKcal: number;
   hasSession: boolean;
 };
 
@@ -52,6 +55,8 @@ type HydrationTrackerProps = {
   waterGoalOz?: number;
   /** Daily sodium goal from Thermotabs tally in mg (default 3000). */
   sodiumGoalMg?: number;
+  /** Daily calorie goal for the progress strip (default 2000 kcal). */
+  calorieGoalKcal?: number;
   /** Hide large header — for embedding under Pulse on home. */
   compact?: boolean;
   /** Bumped from home after sign-in so water/caffeine totals re-fetch today’s `recorded_at` window. */
@@ -61,6 +66,7 @@ type HydrationTrackerProps = {
 export default function HydrationTracker({
   waterGoalOz = DEFAULT_WATER_GOAL_OZ,
   sodiumGoalMg = DEFAULT_SODIUM_GOAL_MG,
+  calorieGoalKcal = DEFAULT_CALORIE_GOAL_KCAL,
   compact = false,
   homeTotalsRefreshKey = 0,
 }: HydrationTrackerProps) {
@@ -90,6 +96,7 @@ export default function HydrationTracker({
   const storedWaterOz = hydrationTotalsQuery.data?.oz ?? 0;
   const storedCaffeineMg = hydrationTotalsQuery.data?.caffeineMg ?? 0;
   const storedSodiumMg = hydrationTotalsQuery.data?.sodiumMg ?? 0;
+  const storedCaloriesKcal = hydrationTotalsQuery.data?.caloriesKcal ?? 0;
 
   useEffect(() => {
     const sb = getSupabaseBrowserClient();
@@ -191,6 +198,21 @@ export default function HydrationTracker({
 
   const currentCaffeineMg = baselineCaffeineMg;
 
+  const cacheFoodKcal = useMemo(
+    () => sumFoodKcalToday(dailyLogs),
+    [dailyLogs],
+  );
+
+  const baselineCaloriesKcal = !supabaseConfigured
+    ? cacheFoodKcal
+    : !sessionResolved || !sessionUser
+      ? 0
+      : hydrationTotalsLoaded
+        ? storedCaloriesKcal
+        : cacheFoodKcal;
+
+  const caloriesKcalToday = baselineCaloriesKcal;
+
   /** Pending oz for offline-only mode (local cache); cloud path waits for DB insert. */
   const [optimisticOz, setOptimisticOz] = useState(0);
   /** Which +oz button just fired — brief checkmark flash. */
@@ -221,9 +243,14 @@ export default function HydrationTracker({
 
   const safeWaterGoalOz = Math.max(Number(waterGoalOz) || 0, 1e-9);
   const safeSodiumGoalMg = Math.max(Number(sodiumGoalMg) || 0, 1e-9);
+  const safeCalorieGoalKcal = Math.max(Number(calorieGoalKcal) || 0, 1e-9);
   /** Bar fills to 100% at goal; numeric totals above goal still display for charts / doctors. */
   const waterBarPct = Math.min(currentWaterIntake / safeWaterGoalOz, 1) * 100;
   const sodiumBarPct = Math.min(sodiumMgToday / safeSodiumGoalMg, 1) * 100;
+  const calorieBarPct = Math.min(
+    caloriesKcalToday / safeCalorieGoalKcal,
+    1,
+  ) * 100;
 
   // Snapshot every matching `hydrationTotalsTodayRoot` cache entry so we can
   // roll the optimistic bump back on insert failure. Matching is by prefix
@@ -237,7 +264,7 @@ export default function HydrationTracker({
   // Add `delta` to one field across every cached totals entry — drives the
   // dashboard number, progress bars, and embedded tracker without waiting on Supabase.
   function bumpTotalsOptimistic(
-    field: "oz" | "caffeineMg" | "sodiumMg",
+    field: "oz" | "caffeineMg" | "sodiumMg" | "caloriesKcal",
     delta: number,
   ) {
     qc.setQueriesData<HydrationTotalsCache>(
@@ -248,6 +275,8 @@ export default function HydrationTracker({
           (old?.caffeineMg ?? 0) + (field === "caffeineMg" ? delta : 0),
         sodiumMg:
           (old?.sodiumMg ?? 0) + (field === "sodiumMg" ? delta : 0),
+        caloriesKcal:
+          (old?.caloriesKcal ?? 0) + (field === "caloriesKcal" ? delta : 0),
         hasSession: old?.hasSession ?? true,
       }),
     );
@@ -684,6 +713,37 @@ export default function HydrationTracker({
             style={{ width: `${waterBarPct}%` }}
           />
         </div>
+      </div>
+
+      <div className={compact ? "mt-4" : "mt-5"}>
+        <div className="mb-1 flex flex-wrap items-center justify-between gap-1 text-xs font-semibold uppercase tracking-wide text-slate-600">
+          <span>Calories (logged)</span>
+          <span className="tabular-nums text-slate-900">
+            {showTotalsPlaceholder ? "…" : caloriesKcalToday} / {calorieGoalKcal}{" "}
+            kcal
+          </span>
+        </div>
+        <div
+          className="h-3 w-full overflow-hidden rounded-full border border-emerald-800/25 bg-emerald-50/90"
+          role="progressbar"
+          aria-valuenow={Math.round(calorieBarPct)}
+          aria-valuemin={0}
+          aria-valuemax={100}
+        >
+          <div
+            className="h-full rounded-full bg-emerald-600 transition-[width] duration-300 ease-out"
+            style={{ width: `${calorieBarPct}%` }}
+          />
+        </div>
+        <p className="mt-2 text-center text-xs font-semibold text-slate-600">
+          <Link
+            href="/food"
+            className="font-bold text-emerald-800 underline underline-offset-2"
+          >
+            Smart nutrition log
+          </Link>{" "}
+          — best-guess kcal from what you ate.
+        </p>
       </div>
 
       <div

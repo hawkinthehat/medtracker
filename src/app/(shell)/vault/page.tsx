@@ -19,10 +19,11 @@ import type {
   SafetyGateBlockEvent,
 } from "@/lib/types";
 import { fetchMedicationLogsFromSupabase } from "@/lib/supabase/medication-logs";
+import { fetchSymptomLogsFromSupabase } from "@/lib/supabase/symptom-logs";
 import { fetchWeatherLogsFromSupabase } from "@/lib/supabase/weather-logs";
 import {
   HISTAMINE_TRIGGER_WINDOW_MS,
-  findSuspectedHistamineTriggerFoodIds,
+  findSuspectedFoodTriggerFoodIds,
 } from "@/lib/trigger-finder";
 import { useMemo } from "react";
 import {
@@ -98,6 +99,14 @@ export default function VaultPage() {
     refetchOnWindowFocus: true,
   });
 
+  const { data: symptomLogs = [] } = useQuery({
+    queryKey: qk.symptomLogs,
+    queryFn: () => fetchSymptomLogsFromSupabase(400),
+    staleTime: 30_000,
+    gcTime: 1000 * 60 * 60 * 24 * 30,
+    refetchOnWindowFocus: true,
+  });
+
   const { data: weatherLogs = [] } = useQuery({
     queryKey: qk.weatherLogs,
     queryFn: () => fetchWeatherLogsFromSupabase(400),
@@ -123,8 +132,9 @@ export default function VaultPage() {
   );
 
   const suspectFoodIds = useMemo(
-    () => findSuspectedHistamineTriggerFoodIds(dailyLogs, journal),
-    [dailyLogs, journal]
+    () =>
+      findSuspectedFoodTriggerFoodIds(dailyLogs, journal, symptomLogs),
+    [dailyLogs, journal, symptomLogs],
   );
 
   const flaggedFoods = useMemo(
@@ -185,8 +195,8 @@ export default function VaultPage() {
         <p className="mt-2 max-w-prose text-sm leading-relaxed text-slate-400">
           Trigger Finder compares{" "}
           <span className="text-slate-800">daily_logs</span> (food) with{" "}
-          <span className="text-slate-800">symptom_journal</span> entries. When a
-          flare or pain note lands within{" "}
+          <span className="text-slate-800">symptom_journal</span> entries and
+          Symptom Matrix quick-taps. When a symptom lands within{" "}
           {formatWindowMinutes(HISTAMINE_TRIGGER_WINDOW_MS)} minutes{" "}
           <strong className="font-medium text-slate-700">after</strong> a food
           log, that food is flagged here as a suspected histamine trigger for

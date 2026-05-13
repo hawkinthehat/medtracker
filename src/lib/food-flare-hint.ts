@@ -40,7 +40,11 @@ export function mealLinkedToRecentFlare(
   if (!target) return false;
   const now = Date.now();
   const foods = dailyLogs
-    .filter((l) => l.category === "food" && normMeal(l.label) === target)
+    .filter((l) => {
+      if (l.category !== "food") return false;
+      const key = normMeal(l.notes ?? l.label);
+      return key === target;
+    })
     .map((l) => ({ ...l, t: new Date(l.recordedAt).getTime() }))
     .filter((l) => now - l.t <= LOOKBACK_MS)
     .sort((a, b) => b.t - a.t);

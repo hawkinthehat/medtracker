@@ -1,15 +1,23 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { UtensilsCrossed } from "lucide-react";
 import { qk } from "@/lib/query-keys";
 import type { BrainFogEntry, DailyLogEntry, MoodEntry } from "@/lib/types";
 import { dailyLogsQueryFn } from "@/lib/daily-logs-query-fn";
 import { persistDailyLogToSupabase } from "@/lib/supabase/daily-logs";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser-client";
+import { ENTRY_TYPE_FOOD } from "@/lib/daily-log-entry-type";
+import { estimateCaloriesFromDescription } from "@/lib/calorie-estimate";
 import { mealLinkedToRecentFlare } from "@/lib/food-flare-hint";
 import { toastFoodLogged } from "@/lib/educational-toasts";
+
+function mealDisplayText(row: DailyLogEntry): string {
+  const fromNotes = row.notes?.trim();
+  if (fromNotes) return fromNotes;
+  return row.label.trim();
+}
 
 function recentFavoriteMeals(logs: DailyLogEntry[], limit = 5): string[] {
   const seen = new Set<string>();
@@ -20,7 +28,7 @@ function recentFavoriteMeals(logs: DailyLogEntry[], limit = 5): string[] {
   );
   for (const row of sorted) {
     if (row.category !== "food") continue;
-    const label = row.label.trim();
+    const label = mealDisplayText(row);
     if (!label) continue;
     const key = label.toLowerCase();
     if (seen.has(key)) continue;
@@ -31,9 +39,16 @@ function recentFavoriteMeals(logs: DailyLogEntry[], limit = 5): string[] {
   return out;
 }
 
+function shortMealLabel(description: string, max = 72): string {
+  const t = description.trim();
+  if (!t) return "Meal";
+  return t.length <= max ? t : `${t.slice(0, max - 1)}…`;
+}
+
 export default function FoodTracker() {
   const qc = useQueryClient();
-  const [manual, setManual] = useState("");
+  const [whatYouAte, setWhatYouAte] = useState("");
+  const [caloriesOverride, setCaloriesOverride] = useState<number | null>(null);
   const [inspectLabel, setInspectLabel] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
 
@@ -69,19 +84,43 @@ export default function FoodTracker() {
 
   const supabaseConfigured = Boolean(getSupabaseBrowserClient());
 
+  const bestGuessKcal = useMemo(
+    () => estimateCaloriesFromDescription(whatYouAte),
+    [whatYouAte],
+  );
+
+  useEffect(() => {
+    setCaloriesOverride(null);
+  }, [whatYouAte]);
+
+  const effectiveKcal =
+    caloriesOverride != null &&
+    Number.isFinite(caloriesOverride) &&
+    caloriesOverride > 0
+      ? Math.round(caloriesOverride)
+      : bestGuessKcal;
+
   const hintForInspect =
     inspectLabel &&
     mealLinkedToRecentFlare(inspectLabel, dailyLogs, moods, brainFog);
 
   const logFood = useMutation({
-    mutationFn: async (label: string) => {
-      const trimmed = label.trim();
-      if (!trimmed) throw new Error("Enter a meal name.");
+    mutationFn: async (input: { description: string; kcal: number }) => {
+      const trimmed = input.description.trim();
+      if (!trimmed) throw new Error("Describe what you ate.");
+      const kcal = Math.round(input.kcal);
+      if (!Number.isFinite(kcal) || kcal <= 0) {
+        throw new Error("Enter a positive calorie estimate.");
+      }
       const row: DailyLogEntry = {
         id: crypto.randomUUID(),
         recordedAt: new Date().toISOString(),
         category: "food",
-        label: trimmed,
+        entryType: ENTRY_TYPE_FOOD,
+        label: shortMealLabel(trimmed),
+        notes: trimmed,
+        valueKcal: kcal,
+        unit: "kcal",
       };
       if (supabaseConfigured) {
         const result = await persistDailyLogToSupabase(row);
@@ -96,10 +135,13 @@ export default function FoodTracker() {
         ...prev,
       ]);
       void qc.invalidateQueries({ queryKey: qk.dailyLogs });
-      setInspectLabel(row.label);
-      setStatus(toastFoodLogged(row.label));
+      void qc.invalidateQueries({ queryKey: qk.hydrationTotalsTodayRoot });
+      const shown = mealDisplayText(row);
+      setInspectLabel(shown);
+      setStatus(toastFoodLogged(shown));
       window.setTimeout(() => setStatus(null), 2400);
-      setManual("");
+      setWhatYouAte("");
+      setCaloriesOverride(null);
     },
     onError: (e: Error) => {
       setStatus(e.message);
@@ -107,17 +149,98 @@ export default function FoodTracker() {
     },
   });
 
+  function submit(description: string, kcal: number) {
+    logFood.mutate({ description, kcal });
+  }
+
   return (
     <div className="space-y-8 pb-16">
       <header>
         <h1 className="flex items-center gap-3 text-3xl font-bold text-slate-900">
           <UtensilsCrossed className="h-12 w-12 shrink-0" aria-hidden />
-          Food tracker
+          Smart nutrition log
         </h1>
         <p className="mt-3 text-xl font-medium text-slate-700">
-          Tap a favorite or type something else — one tap logs the time for you.
+          Describe what you ate — we suggest a best-guess calorie total you can
+          adjust before saving. Entries sync to{" "}
+          <span className="font-semibold text-slate-900">daily_logs</span> for
+          your doctor report and flare timing.
         </p>
       </header>
+
+      <section
+        aria-labelledby="smart-nutrition-heading"
+        className="rounded-2xl border-4 border-black bg-white p-5 shadow-md"
+      >
+        <h2
+          id="smart-nutrition-heading"
+          className="text-2xl font-bold text-slate-900"
+        >
+          Log a meal
+        </h2>
+        <label
+          htmlFor="what-you-ate"
+          className="mt-4 block text-lg font-bold text-slate-800"
+        >
+          What did you eat?
+        </label>
+        <textarea
+          id="what-you-ate"
+          className="mt-2 min-h-[100px] w-full resize-y rounded-xl border-4 border-black bg-white px-4 py-3 text-xl font-semibold text-slate-900 outline-none focus-visible:ring-4 focus-visible:ring-sky-400"
+          placeholder="e.g. 2 eggs and toast, chicken salad…"
+          value={whatYouAte}
+          onChange={(e) => setWhatYouAte(e.target.value)}
+          autoComplete="off"
+        />
+        <div className="mt-4 flex flex-wrap items-end gap-4">
+          <div className="min-w-[10rem] flex-1">
+            <p className="text-sm font-bold uppercase tracking-wide text-slate-600">
+              Best-guess calories
+            </p>
+            <p className="mt-1 text-3xl font-black tabular-nums text-emerald-900">
+              ~{bestGuessKcal > 0 ? bestGuessKcal : "—"}{" "}
+              <span className="text-lg font-bold text-emerald-800/90">kcal</span>
+            </p>
+          </div>
+          <div className="w-full max-w-[12rem]">
+            <label
+              htmlFor="kcal-override"
+              className="block text-sm font-bold text-slate-700"
+            >
+              Adjust (kcal)
+            </label>
+            <input
+              id="kcal-override"
+              type="number"
+              inputMode="numeric"
+              min={1}
+              max={8000}
+              placeholder={bestGuessKcal > 0 ? String(bestGuessKcal) : ""}
+              value={caloriesOverride ?? ""}
+              onChange={(e) => {
+                const v = e.target.value;
+                if (v === "") {
+                  setCaloriesOverride(null);
+                  return;
+                }
+                const n = Number(v);
+                setCaloriesOverride(Number.isFinite(n) ? n : null);
+              }}
+              className="mt-1 w-full rounded-xl border-4 border-slate-400 bg-white px-3 py-2 text-xl font-black tabular-nums text-slate-900 outline-none focus-visible:ring-4 focus-visible:ring-sky-400"
+            />
+          </div>
+        </div>
+        <button
+          type="button"
+          disabled={
+            logFood.isPending || !whatYouAte.trim() || effectiveKcal <= 0
+          }
+          onClick={() => submit(whatYouAte, effectiveKcal)}
+          className="mt-6 min-h-[60px] w-full rounded-xl border-4 border-black bg-emerald-600 py-3 text-2xl font-black uppercase tracking-wide text-white hover:bg-emerald-700 disabled:opacity-40"
+        >
+          Save meal (~{effectiveKcal > 0 ? effectiveKcal : "—"} kcal)
+        </button>
+      </section>
 
       <section aria-labelledby="favorites-heading">
         <h2
@@ -127,12 +250,13 @@ export default function FoodTracker() {
           Favorites
         </h2>
         <p className="mt-2 text-lg text-slate-600">
-          Last five different meals you logged (newest first).
+          Last five different meals (newest first). Tap to log again with the
+          same description — review calories if your portion changed.
         </p>
         <div className="mt-4 flex gap-4 overflow-x-auto pb-2 pt-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {favorites.length === 0 && (
             <p className="text-xl text-slate-500">
-              Log meals below — your top picks will appear here.
+              Saved meals appear here for one-tap logging.
             </p>
           )}
           {favorites.map((meal) => (
@@ -142,7 +266,8 @@ export default function FoodTracker() {
               disabled={logFood.isPending}
               onClick={() => {
                 setInspectLabel(meal);
-                logFood.mutate(meal);
+                const k = estimateCaloriesFromDescription(meal);
+                submit(meal, k > 0 ? k : 250);
               }}
               className="min-h-[72px] min-w-[11rem] shrink-0 rounded-2xl border-4 border-black bg-white px-5 py-4 text-left text-xl font-bold text-slate-900 shadow-md transition hover:bg-slate-50 active:scale-[0.98] disabled:opacity-50"
             >
@@ -166,29 +291,11 @@ export default function FoodTracker() {
         </div>
       )}
 
-      <section aria-labelledby="manual-heading">
-        <h2 id="manual-heading" className="text-2xl font-bold text-slate-900">
-          Something else?
-        </h2>
-        <input
-          className="mt-4 min-h-[60px] w-full rounded-xl border-4 border-black bg-white px-4 text-2xl font-semibold text-slate-900 outline-none focus-visible:ring-4 focus-visible:ring-sky-400"
-          placeholder="Describe your meal"
-          value={manual}
-          onChange={(e) => setManual(e.target.value)}
-          aria-label="Manual meal description"
-        />
-        <button
-          type="button"
-          disabled={logFood.isPending || !manual.trim()}
-          onClick={() => logFood.mutate(manual)}
-          className="mt-4 min-h-[60px] w-full rounded-xl border-4 border-black bg-sky-600 py-3 text-2xl font-black uppercase tracking-wide text-white hover:bg-sky-700 disabled:opacity-40"
-        >
-          Add meal
-        </button>
-      </section>
-
       {status && (
-        <p className="text-center text-2xl font-bold text-slate-900" role="status">
+        <p
+          className="text-center text-2xl font-bold text-slate-900"
+          role="status"
+        >
           {status}
         </p>
       )}
