@@ -122,7 +122,7 @@ export default function MinimalHomeDashboard({
     setHomeTotalsRefreshKey((k) => k + 1);
   }, [countersEnabled, qc]);
 
-  useQuery({
+  const hydrationTotalsQuery = useQuery({
     queryKey: [
       ...qk.hydrationTotalsTodayRoot,
       sessionUserId ?? "none",
@@ -134,6 +134,18 @@ export default function MinimalHomeDashboard({
     gcTime: 1000 * 60 * 60 * 24,
     refetchOnWindowFocus: true,
   });
+
+  // Today's totals are summed from `daily_logs.value`, grouped by `entry_type`
+  // (`water`, `caffeine`, `sodium`). The `unit` column is intentionally ignored
+  // for the math — it's only the visible suffix on the label ("oz" / "mg").
+  // Source of truth: `fetchTodayHydrationTotalsFromDailyLogs` in `lib/supabase/daily-logs`.
+  const todayWaterOz = hydrationTotalsQuery.data?.oz ?? 0;
+  const todayCaffeineMg = hydrationTotalsQuery.data?.caffeineMg ?? 0;
+  const todaySodiumMg = hydrationTotalsQuery.data?.sodiumMg ?? 0;
+  const todayTotalsLoading =
+    Boolean(countersEnabled && sessionUserId) &&
+    !hydrationTotalsQuery.isError &&
+    hydrationTotalsQuery.data == null;
 
   function openDoseModal(m: SavedMedication, tab: DoseModalTab) {
     setDoseModalTab(tab);
@@ -279,6 +291,65 @@ export default function MinimalHomeDashboard({
           Daily pulse
         </h2>
         <PulseStrip />
+        {countersEnabled && sessionUserId && (
+          <dl
+            aria-label="Today's logged totals"
+            aria-live="polite"
+            className="grid grid-cols-3 gap-2 rounded-2xl border-2 border-slate-300 bg-white px-3 py-3 text-center shadow-sm"
+          >
+            <div>
+              <dt className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-600">
+                Water
+              </dt>
+              <dd className="mt-1 font-mono text-lg font-black tabular-nums text-sky-900">
+                {todayTotalsLoading ? (
+                  <span className="text-slate-400">…</span>
+                ) : (
+                  <>
+                    {todayWaterOz}
+                    <span className="ml-1 text-xs font-bold text-sky-800/80">
+                      oz
+                    </span>
+                  </>
+                )}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-600">
+                Caffeine
+              </dt>
+              <dd className="mt-1 font-mono text-lg font-black tabular-nums text-amber-950">
+                {todayTotalsLoading ? (
+                  <span className="text-slate-400">…</span>
+                ) : (
+                  <>
+                    {todayCaffeineMg}
+                    <span className="ml-1 text-xs font-bold text-amber-900/80">
+                      mg
+                    </span>
+                  </>
+                )}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-600">
+                Sodium
+              </dt>
+              <dd className="mt-1 font-mono text-lg font-black tabular-nums text-amber-950">
+                {todayTotalsLoading ? (
+                  <span className="text-slate-400">…</span>
+                ) : (
+                  <>
+                    {todaySodiumMg}
+                    <span className="ml-1 text-xs font-bold text-amber-900/80">
+                      mg
+                    </span>
+                  </>
+                )}
+              </dd>
+            </div>
+          </dl>
+        )}
         <div id="home-hydration" className="scroll-mt-28">
           <HydrationTracker
             compact
