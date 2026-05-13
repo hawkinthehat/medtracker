@@ -39,6 +39,14 @@ import { FeatureHelpTrigger } from "@/components/FeatureHelpModal";
 import { toastWaterLogged } from "@/lib/educational-toasts";
 import { ENTRY_TYPE_CAFFEINE, ENTRY_TYPE_WATER } from "@/lib/daily-log-entry-type";
 
+/** Shape held in the React Query cache under `qk.hydrationTotalsTodayRoot`. */
+type HydrationTotalsCache = {
+  oz: number;
+  caffeineMg: number;
+  sodiumMg: number;
+  hasSession: boolean;
+};
+
 type HydrationTrackerProps = {
   /** Daily fluid goal in fluid ounces (default 100). */
   waterGoalOz?: number;
@@ -115,8 +123,26 @@ export default function HydrationTracker({
     hydrationTotalsQuery.isError;
 
   const needsSignIn = supabaseConfigured && sessionResolved && !sessionUser;
-  const showTotalsPlaceholder =
+
+  // Hard-cap the "…" placeholder at 2s — if the first totals fetch hangs we'd
+  // rather show 0 and let optimistic taps populate the counter than freeze on a spinner.
+  const [totalsPlaceholderTimedOut, setTotalsPlaceholderTimedOut] =
+    useState(false);
+  const awaitingFirstTotals =
     supabaseConfigured && !!sessionUser && !hydrationTotalsLoaded;
+  useEffect(() => {
+    if (!awaitingFirstTotals) {
+      setTotalsPlaceholderTimedOut(false);
+      return;
+    }
+    const t = window.setTimeout(
+      () => setTotalsPlaceholderTimedOut(true),
+      2000,
+    );
+    return () => window.clearTimeout(t);
+  }, [awaitingFirstTotals]);
+  const showTotalsPlaceholder =
+    awaitingFirstTotals && !totalsPlaceholderTimedOut;
 
   const [toast, setToast] = useState<string | null>(null);
 
@@ -193,88 +219,162 @@ export default function HydrationTracker({
       ? 0
       : legacySodiumMedMg + storedSodiumMg;
 
-  const waterProgress = Math.min(1, currentWaterIntake / waterGoalOz);
-  const sodiumProgress = Math.min(1, sodiumMgToday / sodiumGoalMg);
+  const safeWaterGoalOz = Math.max(Number(waterGoalOz) || 0, 1e-9);
+  const safeSodiumGoalMg = Math.max(Number(sodiumGoalMg) || 0, 1e-9);
+  /** Bar fills to 100% at goal; numeric totals above goal still display for charts / doctors. */
+  const waterBarPct = Math.min(currentWaterIntake / safeWaterGoalOz, 1) * 100;
+  const sodiumBarPct = Math.min(sodiumMgToday / safeSodiumGoalMg, 1) * 100;
+
+  // Snapshot every matching `hydrationTotalsTodayRoot` cache entry so we can
+  // roll the optimistic bump back on insert failure. Matching is by prefix
+  // (`qk.hydrationTotalsTodayRoot` plus per-session/refresh suffixes).
+  function snapshotTotalsCaches() {
+    return qc.getQueriesData<HydrationTotalsCache>({
+      queryKey: qk.hydrationTotalsTodayRoot,
+    });
+  }
+
+  // Add `delta` to one field across every cached totals entry — drives the
+  // dashboard number, progress bars, and embedded tracker without waiting on Supabase.
+  function bumpTotalsOptimistic(
+    field: "oz" | "caffeineMg" | "sodiumMg",
+    delta: number,
+  ) {
+    qc.setQueriesData<HydrationTotalsCache>(
+      { queryKey: qk.hydrationTotalsTodayRoot },
+      (old) => ({
+        oz: (old?.oz ?? 0) + (field === "oz" ? delta : 0),
+        caffeineMg:
+          (old?.caffeineMg ?? 0) + (field === "caffeineMg" ? delta : 0),
+        sodiumMg:
+          (old?.sodiumMg ?? 0) + (field === "sodiumMg" ? delta : 0),
+        hasSession: old?.hasSession ?? true,
+      }),
+    );
+  }
+
+  function restoreTotalsCaches(
+    snapshots: ReturnType<typeof snapshotTotalsCaches>,
+  ) {
+    for (const [key, data] of snapshots) {
+      qc.setQueryData(key, data);
+    }
+  }
 
   const addOzMutation = useMutation({
-    mutationFn: async (amountOz: number) => {
-      const row: DailyLogEntry = {
-        id: crypto.randomUUID(),
-        recordedAt: new Date().toISOString(),
-        category: "hydration",
-        label: WATER_OZ_LABEL,
-        notes: String(amountOz),
-        entryType: ENTRY_TYPE_WATER,
-        valueOz: amountOz,
-        unit: "oz",
-      };
-      const result = await persistDailyLogToSupabase(row);
-      if (!result.ok) {
-        const msg = result.error ?? "Could not save — check Supabase.";
-        console.error("[hydration] daily_logs insert rejected:", msg);
-        throw new Error(msg);
+    mutationFn: async (row: DailyLogEntry) => {
+      try {
+        const result = await persistDailyLogToSupabase(row);
+        if (!result.ok) {
+          throw new Error(result.error ?? "Could not save water log.");
+        }
+        const amountOz = Number(
+          row.valueOz ??
+            Number.parseInt(String(row.notes ?? "").trim(), 10),
+        );
+        return { amountOz, row };
+      } catch (err) {
+        throw err instanceof Error
+          ? err
+          : new Error("Could not save water log.");
       }
-      return amountOz;
     },
-    onSuccess: async (amountOz) => {
-      addOzMutation.reset();
-      setToast(null);
-      await qc.invalidateQueries({ queryKey: qk.dailyLogs });
-      await qc.refetchQueries({ queryKey: qk.dailyLogs });
-      void qc.invalidateQueries({ queryKey: qk.hydrationTotalsTodayRoot });
-      await qc.refetchQueries({ queryKey: qk.hydrationTotalsTodayRoot });
-      router.refresh();
+    onMutate: async (row) => {
+      await qc.cancelQueries({ queryKey: qk.hydrationTotalsTodayRoot });
+      await qc.cancelQueries({ queryKey: qk.dailyLogs });
+      const previousTotals = snapshotTotalsCaches();
+      const previousDailyLogs =
+        qc.getQueryData<DailyLogEntry[]>(qk.dailyLogs) ?? [];
+      const deltaOz = Number(
+        row.valueOz ??
+          Number.parseInt(String(row.notes ?? "").trim(), 10),
+      );
+      if (Number.isFinite(deltaOz) && deltaOz > 0) {
+        bumpTotalsOptimistic("oz", deltaOz);
+      }
+      qc.setQueryData<DailyLogEntry[]>(qk.dailyLogs, (prev = []) => [
+        row,
+        ...prev,
+      ]);
+      return { previousTotals, previousDailyLogs };
+    },
+    onError: (err: Error, _row, context) => {
+      if (context?.previousTotals) restoreTotalsCaches(context.previousTotals);
+      if (context?.previousDailyLogs) {
+        qc.setQueryData(qk.dailyLogs, context.previousDailyLogs);
+      }
+      console.error("[hydration] water log failed:", err);
+      setToast(toastMessageForPersistFailure(err.message));
+      window.setTimeout(() => setToast(null), 3500);
+    },
+    onSuccess: ({ amountOz }) => {
       setToast(toastWaterLogged(amountOz));
       window.setTimeout(() => setToast(null), 4500);
     },
-    onError: (err: Error) => {
-      console.error("[hydration] Water log failed:", err);
-      setToast(toastMessageForPersistFailure(err.message));
-      window.setTimeout(() => setToast(null), 3200);
+    onSettled: () => {
+      void qc.invalidateQueries({ queryKey: qk.dailyLogs });
+      void qc.invalidateQueries({ queryKey: qk.hydrationTotalsTodayRoot });
     },
   });
 
   const addCaffeineMutation = useMutation({
-    mutationFn: async (preset: "coffee" | "energy") => {
-      const mg =
-        preset === "coffee" ? CAFFEINE_COFFEE_MG : CAFFEINE_ENERGY_OR_TEA_MG;
-      const label =
-        preset === "coffee" ? CAFFEINE_COFFEE_LABEL : CAFFEINE_ENERGY_LABEL;
-      const row: DailyLogEntry = {
-        id: crypto.randomUUID(),
-        recordedAt: new Date().toISOString(),
-        category: "caffeine",
-        label,
-        notes: String(mg),
-        entryType: ENTRY_TYPE_CAFFEINE,
-        valueMg: mg,
-        unit: "mg",
-      };
-      const result = await persistDailyLogToSupabase(row);
-      if (!result.ok) {
-        const msg = result.error ?? "Could not save caffeine log.";
-        console.error("[hydration] caffeine insert rejected:", msg);
-        throw new Error(msg);
+    mutationFn: async (input: {
+      row: DailyLogEntry;
+      preset: "coffee" | "energy";
+    }) => {
+      const { row, preset } = input;
+      try {
+        const result = await persistDailyLogToSupabase(row);
+        if (!result.ok) {
+          throw new Error(result.error ?? "Could not save caffeine log.");
+        }
+        const mg = Number(
+          row.valueMg ??
+            Number.parseInt(String(row.notes ?? "").trim(), 10),
+        );
+        return { preset, mg, row };
+      } catch (err) {
+        throw err instanceof Error
+          ? err
+          : new Error("Could not save caffeine log.");
       }
-      return preset;
     },
-    onSuccess: async (preset) => {
-      addCaffeineMutation.reset();
-      setToast(null);
-      await qc.invalidateQueries({ queryKey: qk.dailyLogs });
-      await qc.refetchQueries({ queryKey: qk.dailyLogs });
-      void qc.invalidateQueries({ queryKey: qk.hydrationTotalsTodayRoot });
-      await qc.refetchQueries({ queryKey: qk.hydrationTotalsTodayRoot });
-      router.refresh();
-      const mg =
-        preset === "coffee" ? CAFFEINE_COFFEE_MG : CAFFEINE_ENERGY_OR_TEA_MG;
+    onMutate: async (input) => {
+      const { row } = input;
+      await qc.cancelQueries({ queryKey: qk.hydrationTotalsTodayRoot });
+      await qc.cancelQueries({ queryKey: qk.dailyLogs });
+      const previousTotals = snapshotTotalsCaches();
+      const previousDailyLogs =
+        qc.getQueryData<DailyLogEntry[]>(qk.dailyLogs) ?? [];
+      const deltaMg = Number(
+        row.valueMg ??
+          Number.parseInt(String(row.notes ?? "").trim(), 10),
+      );
+      if (Number.isFinite(deltaMg) && deltaMg > 0) {
+        bumpTotalsOptimistic("caffeineMg", deltaMg);
+      }
+      qc.setQueryData<DailyLogEntry[]>(qk.dailyLogs, (prev = []) => [
+        row,
+        ...prev,
+      ]);
+      return { previousTotals, previousDailyLogs };
+    },
+    onError: (err: Error, _input, context) => {
+      if (context?.previousTotals) restoreTotalsCaches(context.previousTotals);
+      if (context?.previousDailyLogs) {
+        qc.setQueryData(qk.dailyLogs, context.previousDailyLogs);
+      }
+      console.error("[hydration] caffeine log failed:", err);
+      setToast(toastMessageForPersistFailure(err.message));
+      window.setTimeout(() => setToast(null), 3500);
+    },
+    onSuccess: ({ mg }) => {
       setToast(`Logged ${mg} mg caffeine.`);
       window.setTimeout(() => setToast(null), 3200);
     },
-    onError: (err: Error) => {
-      console.error("[hydration] Caffeine log failed:", err);
-      setToast(toastMessageForPersistFailure(err.message));
-      window.setTimeout(() => setToast(null), 3200);
+    onSettled: () => {
+      void qc.invalidateQueries({ queryKey: qk.dailyLogs });
+      void qc.invalidateQueries({ queryKey: qk.hydrationTotalsTodayRoot });
     },
   });
 
@@ -314,7 +414,18 @@ export default function HydrationTracker({
 
     setFlashOz(amount);
     window.setTimeout(() => setFlashOz(null), 700);
-    addOzMutation.mutate(amount);
+    const row: DailyLogEntry = {
+      id: crypto.randomUUID(),
+      recordedAt: new Date().toISOString(),
+      category: "hydration",
+      label: WATER_OZ_LABEL,
+      notes: String(amount),
+      entryType: ENTRY_TYPE_WATER,
+      valueOz: amount,
+      unit: "oz",
+      userId: sessionUser?.id,
+    };
+    addOzMutation.mutate(row);
   }
 
   function logCaffeine(preset: "coffee" | "energy") {
@@ -348,11 +459,23 @@ export default function HydrationTracker({
     }
     setFlashCaffeine(preset);
     window.setTimeout(() => setFlashCaffeine(null), 700);
-    addCaffeineMutation.mutate(preset);
+    const mg =
+      preset === "coffee" ? CAFFEINE_COFFEE_MG : CAFFEINE_ENERGY_OR_TEA_MG;
+    const label =
+      preset === "coffee" ? CAFFEINE_COFFEE_LABEL : CAFFEINE_ENERGY_LABEL;
+    const row: DailyLogEntry = {
+      id: crypto.randomUUID(),
+      recordedAt: new Date().toISOString(),
+      category: "caffeine",
+      label,
+      notes: String(mg),
+      entryType: ENTRY_TYPE_CAFFEINE,
+      valueMg: mg,
+      unit: "mg",
+      userId: sessionUser?.id,
+    };
+    addCaffeineMutation.mutate({ row, preset });
   }
-
-  const caffeineBusy =
-    supabaseConfigured && (addOzMutation.isPending || addCaffeineMutation.isPending);
 
   const thermotabsCountToday = useMemo(() => {
     if (THERMOTABS_SODIUM_MG <= 0) return 0;
@@ -466,9 +589,8 @@ export default function HydrationTracker({
             <button
               key={oz}
               type="button"
-              disabled={caffeineBusy || showTotalsPlaceholder}
               onClick={() => quickAddOz(oz)}
-              className={`relative flex min-h-[56px] min-w-[5.5rem] flex-col items-center justify-center rounded-2xl border-4 border-black px-4 text-xl font-black text-white shadow-md transition hover:bg-sky-700 disabled:opacity-50 ${
+              className={`relative flex min-h-[56px] min-w-[5.5rem] flex-col items-center justify-center rounded-2xl border-4 border-black px-4 text-xl font-black text-white shadow-md transition hover:bg-sky-700 active:scale-[0.98] ${
                 flashOz === oz ? "bg-emerald-600 ring-2 ring-emerald-300" : "bg-sky-600"
               }`}
             >
@@ -501,9 +623,8 @@ export default function HydrationTracker({
           <div className="mt-3 flex flex-wrap justify-center gap-3">
             <button
               type="button"
-              disabled={caffeineBusy || showTotalsPlaceholder}
               onClick={() => logCaffeine("coffee")}
-              className={`relative flex min-h-[56px] min-w-[10rem] max-w-full flex-col items-center justify-center rounded-2xl border-4 border-amber-900 px-3 py-2 text-base font-black text-amber-950 shadow-md transition hover:bg-amber-100 disabled:opacity-50 ${
+              className={`relative flex min-h-[56px] min-w-[10rem] max-w-full flex-col items-center justify-center rounded-2xl border-4 border-amber-900 px-3 py-2 text-base font-black text-amber-950 shadow-md transition hover:bg-amber-100 active:scale-[0.98] ${
                 flashCaffeine === "coffee"
                   ? "bg-emerald-200 ring-2 ring-emerald-500"
                   : "bg-amber-200/90"
@@ -519,9 +640,8 @@ export default function HydrationTracker({
             </button>
             <button
               type="button"
-              disabled={caffeineBusy || showTotalsPlaceholder}
               onClick={() => logCaffeine("energy")}
-              className={`relative flex min-h-[56px] min-w-[10rem] max-w-full flex-col items-center justify-center rounded-2xl border-4 border-orange-800 px-3 py-2 text-base font-black text-orange-950 shadow-md transition hover:bg-orange-100 disabled:opacity-50 ${
+              className={`relative flex min-h-[56px] min-w-[10rem] max-w-full flex-col items-center justify-center rounded-2xl border-4 border-orange-800 px-3 py-2 text-base font-black text-orange-950 shadow-md transition hover:bg-orange-100 active:scale-[0.98] ${
                 flashCaffeine === "energy"
                   ? "bg-emerald-200 ring-2 ring-emerald-500"
                   : "bg-orange-200/90"
@@ -551,7 +671,7 @@ export default function HydrationTracker({
         <div
           className="h-3 w-full overflow-hidden rounded-full border border-slate-300 bg-slate-100"
           role="progressbar"
-          aria-valuenow={Math.round(waterProgress * 100)}
+          aria-valuenow={Math.round(waterBarPct)}
           aria-valuemin={0}
           aria-valuemax={100}
         >
@@ -561,7 +681,7 @@ export default function HydrationTracker({
                 ? "h-full rounded-full bg-sky-600 transition-none"
                 : "h-full rounded-full bg-sky-600 transition-[width] duration-300 ease-out"
             }
-            style={{ width: `${waterProgress * 100}%` }}
+            style={{ width: `${waterBarPct}%` }}
           />
         </div>
       </div>
@@ -595,13 +715,13 @@ export default function HydrationTracker({
             <div
               className="h-2.5 w-full overflow-hidden rounded-full border border-amber-600/50 bg-amber-100/80"
               role="progressbar"
-              aria-valuenow={Math.round(sodiumProgress * 100)}
+              aria-valuenow={Math.round(sodiumBarPct)}
               aria-valuemin={0}
               aria-valuemax={100}
             >
               <div
                 className="h-full rounded-full bg-amber-600 transition-[width] duration-300 ease-out"
-                style={{ width: `${sodiumProgress * 100}%` }}
+                style={{ width: `${sodiumBarPct}%` }}
               />
             </div>
           </div>

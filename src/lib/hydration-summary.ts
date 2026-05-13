@@ -2,6 +2,7 @@ import type { DailyLogEntry } from "@/lib/types";
 import type { MedicationLogRow } from "@/lib/supabase/medication-logs";
 import {
   ENTRY_TYPE_CAFFEINE,
+  ENTRY_TYPE_FOOD,
   ENTRY_TYPE_SODIUM,
   ENTRY_TYPE_WATER,
 } from "@/lib/daily-log-entry-type";
@@ -14,6 +15,8 @@ export const LEGACY_GLASS_LABEL = "Water glass";
 export const THERMOTABS_SODIUM_MG = 360;
 export const DEFAULT_WATER_GOAL_OZ = 100;
 export const DEFAULT_SODIUM_GOAL_MG = 3000;
+/** Default daily calorie target for the home hydration strip (editable via prop). */
+export const DEFAULT_CALORIE_GOAL_KCAL = 2000;
 
 function localDayParts(d: Date) {
   return {
@@ -67,13 +70,11 @@ export function sumWaterOzToday(
         oz += 8;
         continue;
       }
-      const fromVal =
-        e.valueOz != null &&
-        Number.isFinite(e.valueOz) &&
-        e.valueOz > 0
-          ? Math.round(e.valueOz)
-          : Number.parseInt(String(e.notes ?? "").trim(), 10);
-      if (Number.isFinite(fromVal) && fromVal > 0) oz += fromVal;
+      const valueOzNum = Number(e.valueOz);
+      const fromVal = Number.isFinite(valueOzNum) && valueOzNum > 0
+        ? Math.round(valueOzNum)
+        : Number.parseInt(String(e.notes ?? "").trim(), 10);
+      if (Number.isFinite(fromVal) && fromVal > 0) oz += Number(fromVal);
       continue;
     }
 
@@ -84,15 +85,30 @@ export function sumWaterOzToday(
       oz += 8;
       continue;
     }
-    const fromVal =
-      e.valueOz != null &&
-      Number.isFinite(e.valueOz) &&
-      e.valueOz > 0
-        ? Math.round(e.valueOz)
-        : Number.parseInt(String(e.notes ?? "").trim(), 10);
-    if (Number.isFinite(fromVal) && fromVal > 0) oz += fromVal;
+    const valueOzNum = Number(e.valueOz);
+    const fromVal = Number.isFinite(valueOzNum) && valueOzNum > 0
+      ? Math.round(valueOzNum)
+      : Number.parseInt(String(e.notes ?? "").trim(), 10);
+    if (Number.isFinite(fromVal) && fromVal > 0) oz += Number(fromVal);
   }
   return oz;
+}
+
+/** Sum estimated kcal from smart nutrition logs (`entry_type` = food) for the local calendar day. */
+export function sumFoodKcalToday(
+  dailyLogs: DailyLogEntry[],
+  ref = new Date(),
+): number {
+  let kcal = 0;
+  for (const e of dailyLogs) {
+    if (!isSameLocalCalendarDay(e.recordedAt, ref)) continue;
+    const typedFood =
+      e.entryType === ENTRY_TYPE_FOOD || e.entryType === "food";
+    if (!typedFood) continue;
+    const v = Number(e.valueKcal);
+    if (Number.isFinite(v) && v > 0) kcal += Math.round(v);
+  }
+  return kcal;
 }
 
 /** Total fluid ounces from hydration logs in the rolling `days` window. */
@@ -109,13 +125,11 @@ export function sumWaterOzLastDays(
         oz += 8;
         continue;
       }
-      const fromVal =
-        e.valueOz != null &&
-        Number.isFinite(e.valueOz) &&
-        e.valueOz > 0
-          ? Math.round(e.valueOz)
-          : Number.parseInt(String(e.notes ?? "").trim(), 10);
-      if (Number.isFinite(fromVal) && fromVal > 0) oz += fromVal;
+      const valueOzNum = Number(e.valueOz);
+      const fromVal = Number.isFinite(valueOzNum) && valueOzNum > 0
+        ? Math.round(valueOzNum)
+        : Number.parseInt(String(e.notes ?? "").trim(), 10);
+      if (Number.isFinite(fromVal) && fromVal > 0) oz += Number(fromVal);
       continue;
     }
 
@@ -126,13 +140,11 @@ export function sumWaterOzLastDays(
       oz += 8;
       continue;
     }
-    const fromVal =
-      e.valueOz != null &&
-      Number.isFinite(e.valueOz) &&
-      e.valueOz > 0
-        ? Math.round(e.valueOz)
-        : Number.parseInt(String(e.notes ?? "").trim(), 10);
-    if (Number.isFinite(fromVal) && fromVal > 0) oz += fromVal;
+    const valueOzNum = Number(e.valueOz);
+    const fromVal = Number.isFinite(valueOzNum) && valueOzNum > 0
+      ? Math.round(valueOzNum)
+      : Number.parseInt(String(e.notes ?? "").trim(), 10);
+    if (Number.isFinite(fromVal) && fromVal > 0) oz += Number(fromVal);
   }
   return oz;
 }
@@ -148,11 +160,12 @@ export function sumThermotabsSodiumMgFromDailyLogsLastDays(
     if (e.entryType !== ENTRY_TYPE_SODIUM && e.entryType !== "sodium") {
       continue;
     }
-    const v =
-      e.valueMg != null && Number.isFinite(e.valueMg) && e.valueMg > 0
-        ? Math.round(e.valueMg)
-        : Number.parseInt(String(e.notes ?? "").trim(), 10);
-    if (Number.isFinite(v) && v > 0) mg += v;
+    const mgRaw = Number(e.valueMg);
+    const v = Number.isFinite(mgRaw) && mgRaw > 0
+      ? Math.round(mgRaw)
+      : Number.parseInt(String(e.notes ?? "").trim(), 10);
+    const addend = Number(v);
+    if (Number.isFinite(addend) && addend > 0) mg += addend;
   }
   return mg;
 }
@@ -182,11 +195,12 @@ export function sumThermotabsSodiumMgTodayFromDailyLogs(
     if (e.entryType !== ENTRY_TYPE_SODIUM && e.entryType !== "sodium") {
       continue;
     }
-    const v =
-      e.valueMg != null && Number.isFinite(e.valueMg) && e.valueMg > 0
-        ? Math.round(e.valueMg)
-        : Number.parseInt(String(e.notes ?? "").trim(), 10);
-    if (Number.isFinite(v) && v > 0) mg += v;
+    const mgRaw = Number(e.valueMg);
+    const v = Number.isFinite(mgRaw) && mgRaw > 0
+      ? Math.round(mgRaw)
+      : Number.parseInt(String(e.notes ?? "").trim(), 10);
+    const addend = Number(v);
+    if (Number.isFinite(addend) && addend > 0) mg += addend;
   }
   return mg;
 }

@@ -93,6 +93,8 @@ export type DailyLogEntry = {
   valueOz?: number;
   /** Caffeine milligrams when `entry_type` is `caffeine` (`daily_logs.value`). */
   valueMg?: number;
+  /** Estimated kcal when `entry_type` is `food` (`daily_logs.value`). */
+  valueKcal?: number;
   /** Owner when row was inserted authenticated (matches Supabase `user_id`). */
   userId?: string;
   /** Body symptom sketch (PNG base64, no data URL prefix) when saved from SymptomCanvas */

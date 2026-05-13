@@ -10,6 +10,7 @@ import type { DailyLogEntry } from "@/lib/types";
 import {
   insertActivityLogRow,
   fetchTodayDogWalkCountForCurrentUser,
+  type ActivityTodayCounts,
 } from "@/lib/supabase/activity-logs";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser-client";
 import { toastMessageForPersistFailure } from "@/lib/supabase/auth-save-guard";
@@ -219,6 +220,12 @@ export default function MovementTracker() {
     setShowHrNudge(false);
 
     setPendingWalk(true);
+    const walkCountKey = supabaseConfigured
+      ? ([...qk.dailyLogDogWalkCountToday, sessionUser?.id ?? "none"] as const)
+      : null;
+    let prevActivitySnapshot: ActivityTodayCounts | undefined;
+    let prevWalkCountSnapshot: number | undefined;
+
     try {
       if (!supabaseConfigured) {
         const row: DailyLogEntry = {
@@ -236,6 +243,24 @@ export default function MovementTracker() {
         return;
       }
 
+      prevActivitySnapshot = qc.getQueryData<ActivityTodayCounts>(
+        qk.activityToday,
+      );
+      if (walkCountKey) {
+        prevWalkCountSnapshot = qc.getQueryData<number>(walkCountKey);
+      }
+
+      qc.setQueryData<ActivityTodayCounts>(qk.activityToday, (old) => ({
+        dogWalks: (old?.dogWalks ?? 0) + 1,
+        ptSessions: old?.ptSessions ?? 0,
+        morningMeds: old?.morningMeds ?? 0,
+        morningMedsLastRecordedAt: old?.morningMedsLastRecordedAt ?? null,
+        hasSession: old?.hasSession ?? true,
+      }));
+      if (walkCountKey) {
+        qc.setQueryData<number>(walkCountKey, (c) => (c ?? 0) + 1);
+      }
+
       const act = await insertActivityLogRow({
         activity_type: "dog_walk",
         notes: getWalkNotesDefault().trim() || DEFAULT_WALK_NOTES,
@@ -249,6 +274,18 @@ export default function MovementTracker() {
       await qc.refetchQueries({ queryKey: qk.dailyLogDogWalkCountToday });
       router.refresh();
     } catch (e) {
+      if (supabaseConfigured && walkCountKey) {
+        if (prevActivitySnapshot !== undefined) {
+          qc.setQueryData(qk.activityToday, prevActivitySnapshot);
+        } else {
+          void qc.removeQueries({ queryKey: qk.activityToday });
+        }
+        if (prevWalkCountSnapshot !== undefined) {
+          qc.setQueryData(walkCountKey, prevWalkCountSnapshot);
+        } else {
+          void qc.removeQueries({ queryKey: walkCountKey });
+        }
+      }
       const msg = e instanceof Error ? e.message : "Save failed";
       setMovementToast(toastMessageForPersistFailure(msg));
       console.error("[handleDogWalk] Failed to save activity_logs:", e);
@@ -268,6 +305,8 @@ export default function MovementTracker() {
     });
 
     setPendingPtSlot(slot);
+    let prevActivityForPt: ActivityTodayCounts | undefined;
+    let bumpedActivityTodayCache = false;
     try {
       const recordedAt = new Date().toISOString();
       const base = `${humanLabel} session${ptMarker(slot)}`;
@@ -291,6 +330,16 @@ export default function MovementTracker() {
         return;
       }
 
+      prevActivityForPt = qc.getQueryData<ActivityTodayCounts>(qk.activityToday);
+      qc.setQueryData<ActivityTodayCounts>(qk.activityToday, (old) => ({
+        dogWalks: old?.dogWalks ?? 0,
+        ptSessions: (old?.ptSessions ?? 0) + 1,
+        morningMeds: old?.morningMeds ?? 0,
+        morningMedsLastRecordedAt: old?.morningMedsLastRecordedAt ?? null,
+        hasSession: old?.hasSession ?? true,
+      }));
+      bumpedActivityTodayCache = true;
+
       const act = await insertActivityLogRow({
         activity_type: "pt",
         notes: `${humanLabel} · ${slot} · ${notes}`,
@@ -302,6 +351,13 @@ export default function MovementTracker() {
       void qc.invalidateQueries({ queryKey: qk.activityToday });
       router.refresh();
     } catch (e) {
+      if (supabaseConfigured && bumpedActivityTodayCache) {
+        if (prevActivityForPt !== undefined) {
+          qc.setQueryData(qk.activityToday, prevActivityForPt);
+        } else {
+          void qc.removeQueries({ queryKey: qk.activityToday });
+        }
+      }
       setPtLatched(rollback);
       savePtLatched(today, rollback);
       console.error("[handlePt] Failed to save PT / activity_logs:", e);

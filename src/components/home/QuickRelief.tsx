@@ -33,6 +33,14 @@ import { getSupabaseBrowserClient } from "@/lib/supabase/browser-client";
 import { FeatureHelpTrigger } from "@/components/FeatureHelpModal";
 import { toastPrnLogged } from "@/lib/educational-toasts";
 
+/** Shape held in the React Query cache under `qk.hydrationTotalsTodayRoot`. */
+type HydrationTotalsCache = {
+  oz: number;
+  caffeineMg: number;
+  sodiumMg: number;
+  hasSession: boolean;
+};
+
 const FOUR_H_MS = 4 * 60 * 60 * 1000;
 const THIRTY_MIN_MS = 30 * 60 * 1000;
 
@@ -137,7 +145,48 @@ export default function QuickRelief() {
     return () => window.clearTimeout(t);
   }, [errorToast]);
 
-  const logMutation = useMutation({
+  // Snapshot every matching hydration totals cache entry so we can rollback on failure.
+  function snapshotTotalsCaches() {
+    return qc.getQueriesData<HydrationTotalsCache>({
+      queryKey: qk.hydrationTotalsTodayRoot,
+    });
+  }
+
+  function bumpSodiumOptimistic(delta: number) {
+    qc.setQueriesData<HydrationTotalsCache>(
+      { queryKey: qk.hydrationTotalsTodayRoot },
+      (old) => ({
+        oz: old?.oz ?? 0,
+        caffeineMg: old?.caffeineMg ?? 0,
+        sodiumMg: (old?.sodiumMg ?? 0) + delta,
+        hasSession: old?.hasSession ?? true,
+      }),
+    );
+  }
+
+  function restoreTotalsCaches(
+    snapshots: ReturnType<typeof snapshotTotalsCaches>,
+  ) {
+    for (const [key, data] of snapshots) {
+      qc.setQueryData(key, data);
+    }
+  }
+
+  type OptimisticContext = {
+    optimisticId: string;
+    recordedAt: string;
+    previousTotals?: ReturnType<typeof snapshotTotalsCaches>;
+    previousDailyLogs?: DailyLogEntry[];
+    previousMedicationLogs?: MedicationLogRow[];
+  };
+
+  const logMutation = useMutation<
+    | { kind: "daily_sodium"; row: DailyLogEntry; def: QuickReliefDef; optimisticId: string }
+    | { kind: "medication"; row: MedicationLogRow; def: QuickReliefDef; optimisticId: string },
+    Error,
+    QuickReliefDef,
+    OptimisticContext
+  >({
     mutationFn: async (def: QuickReliefDef) => {
       const sb = getSupabaseBrowserClient();
       if (!sb) {
@@ -163,11 +212,15 @@ export default function QuickRelief() {
           valueMg: THERMOTABS_SODIUM_MG,
           unit: "mg",
         };
-        const result = await persistDailyLogToSupabase(row);
-        if (!result.ok) {
-          throw new Error(result.error ?? "Could not save log.");
+        try {
+          const result = await persistDailyLogToSupabase(row);
+          if (!result.ok) {
+            throw new Error(result.error ?? "Could not save log.");
+          }
+          return { kind: "daily_sodium", row, def, optimisticId: "" };
+        } catch (err) {
+          throw err instanceof Error ? err : new Error("Could not save log.");
         }
-        return { kind: "daily_sodium" as const, row, def };
       }
 
       const meds =
@@ -180,7 +233,9 @@ export default function QuickRelief() {
       const dosageLabel = resolveQuickReliefDosageLabel(def, meds, profs);
       const medMatch = findSavedMedForQuickRelief(def, meds);
       const sinceIso = new Date(Date.now() - THIRTY_MIN_MS).toISOString();
-      const touch = await fetchMostRecentPainMapTouchSince(sinceIso);
+      const touch = await fetchMostRecentPainMapTouchSince(sinceIso).catch(
+        () => null,
+      );
 
       let linkSummary: string | null = null;
       let linkedBodyPartId: string | null = null;
@@ -203,49 +258,133 @@ export default function QuickRelief() {
         );
       }
 
-      const res = await insertMedicationLogRow({
-        medicationName: def.displayName,
-        dosageLabel,
-        period: clockPeriod(),
-        medicationId: medMatch?.id ?? null,
-        linkedBodyPartId,
-        linkedPainCategory,
-        linkedPainIntensity,
-        linkSummary,
-      });
+      try {
+        const res = await insertMedicationLogRow({
+          medicationName: def.displayName,
+          dosageLabel,
+          period: clockPeriod(),
+          medicationId: medMatch?.id ?? null,
+          linkedBodyPartId,
+          linkedPainCategory,
+          linkedPainIntensity,
+          linkSummary,
+        });
+        if (!res.ok) {
+          throw new Error(res.error ?? "Could not save log.");
+        }
+        return { kind: "medication", row: res.row!, def, optimisticId: "" };
+      } catch (err) {
+        throw err instanceof Error ? err : new Error("Could not save log.");
+      }
+    },
+    // Optimistic: write a placeholder row into the relevant cache so "Last:" labels
+    // and the sodium total update on the same frame as the tap.
+    onMutate: async (def) => {
+      const optimisticId = `optimistic-${crypto.randomUUID()}`;
+      const recordedAt = new Date().toISOString();
 
-      if (!res.ok) {
-        throw new Error(res.error ?? "Could not save log.");
-      }
-      return { kind: "medication" as const, row: res.row!, def };
-    },
-    onSuccess: (data) => {
-      if (data.kind === "daily_sodium") {
+      if (def.displayName === "Thermotabs") {
+        await qc.cancelQueries({ queryKey: qk.hydrationTotalsTodayRoot });
+        await qc.cancelQueries({ queryKey: qk.dailyLogs });
+        const previousTotals = snapshotTotalsCaches();
+        const previousDailyLogs =
+          qc.getQueryData<DailyLogEntry[]>(qk.dailyLogs) ?? [];
+        const sb = getSupabaseBrowserClient();
+        const uid = sb
+          ? (await sb.auth.getSession()).data.session?.user?.id
+          : undefined;
+
+        bumpSodiumOptimistic(THERMOTABS_SODIUM_MG);
         qc.setQueryData<DailyLogEntry[]>(qk.dailyLogs, (prev = []) => [
-          data.row,
-          ...prev.filter((x) => x.id !== data.row.id),
+          {
+            id: optimisticId,
+            recordedAt,
+            category: "sodium",
+            label: "Thermotabs",
+            notes: String(THERMOTABS_SODIUM_MG),
+            entryType: ENTRY_TYPE_SODIUM,
+            valueMg: THERMOTABS_SODIUM_MG,
+            unit: "mg",
+            userId: uid,
+          },
+          ...prev,
         ]);
-        void qc.invalidateQueries({ queryKey: qk.dailyLogs });
-        void qc.refetchQueries({ queryKey: qk.dailyLogs });
-        void qc.invalidateQueries({ queryKey: qk.hydrationTotalsTodayRoot });
-        void qc.refetchQueries({ queryKey: qk.hydrationTotalsTodayRoot });
-        const t = formatClock(data.row.recordedAt);
-        setToast(toastPrnLogged(data.def.displayName, t));
-        return;
+        return { optimisticId, recordedAt, previousTotals, previousDailyLogs };
       }
-      qc.setQueryData<MedicationLogRow[]>(qk.medicationLogs, (prev = []) => {
-        const next = [data.row, ...prev.filter((x) => x.id !== data.row.id)];
-        return next;
-      });
-      void qc.invalidateQueries({ queryKey: qk.medicationLogs });
-      const t = formatClock(data.row.recordedAt);
-      setToast(toastPrnLogged(data.def.displayName, t));
+
+      await qc.cancelQueries({ queryKey: qk.medicationLogs });
+      const previousMedicationLogs =
+        qc.getQueryData<MedicationLogRow[]>(qk.medicationLogs) ?? [];
+      const meds =
+        qc.getQueryData<SavedMedication[]>(qk.medications) ?? medications;
+      const profs =
+        qc.getQueryData<Record<string, MedicationProfile>>(
+          qk.medicationProfiles,
+        ) ?? profiles;
+      const dosageLabel = resolveQuickReliefDosageLabel(def, meds, profs);
+      const medMatch = findSavedMedForQuickRelief(def, meds);
+      qc.setQueryData<MedicationLogRow[]>(qk.medicationLogs, (prev = []) => [
+        {
+          id: optimisticId,
+          recordedAt,
+          medicationName: def.displayName,
+          dosageLabel,
+          period: clockPeriod(),
+          medicationId: medMatch?.id ?? null,
+          linkedBodyPartId: null,
+          linkedPainCategory: null,
+          linkedPainIntensity: null,
+          linkSummary: null,
+          status: null,
+          userId: null,
+        },
+        ...prev,
+      ]);
+      return { optimisticId, recordedAt, previousMedicationLogs };
     },
-    onError: (e) => {
+    onError: (e, _def, context) => {
+      // Roll the UI back so the user isn't looking at a phantom successful log.
+      if (context?.previousTotals) restoreTotalsCaches(context.previousTotals);
+      if (context?.previousDailyLogs) {
+        qc.setQueryData(qk.dailyLogs, context.previousDailyLogs);
+      }
+      if (context?.previousMedicationLogs) {
+        qc.setQueryData(qk.medicationLogs, context.previousMedicationLogs);
+      }
       const raw =
         e instanceof Error ? e.message : "Could not log. Check Supabase.";
       console.error("[quick-relief] log failed:", e);
       setErrorToast(toastMessageForPersistFailure(raw));
+    },
+    onSuccess: (data, _def, context) => {
+      // Replace the optimistic placeholder with the real persisted row.
+      if (data.kind === "daily_sodium") {
+        qc.setQueryData<DailyLogEntry[]>(qk.dailyLogs, (prev = []) => [
+          data.row,
+          ...prev.filter(
+            (x) => x.id !== data.row.id && x.id !== context?.optimisticId,
+          ),
+        ]);
+        const t = formatClock(data.row.recordedAt);
+        setToast(toastPrnLogged(data.def.displayName, t));
+        return;
+      }
+      qc.setQueryData<MedicationLogRow[]>(qk.medicationLogs, (prev = []) => [
+        data.row,
+        ...prev.filter(
+          (x) => x.id !== data.row.id && x.id !== context?.optimisticId,
+        ),
+      ]);
+      const t = formatClock(data.row.recordedAt);
+      setToast(toastPrnLogged(data.def.displayName, t));
+    },
+    // Background reconciliation — fire-and-forget, never awaited.
+    onSettled: (_data, _err, def) => {
+      void qc.invalidateQueries({ queryKey: qk.dailyLogs });
+      void qc.invalidateQueries({ queryKey: qk.medicationLogs });
+      if (def?.displayName === "Thermotabs") {
+        void qc.invalidateQueries({ queryKey: qk.hydrationTotalsTodayRoot });
+      }
     },
   });
 
@@ -304,9 +443,8 @@ export default function QuickRelief() {
             <button
               key={def.displayName}
               type="button"
-              disabled={logMutation.isPending}
               onClick={() => logMutation.mutate(def)}
-              className={`flex min-h-[120px] w-[min(46vw,11rem)] shrink-0 snap-start flex-col justify-between rounded-2xl border-4 border-black px-3 py-3 text-left shadow-md transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 ${
+              className={`flex min-h-[120px] w-[min(46vw,11rem)] shrink-0 snap-start flex-col justify-between rounded-2xl border-4 border-black px-3 py-3 text-left shadow-md transition active:scale-[0.98] ${
                 waitStyle
                   ? "bg-slate-200 ring-2 ring-slate-400"
                   : `bg-gradient-to-br ${def.gradientClass} ring-2 ${def.ringClass} text-white`

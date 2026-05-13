@@ -142,10 +142,23 @@ export default function MinimalHomeDashboard({
   const todayWaterOz = hydrationTotalsQuery.data?.oz ?? 0;
   const todayCaffeineMg = hydrationTotalsQuery.data?.caffeineMg ?? 0;
   const todaySodiumMg = hydrationTotalsQuery.data?.sodiumMg ?? 0;
-  const todayTotalsLoading =
+
+  // Hard-cap the "…" placeholder at 2s — if Supabase hangs, we'd rather show
+  // zeros and let optimistic taps populate the strip than freeze on a spinner.
+  const [totalsLoadTimedOut, setTotalsLoadTimedOut] = useState(false);
+  const isAwaitingFirstTotals =
     Boolean(countersEnabled && sessionUserId) &&
     !hydrationTotalsQuery.isError &&
     hydrationTotalsQuery.data == null;
+  useEffect(() => {
+    if (!isAwaitingFirstTotals) {
+      setTotalsLoadTimedOut(false);
+      return;
+    }
+    const t = window.setTimeout(() => setTotalsLoadTimedOut(true), 2000);
+    return () => window.clearTimeout(t);
+  }, [isAwaitingFirstTotals]);
+  const todayTotalsLoading = isAwaitingFirstTotals && !totalsLoadTimedOut;
 
   function openDoseModal(m: SavedMedication, tab: DoseModalTab) {
     setDoseModalTab(tab);

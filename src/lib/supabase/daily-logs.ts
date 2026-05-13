@@ -3,6 +3,7 @@ import {
   ENTRY_TYPE_WATER,
   ENTRY_TYPE_CAFFEINE,
   ENTRY_TYPE_SODIUM,
+  ENTRY_TYPE_FOOD,
   resolveDailyLogEntryType,
 } from "@/lib/daily-log-entry-type";
 import {
@@ -21,7 +22,9 @@ type DailyLogRow = {
   sketch_png_base64?: string | null;
   sketch_side?: string | null;
   user_id?: string | null;
+  /** Standard column; legacy rows may only have {@link DailyLogRow.log_entry_type}. */
   entry_type?: string | null;
+  log_entry_type?: string | null;
   unit?: string | null;
   value?: number | null;
 };
@@ -32,7 +35,8 @@ function rowToEntry(row: DailyLogRow): DailyLogEntry {
     row.value != null && Number.isFinite(Number(row.value))
       ? Number(row.value)
       : undefined;
-  const et = row.entry_type ?? undefined;
+  const et =
+    row.entry_type ?? row.log_entry_type ?? undefined;
   const base: DailyLogEntry = {
     id: row.id,
     recordedAt: row.recorded_at,
@@ -64,6 +68,22 @@ function rowToEntry(row: DailyLogRow): DailyLogEntry {
       ? { ...base, valueMg: Math.round(v) }
       : base;
   }
+  if (
+    et === ENTRY_TYPE_FOOD ||
+    et === "food" ||
+    row.category === "food"
+  ) {
+    if (v != null && Number.isFinite(v) && v > 0) {
+      return {
+        ...base,
+        category: "food",
+        entryType: ENTRY_TYPE_FOOD,
+        valueKcal: Math.round(v),
+        unit: row.unit ?? "kcal",
+      };
+    }
+    return { ...base, category: "food" };
+  }
   return v != null && Number.isFinite(v) && v > 0
     ? { ...base, valueOz: Math.round(v) }
     : base;
@@ -88,15 +108,17 @@ export async function fetchDailyLogsFromSupabase(): Promise<DailyLogEntry[]> {
 }
 
 function sumNumericColumnFromRows(
-  data: { value?: number | null; notes?: string | null }[] | null,
+  data: { value?: unknown; notes?: string | null }[] | null,
 ): number {
   let total = 0;
   for (const row of data ?? []) {
-    const fromVal =
-      row.value != null && Number.isFinite(Number(row.value))
-        ? Number(row.value)
+    const raw = row.value;
+    const fromValue =
+      raw != null && String(raw).trim() !== "" && Number.isFinite(Number(raw))
+        ? Number(raw)
         : Number.parseInt(String(row.notes ?? "").trim(), 10);
-    if (Number.isFinite(fromVal) && fromVal > 0) total += fromVal;
+    const addend = Number(fromValue);
+    if (Number.isFinite(addend) && addend > 0) total += addend;
   }
   return total;
 }
@@ -133,21 +155,34 @@ export async function fetchTodayDailyLogsForCurrentUser(): Promise<{
   };
 }
 
-/** Three parallel reads of `daily_logs` for today, each filtered by `entry_type`. */
+/** Parallel reads of `daily_logs` for today, filtered by `entry_type`. */
 export async function fetchTodayHydrationTotalsFromDailyLogs(): Promise<{
   oz: number;
   caffeineMg: number;
   sodiumMg: number;
+  caloriesKcal: number;
   hasSession: boolean;
 }> {
   const sb = getSupabaseBrowserClient();
   if (!sb) {
-    return { oz: 0, caffeineMg: 0, sodiumMg: 0, hasSession: false };
+    return {
+      oz: 0,
+      caffeineMg: 0,
+      sodiumMg: 0,
+      caloriesKcal: 0,
+      hasSession: false,
+    };
   }
 
   const uid = await resolveSupabaseUserId(sb);
   if (!uid) {
-    return { oz: 0, caffeineMg: 0, sodiumMg: 0, hasSession: false };
+    return {
+      oz: 0,
+      caffeineMg: 0,
+      sodiumMg: 0,
+      caloriesKcal: 0,
+      hasSession: false,
+    };
   }
 
   const { startIso, endIso } = localCalendarDayRecordedAtBounds();
@@ -161,10 +196,11 @@ export async function fetchTodayHydrationTotalsFromDailyLogs(): Promise<{
       .gte("recorded_at", startIso)
       .lt("recorded_at", endIso);
 
-  const [wRes, cRes, sRes] = await Promise.all([
+  const [wRes, cRes, sRes, fRes] = await Promise.all([
     forEntryType(ENTRY_TYPE_WATER),
     forEntryType(ENTRY_TYPE_CAFFEINE),
     forEntryType(ENTRY_TYPE_SODIUM),
+    forEntryType(ENTRY_TYPE_FOOD),
   ]);
 
   if (wRes.error) {
@@ -176,11 +212,15 @@ export async function fetchTodayHydrationTotalsFromDailyLogs(): Promise<{
   if (sRes.error) {
     console.warn("today daily_logs sodium sum:", sRes.error.message);
   }
+  if (fRes.error) {
+    console.warn("today daily_logs food kcal sum:", fRes.error.message);
+  }
 
   return {
     oz: wRes.error ? 0 : sumNumericColumnFromRows(wRes.data),
     caffeineMg: cRes.error ? 0 : sumNumericColumnFromRows(cRes.data),
     sodiumMg: sRes.error ? 0 : sumNumericColumnFromRows(sRes.data),
+    caloriesKcal: fRes.error ? 0 : sumNumericColumnFromRows(fRes.data),
     hasSession: true,
   };
 }
@@ -287,7 +327,7 @@ export async function persistDailyLogToSupabase(
       unit: entry.unit ?? "oz",
       category: entry.category,
       label: entry.label,
-      value: oz,
+      value: Number(oz),
     };
     const res = await sb.from("daily_logs").insert(payload);
     if (res.error) {
@@ -312,7 +352,7 @@ export async function persistDailyLogToSupabase(
       unit: entry.unit ?? "mg",
       category: entry.category,
       label: entry.label,
-      value: mg,
+      value: Number(mg),
     };
     const res = await sb.from("daily_logs").insert(payload);
     if (res.error) {
@@ -337,7 +377,32 @@ export async function persistDailyLogToSupabase(
       unit: entry.unit ?? "mg",
       category: entry.category,
       label: entry.label,
-      value: mg,
+      value: Number(mg),
+    };
+    const res = await sb.from("daily_logs").insert(payload);
+    if (res.error) {
+      logInsertFailure(payload, res.error);
+      return { ok: false, error: res.error.message };
+    }
+    return { ok: true };
+  }
+
+  if (et === ENTRY_TYPE_FOOD || et === "food") {
+    const kcal = entry.valueKcal;
+    if (!Number.isFinite(kcal) || !kcal || kcal <= 0) {
+      return { ok: false, error: "invalid_food_calories" };
+    }
+    const description = String(entry.notes ?? "").trim();
+    const payload = {
+      id: entry.id,
+      user_id: uid,
+      recorded_at: recordedAtIso,
+      entry_type: ENTRY_TYPE_FOOD,
+      unit: entry.unit ?? "kcal",
+      category: "food" as const,
+      label: entry.label,
+      value: Math.round(Number(kcal)),
+      notes: description.length > 0 ? description : null,
     };
     const res = await sb.from("daily_logs").insert(payload);
     if (res.error) {

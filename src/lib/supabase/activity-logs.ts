@@ -5,14 +5,17 @@ import {
 } from "@/lib/supabase/auth-save-guard";
 import { localCalendarDayRecordedAtBounds } from "@/lib/hydration-summary";
 
-export async function fetchTodayActivityCountsForCurrentUser(): Promise<{
+/** Cached shape for `qk.activityToday` — matches {@link fetchTodayActivityCountsForCurrentUser}. */
+export type ActivityTodayCounts = {
   dogWalks: number;
   ptSessions: number;
   morningMeds: number;
   /** Latest `recorded_at` among today’s `morning_meds` rows (ISO), if any. */
   morningMedsLastRecordedAt: string | null;
   hasSession: boolean;
-}> {
+};
+
+export async function fetchTodayActivityCountsForCurrentUser(): Promise<ActivityTodayCounts> {
   const sb = getSupabaseBrowserClient();
   if (!sb) {
     return {
