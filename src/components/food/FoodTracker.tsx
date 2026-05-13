@@ -13,6 +13,15 @@ import { estimateCaloriesFromDescription } from "@/lib/calorie-estimate";
 import { mealLinkedToRecentFlare } from "@/lib/food-flare-hint";
 import { toastFoodLogged } from "@/lib/educational-toasts";
 
+/** Matches `HydrationTracker` / `qk.hydrationTotalsTodayRoot` cache shape. */
+type HydrationTotalsCache = {
+  oz: number;
+  caffeineMg: number;
+  sodiumMg: number;
+  caloriesKcal: number;
+  hasSession: boolean;
+};
+
 function mealDisplayText(row: DailyLogEntry): string {
   const fromNotes = row.notes?.trim();
   if (fromNotes) return fromNotes;
@@ -134,8 +143,19 @@ export default function FoodTracker() {
         row,
         ...prev,
       ]);
-      void qc.invalidateQueries({ queryKey: qk.dailyLogs });
-      void qc.invalidateQueries({ queryKey: qk.hydrationTotalsTodayRoot });
+      const kcal = Number(row.valueKcal);
+      if (Number.isFinite(kcal) && kcal > 0) {
+        qc.setQueriesData<HydrationTotalsCache>(
+          { queryKey: qk.hydrationTotalsTodayRoot },
+          (old) => ({
+            oz: old?.oz ?? 0,
+            caffeineMg: old?.caffeineMg ?? 0,
+            sodiumMg: old?.sodiumMg ?? 0,
+            caloriesKcal: (old?.caloriesKcal ?? 0) + kcal,
+            hasSession: old?.hasSession ?? true,
+          }),
+        );
+      }
       const shown = mealDisplayText(row);
       setInspectLabel(shown);
       setStatus(toastFoodLogged(shown));

@@ -175,12 +175,16 @@ export default function HydrationTracker({
     [dailyLogs],
   );
 
+  /**
+   * Server sums can briefly lag behind inserts; `daily_logs` cache includes taps
+   * immediately. Use the higher of the two so the bar and totals always stack.
+   */
   const baselineOz = !supabaseConfigured
     ? cacheOz
     : !sessionResolved || !sessionUser
       ? 0
       : hydrationTotalsLoaded
-        ? storedWaterOz
+        ? Math.max(storedWaterOz, cacheOz)
         : cacheOz;
 
   const cacheCaffeineMg = useMemo(
@@ -193,7 +197,7 @@ export default function HydrationTracker({
     : !sessionResolved || !sessionUser
       ? 0
       : hydrationTotalsLoaded
-        ? storedCaffeineMg
+        ? Math.max(storedCaffeineMg, cacheCaffeineMg)
         : cacheCaffeineMg;
 
   const currentCaffeineMg = baselineCaffeineMg;
@@ -208,7 +212,7 @@ export default function HydrationTracker({
     : !sessionResolved || !sessionUser
       ? 0
       : hydrationTotalsLoaded
-        ? storedCaloriesKcal
+        ? Math.max(storedCaloriesKcal, cacheFoodKcal)
         : cacheFoodKcal;
 
   const caloriesKcalToday = baselineCaloriesKcal;
@@ -340,10 +344,6 @@ export default function HydrationTracker({
       setToast(toastWaterLogged(amountOz));
       window.setTimeout(() => setToast(null), 4500);
     },
-    onSettled: () => {
-      void qc.invalidateQueries({ queryKey: qk.dailyLogs });
-      void qc.invalidateQueries({ queryKey: qk.hydrationTotalsTodayRoot });
-    },
   });
 
   const addCaffeineMutation = useMutation({
@@ -400,10 +400,6 @@ export default function HydrationTracker({
     onSuccess: ({ mg }) => {
       setToast(`Logged ${mg} mg caffeine.`);
       window.setTimeout(() => setToast(null), 3200);
-    },
-    onSettled: () => {
-      void qc.invalidateQueries({ queryKey: qk.dailyLogs });
-      void qc.invalidateQueries({ queryKey: qk.hydrationTotalsTodayRoot });
     },
   });
 

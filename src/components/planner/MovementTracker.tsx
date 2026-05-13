@@ -268,11 +268,6 @@ export default function MovementTracker() {
       if (!act.ok) {
         throw new Error(act.error ?? "Could not save activity log.");
       }
-
-      void qc.invalidateQueries({ queryKey: qk.activityToday });
-      void qc.invalidateQueries({ queryKey: qk.dailyLogDogWalkCountToday });
-      await qc.refetchQueries({ queryKey: qk.dailyLogDogWalkCountToday });
-      router.refresh();
     } catch (e) {
       if (supabaseConfigured && walkCountKey) {
         if (prevActivitySnapshot !== undefined) {
@@ -325,7 +320,6 @@ export default function MovementTracker() {
           row,
           ...prev,
         ]);
-        void qc.invalidateQueries({ queryKey: qk.activityToday });
         router.refresh();
         return;
       }
@@ -347,9 +341,6 @@ export default function MovementTracker() {
       if (!act.ok) {
         throw new Error(act.error ?? "Could not save activity log.");
       }
-
-      void qc.invalidateQueries({ queryKey: qk.activityToday });
-      router.refresh();
     } catch (e) {
       if (supabaseConfigured && bumpedActivityTodayCache) {
         if (prevActivityForPt !== undefined) {
