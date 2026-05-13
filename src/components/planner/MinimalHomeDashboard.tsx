@@ -264,6 +264,23 @@ export default function MinimalHomeDashboard({
         <WelcomeWizard onComplete={() => setWelcomeOpen(false)} />
       )}
 
+      <header
+        id="planner-home-sticky-header"
+        className="sticky top-0 z-[90] -mx-4 mb-2 flex flex-row items-start justify-between gap-3 border-b-2 border-slate-900 bg-white/95 px-4 py-3 pb-4 shadow-[0_4px_12px_rgba(15,23,42,0.06)] backdrop-blur-md supports-[backdrop-filter]:bg-white/90 sm:-mx-5 sm:px-5"
+      >
+        <div className="min-w-0 flex-1 space-y-1 pr-2">
+          <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
+            {displayFirstName
+              ? `${greeting()}, ${displayFirstName}`
+              : greeting()}
+          </h1>
+          <p className="text-base font-medium text-slate-700 sm:text-lg">
+            {formatLongDate()}
+          </p>
+        </div>
+        <QuickBpHomeButton canSave={countersEnabled} />
+      </header>
+
       <HomeDashboardTopZone bypassBarometerAdvisory={bypassBarometerAdvisory} />
 
       <HomeDailyActionGrid />
@@ -280,20 +297,6 @@ export default function MinimalHomeDashboard({
           high-contrast screen.
         </p>
       </div>
-
-      <header className="flex flex-col gap-3 border-b-2 border-slate-900 pb-4 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
-        <div className="min-w-0 flex-1 space-y-1">
-          <h1 className="text-3xl font-bold tracking-tight text-slate-900">
-            {displayFirstName
-              ? `${greeting()}, ${displayFirstName}`
-              : greeting()}
-          </h1>
-          <p className="text-lg font-medium text-slate-700">
-            {formatLongDate()}
-          </p>
-        </div>
-        <QuickBpHomeButton canSave={countersEnabled} />
-      </header>
 
       <DashboardTodayCounters enabled={countersEnabled} />
 

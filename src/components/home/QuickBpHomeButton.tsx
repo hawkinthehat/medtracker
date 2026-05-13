@@ -170,7 +170,7 @@ export default function QuickBpHomeButton({ canSave }: QuickBpHomeButtonProps) {
 
       {open && (
         <div
-          className="fixed inset-0 z-[100] flex items-end justify-center bg-black/70 p-3 sm:items-center"
+          className="fixed inset-0 z-[200] flex items-end justify-center bg-black/70 p-3 sm:items-center"
           role="presentation"
           onMouseDown={(e) => {
             if (e.target === e.currentTarget) closeModal();

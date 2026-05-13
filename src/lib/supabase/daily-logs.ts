@@ -393,10 +393,17 @@ export async function persistDailyLogToSupabase(
       return { ok: false, error: "invalid_food_calories" };
     }
     const description = String(entry.notes ?? "").trim();
+    const fromEntryRecordedAt = (() => {
+      const raw = entry.recordedAt?.trim();
+      if (!raw) return null;
+      const t = new Date(raw).getTime();
+      if (Number.isNaN(t)) return null;
+      return new Date(raw).toISOString();
+    })();
     const payload = {
       id: entry.id,
       user_id: uid,
-      recorded_at: recordedAtIso,
+      recorded_at: fromEntryRecordedAt ?? recordedAtIso,
       entry_type: ENTRY_TYPE_FOOD,
       unit: entry.unit ?? "kcal",
       category: "food" as const,

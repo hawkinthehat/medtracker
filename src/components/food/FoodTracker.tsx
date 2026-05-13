@@ -12,6 +12,7 @@ import { ENTRY_TYPE_FOOD } from "@/lib/daily-log-entry-type";
 import { estimateCaloriesFromDescription } from "@/lib/calorie-estimate";
 import { mealLinkedToRecentFlare } from "@/lib/food-flare-hint";
 import { toastFoodLogged } from "@/lib/educational-toasts";
+import { isSameLocalCalendarDay } from "@/lib/hydration-summary";
 
 /** Matches `HydrationTracker` / `qk.hydrationTotalsTodayRoot` cache shape. */
 type HydrationTotalsCache = {
@@ -54,9 +55,26 @@ function shortMealLabel(description: string, max = 72): string {
   return t.length <= max ? t : `${t.slice(0, max - 1)}…`;
 }
 
+function pad2(n: number) {
+  return n.toString().padStart(2, "0");
+}
+
+function toDatetimeLocalInput(d: Date) {
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}T${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+}
+
+function datetimeLocalToIso(value: string): string | null {
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toISOString();
+}
+
 export default function FoodTracker() {
   const qc = useQueryClient();
   const [whatYouAte, setWhatYouAte] = useState("");
+  const [mealRecordedAtLocal, setMealRecordedAtLocal] = useState(() =>
+    toDatetimeLocalInput(new Date()),
+  );
   const [caloriesOverride, setCaloriesOverride] = useState<number | null>(null);
   const [inspectLabel, setInspectLabel] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
@@ -114,7 +132,11 @@ export default function FoodTracker() {
     mealLinkedToRecentFlare(inspectLabel, dailyLogs, moods, brainFog);
 
   const logFood = useMutation({
-    mutationFn: async (input: { description: string; kcal: number }) => {
+    mutationFn: async (input: {
+      description: string;
+      kcal: number;
+      recordedAtIso: string;
+    }) => {
       const trimmed = input.description.trim();
       if (!trimmed) throw new Error("Describe what you ate.");
       const kcal = Math.round(input.kcal);
@@ -123,7 +145,7 @@ export default function FoodTracker() {
       }
       const row: DailyLogEntry = {
         id: crypto.randomUUID(),
-        recordedAt: new Date().toISOString(),
+        recordedAt: input.recordedAtIso,
         category: "food",
         entryType: ENTRY_TYPE_FOOD,
         label: shortMealLabel(trimmed),
@@ -144,7 +166,11 @@ export default function FoodTracker() {
         ...prev,
       ]);
       const kcal = Number(row.valueKcal);
-      if (Number.isFinite(kcal) && kcal > 0) {
+      if (
+        Number.isFinite(kcal) &&
+        kcal > 0 &&
+        isSameLocalCalendarDay(row.recordedAt)
+      ) {
         qc.setQueriesData<HydrationTotalsCache>(
           { queryKey: qk.hydrationTotalsTodayRoot },
           (old) => ({
@@ -156,12 +182,14 @@ export default function FoodTracker() {
           }),
         );
       }
+      void qc.invalidateQueries({ queryKey: qk.hydrationTotalsTodayRoot });
       const shown = mealDisplayText(row);
       setInspectLabel(shown);
       setStatus(toastFoodLogged(shown));
       window.setTimeout(() => setStatus(null), 2400);
       setWhatYouAte("");
       setCaloriesOverride(null);
+      setMealRecordedAtLocal(toDatetimeLocalInput(new Date()));
     },
     onError: (e: Error) => {
       setStatus(e.message);
@@ -170,7 +198,13 @@ export default function FoodTracker() {
   });
 
   function submit(description: string, kcal: number) {
-    logFood.mutate({ description, kcal });
+    const recordedAtIso = datetimeLocalToIso(mealRecordedAtLocal);
+    if (!recordedAtIso) {
+      setStatus("Pick a valid date and time for this meal.");
+      window.setTimeout(() => setStatus(null), 3500);
+      return;
+    }
+    logFood.mutate({ description, kcal, recordedAtIso });
   }
 
   return (
@@ -198,6 +232,21 @@ export default function FoodTracker() {
         >
           Log a meal
         </h2>
+        <div className="mt-4">
+          <label
+            htmlFor="meal-datetime"
+            className="block text-lg font-bold text-slate-800"
+          >
+            When did you eat?
+          </label>
+          <input
+            id="meal-datetime"
+            type="datetime-local"
+            value={mealRecordedAtLocal}
+            onChange={(e) => setMealRecordedAtLocal(e.target.value)}
+            className="mt-2 min-h-[52px] w-full max-w-md rounded-xl border-4 border-black bg-white px-3 py-2 text-lg font-semibold text-slate-900 outline-none focus-visible:ring-4 focus-visible:ring-sky-400"
+          />
+        </div>
         <label
           htmlFor="what-you-ate"
           className="mt-4 block text-lg font-bold text-slate-800"
