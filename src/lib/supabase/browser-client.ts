@@ -66,7 +66,6 @@ export function getSupabaseBrowserClient(): SupabaseClient | null {
   const key = supabaseAnonKeyResolved();
 
   if (!browserClient) {
-    console.log("Check:", !!process.env.NEXT_PUBLIC_SUPABASE_URL);
     browserClient = createBrowserClient(url, key);
   }
   return browserClient;

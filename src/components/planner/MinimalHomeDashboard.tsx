@@ -162,8 +162,9 @@ export default function MinimalHomeDashboard({
   const [welcomeOpen, setWelcomeOpen] = useState<boolean | null>(null);
   const [todaysLogsSyncing, setTodaysLogsSyncing] = useState(false);
   const [morningRoutineAccordionOpen, setMorningRoutineAccordionOpen] =
-    useState(false);
-  const [symptomsAccordionOpen, setSymptomsAccordionOpen] = useState(false);
+    useState(false); // default closed (save vertical space on mobile)
+  const [symptomsAccordionOpen, setSymptomsAccordionOpen] =
+    useState(false); // default closed
   const morningRoutinePanelId = useId();
   const symptomsPanelId = useId();
 
@@ -421,21 +422,21 @@ export default function MinimalHomeDashboard({
       <QuickRelief />
 
       <HomeDashboardAccordion
-        panelId={morningRoutinePanelId}
-        title="Morning routine"
-        open={morningRoutineAccordionOpen}
-        onToggle={() => setMorningRoutineAccordionOpen((v) => !v)}
-      >
-        <MorningRoutine />
-      </HomeDashboardAccordion>
-
-      <HomeDashboardAccordion
         panelId={symptomsPanelId}
         title="Symptoms tracker"
         open={symptomsAccordionOpen}
         onToggle={() => setSymptomsAccordionOpen((v) => !v)}
       >
         <SymptomMatrix />
+      </HomeDashboardAccordion>
+
+      <HomeDashboardAccordion
+        panelId={morningRoutinePanelId}
+        title="Morning routine"
+        open={morningRoutineAccordionOpen}
+        onToggle={() => setMorningRoutineAccordionOpen((v) => !v)}
+      >
+        <MorningRoutine />
       </HomeDashboardAccordion>
 
       <section aria-labelledby="daily-pulse-heading" className="space-y-4">

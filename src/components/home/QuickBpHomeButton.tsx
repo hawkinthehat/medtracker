@@ -68,6 +68,32 @@ export default function QuickBpHomeButton({
     supabaseConfigured && sessionResolved && !sessionUser;
   const saveEnabled = Boolean(sb && sessionUser?.id);
 
+  /** Same pattern as `SaltTracker.insertSaltRow`: direct `sb.from(…).insert` with `sessionUser.id`. */
+  async function insertQuickBpRow(payload: {
+    id: string;
+    recordedAt: string;
+    systolic: number;
+    diastolic: number;
+    position: HealthVitalPosition;
+    heartRate: number | null;
+  }): Promise<string | null> {
+    if (!sb || !sessionUser?.id) return "not_signed_in";
+    const { error } = await sb.from("health_vitals").insert({
+      id: payload.id,
+      user_id: sessionUser.id,
+      recorded_at: payload.recordedAt,
+      systolic: payload.systolic,
+      diastolic: payload.diastolic,
+      position: payload.position,
+      heart_rate: payload.heartRate,
+    });
+    if (error) {
+      console.warn("[QuickBP] health_vitals insert:", error.message);
+      return error.message;
+    }
+    return null;
+  }
+
   useEffect(() => {
     if (!sb) {
       setSessionUser(null);
@@ -176,22 +202,10 @@ export default function QuickBpHomeButton({
 
     void (async () => {
       try {
-        const client = getSupabaseBrowserClient();
-        if (!client) {
+        if (!sb) {
           qc.setQueryData(qk.vitals, previous);
           setLoggedAck(false);
           setSaveError("Supabase is not configured.");
-          return;
-        }
-
-        const {
-          data: { user },
-        } = await client.auth.getUser();
-        const userId = user?.id;
-        if (!userId) {
-          qc.setQueryData(qk.vitals, previous);
-          setLoggedAck(false);
-          setSaveError(formatBpSaveFailure("not_signed_in"));
           return;
         }
 
@@ -200,21 +214,19 @@ export default function QuickBpHomeButton({
             ? Math.round(heartRate)
             : null;
 
-        const { error } = await client.from("health_vitals").insert({
+        const insertError = await insertQuickBpRow({
           id,
-          user_id: userId,
-          recorded_at: recordedAt,
+          recordedAt,
           systolic: Math.round(s),
           diastolic: Math.round(d),
           position,
-          heart_rate: hrDb,
+          heartRate: hrDb,
         });
 
-        if (error) {
-          console.warn("[QuickBP] health_vitals insert:", error.message);
+        if (insertError !== null) {
           qc.setQueryData(qk.vitals, previous);
           setLoggedAck(false);
-          setSaveError(formatBpSaveFailure(error.message));
+          setSaveError(formatBpSaveFailure(insertError));
           return;
         }
 
