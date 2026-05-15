@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { useState, type FormEvent } from "react";
+import { useState, type FormEvent, type ReactNode } from "react";
 import { safeInternalPath } from "@/lib/auth/safe-redirect";
 import {
   getSupabaseBrowserClient,
@@ -10,7 +10,14 @@ import {
 
 type Mode = "signup" | "signin";
 
-export default function AuthPageContent() {
+type AuthPageContentProps = {
+  /** Temporary: server env probe from `page.tsx` (see AuthEnvDebugBridge). */
+  envDebugSlot?: ReactNode;
+};
+
+export default function AuthPageContent({
+  envDebugSlot,
+}: AuthPageContentProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const nextPath = safeInternalPath(searchParams.get("next"));
@@ -85,21 +92,40 @@ export default function AuthPageContent() {
       </div>
 
       {!supabaseConfigured && (
-        <div
-          className="mb-8 rounded-2xl border-4 border-amber-600 bg-amber-50 px-4 py-4 text-left text-base font-semibold text-amber-950"
-          role="status"
-        >
-          Cloud sync is off. Set{" "}
-          <code className="rounded bg-white px-1 py-0.5 font-mono text-sm">
-            NEXT_PUBLIC_SUPABASE_URL
-          </code>{" "}
-          and{" "}
-          <code className="rounded bg-white px-1 py-0.5 font-mono text-sm">
-            NEXT_PUBLIC_SUPABASE_ANON_KEY
-          </code>{" "}
-          in Vercel (or <code className="rounded bg-white px-1 py-0.5 font-mono text-sm">.env.local</code>
-          ) and redeploy.
-        </div>
+        <>
+          <div
+            className="mb-8 rounded-2xl border-4 border-amber-600 bg-amber-50 px-4 py-4 text-left text-base font-semibold text-amber-950"
+            role="status"
+          >
+            Cloud sync is off. Set{" "}
+            <code className="rounded bg-white px-1 py-0.5 font-mono text-sm">
+              NEXT_PUBLIC_SUPABASE_URL
+            </code>{" "}
+            and{" "}
+            <code className="rounded bg-white px-1 py-0.5 font-mono text-sm">
+              NEXT_PUBLIC_SUPABASE_ANON_KEY
+            </code>{" "}
+            in Vercel (or{" "}
+            <code className="rounded bg-white px-1 py-0.5 font-mono text-sm">
+              .env.local
+            </code>
+            ) and redeploy.
+          </div>
+          {envDebugSlot}
+          <div className="mb-6 rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 font-mono text-xs text-slate-800">
+            <p className="mb-1 font-semibold uppercase tracking-wide text-slate-600">
+              Client bundle
+            </p>
+            <p>
+              URL Present:{" "}
+              {!!process.env.NEXT_PUBLIC_SUPABASE_URL ? "YES" : "NO"}
+            </p>
+            <p>
+              Key Present:{" "}
+              {!!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ? "YES" : "NO"}
+            </p>
+          </div>
+        </>
       )}
 
       <form onSubmit={handleSubmit} className="space-y-6">

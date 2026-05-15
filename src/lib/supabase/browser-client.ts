@@ -1,6 +1,14 @@
 import { createBrowserClient } from "@supabase/ssr";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+/**
+ * Supabase browser client — **no `createClient` from `@supabase/supabase-js`** in this
+ * repo: `@supabase/ssr` `createBrowserClient` is used with literal
+ * `process.env.NEXT_PUBLIC_SUPABASE_URL` + `NEXT_PUBLIC_SUPABASE_ANON_KEY` only
+ * (see {@link supabaseUrlFromEnv} / {@link supabaseAnonKeyFromEnv}). Server middleware
+ * uses `createServerClient` with the same env pair via {@link getSupabasePublicConfig}.
+ */
+
 let browserClient: SupabaseClient | null = null;
 
 /**

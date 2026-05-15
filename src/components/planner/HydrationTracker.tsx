@@ -19,7 +19,6 @@ import {
   CAFFEINE_ENERGY_OR_TEA_MG,
   sumCaffeineMgToday,
 } from "@/lib/caffeine-intake";
-import { getSupabaseBrowserClient } from "@/lib/supabase/browser-client";
 import {
   DEFAULT_WATER_GOAL_OZ,
   DEFAULT_CALORIE_GOAL_KCAL,
@@ -37,10 +36,12 @@ import {
 } from "@/lib/hydration-local-backup";
 import { calendarDayLocal } from "@/lib/movement-tracking";
 import {
-  queuePersistDailyLogSilentRetries,
   readPlannerDailyBackup,
   writePlannerDailyBackupFromLogs,
 } from "@/lib/planner-daily-backup";
+import { insertDailyLogDirect } from "@/lib/supabase/direct-daily-log-insert";
+import { getSupabaseBrowserClient } from "@/lib/supabase/browser-client";
+import { resolveSupabaseUserId } from "@/lib/supabase/auth-save-guard";
 import { Check, Droplets, RefreshCw } from "lucide-react";
 import { FeatureHelpTrigger } from "@/components/FeatureHelpModal";
 import { toastWaterLogged } from "@/lib/educational-toasts";
@@ -48,7 +49,7 @@ import { ENTRY_TYPE_CAFFEINE, ENTRY_TYPE_FOOD, ENTRY_TYPE_SODIUM, ENTRY_TYPE_WAT
 
 /**
  * Cloud saves use optimistic React Query + `localStorage` totals via
- * {@link writePlannerDailyBackupFromLogs}, then {@link queuePersistDailyLogSilentRetries}
+ * {@link writePlannerDailyBackupFromLogs}, then direct `daily_logs` inserts
  * (no save-guard timeout, no error alerts).
  */
 /**
@@ -314,6 +315,7 @@ export default function HydrationTracker({
         setBackupRev((n) => n + 1);
       }
     } catch (e) {
+      console.error("SUPABASE_DIAGNOSTIC:", e);
       console.warn("[hydration] todaysLogs sync (isolated from weather):", e);
     }
   }
@@ -502,18 +504,23 @@ export default function HydrationTracker({
   const addOzMutation = useMutation({
     mutationFn: async (row: DailyLogEntry) => {
       const dk = calendarDayLocal();
-      console.log("SENDING TO SUPABASE (background):", row);
-      queuePersistDailyLogSilentRetries(row, qc, () => {
-        writePlannerDailyBackupFromLogs(
-          sessionUser?.id,
-          dk,
-          qc.getQueryData<DailyLogEntry[]>(qk.dailyLogs) ?? [],
-        );
-        scheduleFullCycleSyncAfterWrite();
-        queueMicrotask(() => {
-          router.refresh();
-        });
+      const sb = getSupabaseBrowserClient();
+      if (!sb) throw new Error("Supabase is not configured.");
+      let uid = row.userId ? String(row.userId).trim() : "";
+      if (!uid) uid = (await resolveSupabaseUserId(sb)) ?? "";
+      if (!uid) throw new Error("not_signed_in");
+      const ok = await insertDailyLogDirect(sb, uid, row);
+      if (!ok) throw new Error("daily_logs_insert_failed");
+      writePlannerDailyBackupFromLogs(
+        sessionUser?.id,
+        dk,
+        qc.getQueryData<DailyLogEntry[]>(qk.dailyLogs) ?? [],
+      );
+      scheduleFullCycleSyncAfterWrite();
+      queueMicrotask(() => {
+        router.refresh();
       });
+      void qc.invalidateQueries({ queryKey: qk.dailyLogs, exact: true });
       const amountOz = Number(
         row.valueOz ??
           Number.parseInt(String(row.notes ?? "").trim(), 10),
@@ -557,6 +564,7 @@ export default function HydrationTracker({
       return { previousTotals, previousDailyLogs };
     },
     onError: (err: Error) => {
+      console.error("SUPABASE_DIAGNOSTIC:", err);
       console.warn("[hydration] water mutation error (optimistic UI kept):", err);
     },
     onSuccess: ({ amountOz }) => {
@@ -571,19 +579,24 @@ export default function HydrationTracker({
       preset: "coffee" | "energy";
     }) => {
       const dk = calendarDayLocal();
-      console.log("SENDING TO SUPABASE (background):", input.row);
-      queuePersistDailyLogSilentRetries(input.row, qc, () => {
-        writePlannerDailyBackupFromLogs(
-          sessionUser?.id,
-          dk,
-          qc.getQueryData<DailyLogEntry[]>(qk.dailyLogs) ?? [],
-        );
-        scheduleFullCycleSyncAfterWrite();
-        queueMicrotask(() => {
-          router.refresh();
-        });
-      });
+      const sb = getSupabaseBrowserClient();
+      if (!sb) throw new Error("Supabase is not configured.");
       const { row, preset } = input;
+      let uid = row.userId ? String(row.userId).trim() : "";
+      if (!uid) uid = (await resolveSupabaseUserId(sb)) ?? "";
+      if (!uid) throw new Error("not_signed_in");
+      const ok = await insertDailyLogDirect(sb, uid, row);
+      if (!ok) throw new Error("daily_logs_insert_failed");
+      writePlannerDailyBackupFromLogs(
+        sessionUser?.id,
+        dk,
+        qc.getQueryData<DailyLogEntry[]>(qk.dailyLogs) ?? [],
+      );
+      scheduleFullCycleSyncAfterWrite();
+      queueMicrotask(() => {
+        router.refresh();
+      });
+      void qc.invalidateQueries({ queryKey: qk.dailyLogs, exact: true });
       const mg = Number(
         row.valueMg ??
           Number.parseInt(String(row.notes ?? "").trim(), 10),
@@ -628,6 +641,7 @@ export default function HydrationTracker({
       return { previousTotals, previousDailyLogs };
     },
     onError: (err: Error) => {
+      console.error("SUPABASE_DIAGNOSTIC:", err);
       console.warn(
         "[hydration] caffeine mutation error (optimistic UI kept):",
         err,

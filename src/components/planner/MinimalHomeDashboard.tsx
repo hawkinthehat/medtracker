@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState, useCallback } from "react";
+import { useCallback, useEffect, useId, useState, type ReactNode } from "react";
 import { ChevronDown, ClipboardList } from "lucide-react";
 import PulseStrip from "@/components/planner/PulseStrip";
 import MorningRoutine from "@/components/planner/MorningRoutine";
@@ -52,6 +52,7 @@ import {
   loadBaselines,
   type BaselinesProfile,
 } from "@/lib/baselines-storage";
+import { cn } from "@/lib/utils";
 
 function greeting(now = new Date()) {
   const h = now.getHours();
@@ -67,6 +68,73 @@ function formatLongDate(d = new Date()) {
     day: "numeric",
     year: "numeric",
   });
+}
+
+type HomeDashboardAccordionProps = {
+  panelId: string;
+  title: string;
+  open: boolean;
+  onToggle: () => void;
+  children: ReactNode;
+};
+
+/**
+ * Mobile-first expand/collapse — `open` is ordinary React state (no Supabase,
+ * no localStorage). Content mounts only when open so nested trackers do not
+ * fetch until the user expands.
+ */
+function HomeDashboardAccordion({
+  panelId,
+  title,
+  open,
+  onToggle,
+  children,
+}: HomeDashboardAccordionProps) {
+  const triggerId = `${panelId}-trigger`;
+  return (
+    <div className="overflow-hidden rounded-2xl border-4 border-black bg-white shadow-sm">
+      <button
+        type="button"
+        id={triggerId}
+        aria-expanded={open}
+        aria-controls={panelId}
+        onClick={onToggle}
+        className={cn(
+          "flex w-full min-h-[56px] items-center justify-between gap-3 px-4 py-4 text-left touch-manipulation sm:min-h-[60px] sm:px-5",
+          "text-lg font-black tracking-tight text-slate-900 sm:text-xl",
+          "transition-colors active:bg-slate-100",
+        )}
+      >
+        <span className="min-w-0">{title}</span>
+        <span className="flex shrink-0 items-center gap-2 sm:gap-3">
+          <span className="text-sm font-bold uppercase tracking-wide text-slate-600 sm:text-base">
+            {open ? "Hide" : "Show"}
+          </span>
+          <span
+            className="flex h-12 min-h-12 min-w-12 w-12 items-center justify-center rounded-xl border-2 border-slate-900 bg-slate-50 sm:h-14 sm:min-h-14 sm:min-w-14 sm:w-14"
+            aria-hidden
+          >
+            <ChevronDown
+              className={cn(
+                "h-7 w-7 shrink-0 text-slate-900 transition-transform sm:h-8 sm:w-8",
+                open && "rotate-180",
+              )}
+            />
+          </span>
+        </span>
+      </button>
+      {open ? (
+        <div
+          id={panelId}
+          role="region"
+          aria-labelledby={triggerId}
+          className="border-t-4 border-slate-200 px-3 pb-5 pt-4 sm:px-4"
+        >
+          {children}
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 type MinimalHomeDashboardProps = {
@@ -93,6 +161,11 @@ export default function MinimalHomeDashboard({
   const [baselines, setBaselines] = useState<BaselinesProfile>(loadBaselines);
   const [welcomeOpen, setWelcomeOpen] = useState<boolean | null>(null);
   const [todaysLogsSyncing, setTodaysLogsSyncing] = useState(false);
+  const [morningRoutineAccordionOpen, setMorningRoutineAccordionOpen] =
+    useState(false);
+  const [symptomsAccordionOpen, setSymptomsAccordionOpen] = useState(false);
+  const morningRoutinePanelId = useId();
+  const symptomsPanelId = useId();
 
   /**
    * Full-cycle sync: re-read today’s hydration sums from Supabase (same `recorded_at`
@@ -348,9 +421,23 @@ export default function MinimalHomeDashboard({
 
       <QuickRelief />
 
-      <MorningRoutine />
+      <HomeDashboardAccordion
+        panelId={morningRoutinePanelId}
+        title="Morning routine"
+        open={morningRoutineAccordionOpen}
+        onToggle={() => setMorningRoutineAccordionOpen((v) => !v)}
+      >
+        <MorningRoutine />
+      </HomeDashboardAccordion>
 
-      <SymptomMatrix />
+      <HomeDashboardAccordion
+        panelId={symptomsPanelId}
+        title="Symptoms tracker"
+        open={symptomsAccordionOpen}
+        onToggle={() => setSymptomsAccordionOpen((v) => !v)}
+      >
+        <SymptomMatrix />
+      </HomeDashboardAccordion>
 
       <section aria-labelledby="daily-pulse-heading" className="space-y-4">
         <h2

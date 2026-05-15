@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import AuthEnvDebugBridge from "./AuthEnvDebugBridge";
 import AuthPageContent from "./AuthPageContent";
 
 function AuthFallback() {
@@ -12,7 +13,7 @@ function AuthFallback() {
 export default function AuthPage() {
   return (
     <Suspense fallback={<AuthFallback />}>
-      <AuthPageContent />
+      <AuthPageContent envDebugSlot={<AuthEnvDebugBridge />} />
     </Suspense>
   );
 }

@@ -1,17 +1,18 @@
 "use client";
 
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { Check } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { qk } from "@/lib/query-keys";
 import type { VitalRow } from "@/lib/types";
+import type { HealthVitalPosition } from "@/lib/supabase/health-vitals";
+import { getSupabaseBrowserClient } from "@/lib/supabase/browser-client";
 import {
-  insertHealthVital,
-  type HealthVitalPosition,
-  type InsertHealthVitalInput,
-} from "@/lib/supabase/health-vitals";
-import { toastMessageForPersistFailure } from "@/lib/supabase/auth-save-guard";
+  resolveSupabaseUserId,
+  toastMessageForPersistFailure,
+} from "@/lib/supabase/auth-save-guard";
 
 type QuickBpHomeButtonProps = {
   /** True when Supabase is configured and the user is signed in (enables Save to `health_vitals`). */
@@ -35,6 +36,7 @@ export default function QuickBpHomeButton({
   onAfterSuccessfulSave,
 }: QuickBpHomeButtonProps) {
   const qc = useQueryClient();
+  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [sys, setSys] = useState("");
   const [dia, setDia] = useState("");
@@ -46,7 +48,7 @@ export default function QuickBpHomeButton({
 
   useEffect(() => {
     if (!loggedAck) return;
-    const t = window.setTimeout(() => setLoggedAck(false), 2600);
+    const t = window.setTimeout(() => setLoggedAck(false), 3200);
     return () => window.clearTimeout(t);
   }, [loggedAck]);
 
@@ -55,45 +57,6 @@ export default function QuickBpHomeButton({
     const t = window.setTimeout(() => setSaveError(null), 5000);
     return () => window.clearTimeout(t);
   }, [saveError]);
-
-  const saveMutation = useMutation({
-    mutationFn: async (input: InsertHealthVitalInput) => {
-      const res = await insertHealthVital(input);
-      if (!res.ok) throw new Error(res.error);
-      return res;
-    },
-    onMutate: async (input) => {
-      await qc.cancelQueries({ queryKey: qk.vitals });
-      const previous = qc.getQueryData<VitalRow[]>(qk.vitals) ?? [];
-      const optimistic: VitalRow = {
-        id: input.id ?? crypto.randomUUID(),
-        recordedAt: new Date().toISOString(),
-        systolic: Math.round(input.systolic),
-        diastolic: Math.round(input.diastolic),
-        heartRate:
-          input.heartRate != null && Number.isFinite(input.heartRate)
-            ? Math.round(Number(input.heartRate))
-            : undefined,
-        notes: `Quick BP · ${input.position}`,
-      };
-      qc.setQueryData<VitalRow[]>(qk.vitals, [optimistic, ...previous]);
-      return { previous };
-    },
-    onError: (err: unknown, _input, ctx) => {
-      setLoggedAck(false);
-      if (ctx?.previous) qc.setQueryData(qk.vitals, ctx.previous);
-      const raw = err instanceof Error ? err.message : "Save failed";
-      setSaveError(toastMessageForPersistFailure(raw));
-    },
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: qk.vitals });
-      try {
-        onAfterSuccessfulSave?.();
-      } catch (e) {
-        console.warn("[quick-bp] onAfterSuccessfulSave failed (non-fatal):", e);
-      }
-    },
-  });
 
   function resetForm() {
     setSys("");
@@ -130,7 +93,7 @@ export default function QuickBpHomeButton({
     }
 
     const hrTrim = hr.trim();
-    let heartRate: number | null | undefined;
+    let heartRate: number | null = null;
     if (hrTrim !== "") {
       const h = Number.parseInt(hrTrim, 10);
       if (!Number.isFinite(h) || h < 30 || h > 240) {
@@ -141,16 +104,88 @@ export default function QuickBpHomeButton({
     }
 
     const id = crypto.randomUUID();
+    const recordedAt = new Date().toISOString();
+    const previous = qc.getQueryData<VitalRow[]>(qk.vitals) ?? [];
+    const optimistic: VitalRow = {
+      id,
+      recordedAt,
+      systolic: Math.round(s),
+      diastolic: Math.round(d),
+      heartRate:
+        heartRate != null && Number.isFinite(heartRate)
+          ? Math.round(heartRate)
+          : undefined,
+      notes: `Quick BP · ${position}`,
+    };
+    void qc.cancelQueries({ queryKey: qk.vitals });
+    qc.setQueryData<VitalRow[]>(qk.vitals, [optimistic, ...previous]);
+
     closeModal();
     setLoggedAck(true);
 
-    saveMutation.mutate({
-      id,
-      systolic: s,
-      diastolic: d,
-      position,
-      heartRate: heartRate ?? null,
-    });
+    void (async () => {
+      try {
+        const sb = getSupabaseBrowserClient();
+        if (!sb) {
+          qc.setQueryData(qk.vitals, previous);
+          setLoggedAck(false);
+          setSaveError(
+            toastMessageForPersistFailure("Supabase is not configured."),
+          );
+          return;
+        }
+
+        const userId = await resolveSupabaseUserId(sb);
+        if (!userId) {
+          qc.setQueryData(qk.vitals, previous);
+          setLoggedAck(false);
+          setSaveError(toastMessageForPersistFailure("not_signed_in"));
+          return;
+        }
+        const userIdStr = String(userId);
+
+        const hrDb =
+          heartRate != null && Number.isFinite(heartRate)
+            ? Math.round(heartRate)
+            : null;
+
+        const { error } = await sb.from("health_vitals").insert({
+          id,
+          user_id: userIdStr,
+          recorded_at: recordedAt,
+          systolic: Math.round(s),
+          diastolic: Math.round(d),
+          position,
+          heart_rate: hrDb,
+        });
+
+        if (error) {
+          console.error("SUPABASE_DIAGNOSTIC:", error);
+          qc.setQueryData(qk.vitals, previous);
+          setLoggedAck(false);
+          setSaveError(toastMessageForPersistFailure(error.message));
+          return;
+        }
+
+        void qc.invalidateQueries({ queryKey: qk.vitals });
+        try {
+          onAfterSuccessfulSave?.();
+        } catch (e) {
+          console.error("SUPABASE_DIAGNOSTIC:", e);
+          console.warn("[quick-bp] onAfterSuccessfulSave failed (non-fatal):", e);
+        }
+        router.refresh();
+      } catch (e) {
+        console.error("SUPABASE_DIAGNOSTIC:", e);
+        qc.setQueryData(qk.vitals, previous);
+        setLoggedAck(false);
+        setSaveError(
+          toastMessageForPersistFailure(
+            e instanceof Error ? e.message : "Save failed",
+          ),
+        );
+      }
+    })();
   }
 
   const modal =
@@ -183,9 +218,9 @@ export default function QuickBpHomeButton({
           </h2>
           <p className="mt-1 text-sm font-semibold text-slate-700">
             Systolic / diastolic (mmHg), posture (lying / sitting / standing),
-            optional pulse. Saved to{" "}
-            <span className="font-bold text-slate-900">health_vitals</span> when
-            you are signed in.
+            optional pulse. Syncs to{" "}
+            <span className="font-bold text-slate-900">health_vitals</span> in
+            the background.
           </p>
           {!canSave && (
             <p className="mt-3 rounded-lg border-2 border-amber-700 bg-amber-50 px-3 py-2 text-sm font-bold text-amber-950">
@@ -195,7 +230,7 @@ export default function QuickBpHomeButton({
           )}
 
           <div className="mt-4 flex flex-wrap items-end gap-2">
-            <label className="flex flex-1 min-w-[5rem] flex-col gap-1">
+            <label className="flex min-w-[5rem] flex-1 flex-col gap-1">
               <span className="text-xs font-black uppercase tracking-wide text-black">
                 Systolic
               </span>
@@ -214,7 +249,7 @@ export default function QuickBpHomeButton({
             >
               /
             </span>
-            <label className="flex flex-1 min-w-[5rem] flex-col gap-1">
+            <label className="flex min-w-[5rem] flex-1 flex-col gap-1">
               <span className="text-xs font-black uppercase tracking-wide text-black">
                 Diastolic
               </span>
@@ -283,10 +318,10 @@ export default function QuickBpHomeButton({
             <button
               type="button"
               onClick={submit}
-              disabled={!canSave || saveMutation.isPending}
+              disabled={!canSave}
               className="min-h-[48px] flex-1 rounded-xl border-4 border-black bg-black px-4 text-base font-black text-white transition hover:bg-neutral-900 disabled:cursor-not-allowed disabled:bg-slate-600"
             >
-              {saveMutation.isPending ? "Saving…" : "Save"}
+              Save
             </button>
           </div>
         </div>
@@ -310,7 +345,7 @@ export default function QuickBpHomeButton({
           role="status"
         >
           <Check className="h-3.5 w-3.5" strokeWidth={3} aria-hidden />
-          Logged
+          Saved
         </span>
       )}
       {saveError && (

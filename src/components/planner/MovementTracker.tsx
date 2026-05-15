@@ -15,7 +15,11 @@ import {
 } from "@/lib/supabase/activity-logs";
 import type { DailyLogsFullCycleHydrationTotals } from "@/lib/supabase/daily-logs";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser-client";
-import { toastMessageForPersistFailure } from "@/lib/supabase/auth-save-guard";
+import {
+  resolveSupabaseUserId,
+  toastMessageForPersistFailure,
+} from "@/lib/supabase/auth-save-guard";
+import { insertDailyLogDirect } from "@/lib/supabase/direct-daily-log-insert";
 import { dailyLogsQueryFn } from "@/lib/daily-logs-query-fn";
 import { fetchAndLogWeather } from "@/lib/weather";
 import { getEnvironmentSnapshot } from "@/lib/environment-snapshot";
@@ -39,7 +43,6 @@ import {
   type PtSlot,
 } from "@/lib/movement-tracking";
 import {
-  queuePersistDailyLogSilentRetries,
   writePlannerDailyBackupFromLogs,
   readPlannerDailyBackup,
 } from "@/lib/planner-daily-backup";
@@ -320,17 +323,35 @@ export default function MovementTracker({
     });
     writePlannerDailyBackupFromLogs(sessionUser?.id, today, logsAfter);
 
-    queuePersistDailyLogSilentRetries(row, qc, () => {
-      writePlannerDailyBackupFromLogs(
-        sessionUser?.id,
-        today,
-        qc.getQueryData<DailyLogEntry[]>(qk.dailyLogs) ?? [],
-      );
-      scheduleMovementFullCycleAfterWrite();
-      queueMicrotask(() => {
-        router.refresh();
-      });
-    });
+    void (async () => {
+      try {
+        const sb = getSupabaseBrowserClient();
+        if (!sb) {
+          console.error("SUPABASE_DIAGNOSTIC:", new Error("no_supabase_client"));
+          return;
+        }
+        let uid = row.userId ? String(row.userId).trim() : "";
+        if (!uid) uid = (await resolveSupabaseUserId(sb)) ?? "";
+        if (!uid) {
+          console.error("SUPABASE_DIAGNOSTIC:", new Error("not_signed_in"));
+          return;
+        }
+        const ok = await insertDailyLogDirect(sb, uid, row);
+        if (!ok) return;
+        writePlannerDailyBackupFromLogs(
+          sessionUser?.id,
+          today,
+          qc.getQueryData<DailyLogEntry[]>(qk.dailyLogs) ?? [],
+        );
+        scheduleMovementFullCycleAfterWrite();
+        queueMicrotask(() => {
+          router.refresh();
+        });
+        void qc.invalidateQueries({ queryKey: qk.dailyLogs, exact: true });
+      } catch (e) {
+        console.error("SUPABASE_DIAGNOSTIC:", e);
+      }
+    })();
   }
 
   async function handlePt(slot: PtSlot, humanLabel: string) {
@@ -398,7 +419,7 @@ export default function MovementTracker({
       }
       setPtLatched(rollback);
       savePtLatched(today, rollback);
-      console.error("[handlePt] Failed to save PT / activity_logs:", e);
+      console.error("SUPABASE_DIAGNOSTIC:", e);
       throw e;
     } finally {
       setPendingPtSlot(null);
