@@ -35,7 +35,6 @@ import {
   resetHydrationDayBackupFromServer,
   writeHydrationDayBackup,
 } from "@/lib/hydration-local-backup";
-import { toastMessageForPersistFailure } from "@/lib/supabase/auth-save-guard";
 import { calendarDayLocal } from "@/lib/movement-tracking";
 import {
   queuePersistDailyLogSilentRetries,
@@ -236,10 +235,6 @@ export default function HydrationTracker({
     };
   }, []);
 
-  useEffect(() => {
-    console.log("SUPABASE URL:", process.env.NEXT_PUBLIC_SUPABASE_URL);
-  }, []);
-
   const hydrationTotalsLoaded =
     !supabaseConfigured ||
     !sessionUser ||
@@ -341,9 +336,11 @@ export default function HydrationTracker({
   });
 
   const plannerDayKey = calendarDayLocal();
-  const plannerDailyBackup = useMemo(
-    () => readPlannerDailyBackup(sessionUser?.id, plannerDayKey),
-    [sessionUser?.id, plannerDayKey, dailyLogs, backupRev],
+  // backupRev bumps after localStorage writes — re-read planner backup on each bump.
+  void backupRev;
+  const plannerDailyBackup = readPlannerDailyBackup(
+    sessionUser?.id,
+    plannerDayKey,
   );
 
   const cacheOz = useMemo(() => {
@@ -370,10 +367,7 @@ export default function HydrationTracker({
         ? Math.max(storedWaterOz, cacheOz)
         : cacheOz;
 
-  const localBackup = useMemo(
-    () => readHydrationDayBackup(sessionUser?.id ?? undefined),
-    [sessionUser?.id, backupRev],
-  );
+  const localBackup = readHydrationDayBackup(sessionUser?.id ?? undefined);
 
   const cacheCaffeineMg = useMemo(() => {
     const fromStrict = todayCaffeineMgFromLogsReduce(dailyLogs);
@@ -646,7 +640,6 @@ export default function HydrationTracker({
   });
 
   function quickAddOz(amount: number) {
-    console.log("INITIALIZING SAVE");
     if (needsSignIn) {
       router.push(`/auth?next=${encodeURIComponent(pathname || "/")}`);
       return;
@@ -703,7 +696,6 @@ export default function HydrationTracker({
   }
 
   function logCaffeine(preset: "coffee" | "energy") {
-    console.log("INITIALIZING SAVE");
     if (needsSignIn) {
       router.push(`/auth?next=${encodeURIComponent(pathname || "/")}`);
       return;
