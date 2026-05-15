@@ -3,7 +3,10 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { safeInternalPath } from "@/lib/auth/safe-redirect";
-import { getSupabaseBrowserClient } from "@/lib/supabase/browser-client";
+import {
+  getSupabaseBrowserClient,
+  isSupabaseConfigured,
+} from "@/lib/supabase/browser-client";
 
 type Mode = "signup" | "signin";
 
@@ -18,7 +21,7 @@ export default function AuthPageContent() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const supabaseConfigured = Boolean(getSupabaseBrowserClient());
+  const supabaseConfigured = isSupabaseConfigured();
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -86,11 +89,16 @@ export default function AuthPageContent() {
           className="mb-8 rounded-2xl border-4 border-amber-600 bg-amber-50 px-4 py-4 text-left text-base font-semibold text-amber-950"
           role="status"
         >
-          Cloud sync is off until Supabase environment variables are set in{" "}
+          Cloud sync is off. Set{" "}
           <code className="rounded bg-white px-1 py-0.5 font-mono text-sm">
-            .env.local
-          </code>
-          .
+            NEXT_PUBLIC_SUPABASE_URL
+          </code>{" "}
+          and{" "}
+          <code className="rounded bg-white px-1 py-0.5 font-mono text-sm">
+            NEXT_PUBLIC_SUPABASE_ANON_KEY
+          </code>{" "}
+          in Vercel (or <code className="rounded bg-white px-1 py-0.5 font-mono text-sm">.env.local</code>
+          ) and redeploy.
         </div>
       )}
 

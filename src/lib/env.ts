@@ -1,16 +1,16 @@
-/** Safe reads for public env vars — never throws during SSG/build when unset. */
-export function publicEnv(name: string): string {
-  const v = process.env[name];
-  return typeof v === "string" ? v.trim() : "";
-}
-
+/**
+ * Server/middleware Supabase config — literal `process.env.NEXT_PUBLIC_*` access only
+ * (dynamic `process.env[name]` is not inlined into the client bundle).
+ */
 export function getSupabasePublicConfig(): {
   url: string;
   anonKey: string;
   configured: boolean;
 } {
-  const url = publicEnv("NEXT_PUBLIC_SUPABASE_URL");
-  const anonKey = publicEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY");
+  const urlRaw = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const keyRaw = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const url = typeof urlRaw === "string" ? urlRaw.trim() : "";
+  const anonKey = typeof keyRaw === "string" ? keyRaw.trim() : "";
   return {
     url,
     anonKey,
