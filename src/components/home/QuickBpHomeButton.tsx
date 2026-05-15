@@ -5,21 +5,34 @@ import { Check } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
+import type { User } from "@supabase/supabase-js";
 import { qk } from "@/lib/query-keys";
 import type { VitalRow } from "@/lib/types";
 import type { HealthVitalPosition } from "@/lib/supabase/health-vitals";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser-client";
-import {
-  resolveSupabaseUserId,
-  toastMessageForPersistFailure,
-} from "@/lib/supabase/auth-save-guard";
 
 type QuickBpHomeButtonProps = {
-  /** True when Supabase is configured and the user is signed in (enables Save to `health_vitals`). */
-  canSave: boolean;
   /** Runs after a successful BP save — e.g. refresh `daily_logs` hydration totals (never awaits weather). */
   onAfterSuccessfulSave?: () => void;
 };
+
+/** Same user-facing mapping as other save surfaces; kept local so this component does not depend on auth-save helpers. */
+function formatBpSaveFailure(errorMessage: string): string {
+  const m = errorMessage.toLowerCase();
+  if (
+    errorMessage === "not_signed_in" ||
+    m.includes("jwt expired") ||
+    m.includes("invalid jwt") ||
+    m.includes("auth session missing") ||
+    m.includes("refresh token") ||
+    m.includes("session expired") ||
+    (m.includes("foreign key") &&
+      (m.includes("user_id") || m.includes("daily_logs_user_id")))
+  ) {
+    return "Session expired. Please log in again to save your progress.";
+  }
+  return errorMessage;
+}
 
 const POSITIONS: {
   value: HealthVitalPosition;
@@ -32,11 +45,16 @@ const POSITIONS: {
 ];
 
 export default function QuickBpHomeButton({
-  canSave,
   onAfterSuccessfulSave,
 }: QuickBpHomeButtonProps) {
   const qc = useQueryClient();
   const router = useRouter();
+  const sb = getSupabaseBrowserClient();
+  const supabaseConfigured = Boolean(sb);
+
+  const [sessionUser, setSessionUser] = useState<User | null>(null);
+  const [sessionResolved, setSessionResolved] = useState(false);
+
   const [open, setOpen] = useState(false);
   const [sys, setSys] = useState("");
   const [dia, setDia] = useState("");
@@ -45,6 +63,32 @@ export default function QuickBpHomeButton({
   const [formError, setFormError] = useState<string | null>(null);
   const [loggedAck, setLoggedAck] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+
+  const needsSignIn =
+    supabaseConfigured && sessionResolved && !sessionUser;
+  const saveEnabled = Boolean(sb && sessionUser?.id);
+
+  useEffect(() => {
+    if (!sb) {
+      setSessionUser(null);
+      setSessionResolved(true);
+      return;
+    }
+    void sb.auth.getUser().then(({ data: { user } }) => {
+      setSessionUser(user ?? null);
+      setSessionResolved(true);
+    });
+    const {
+      data: { subscription },
+    } = sb.auth.onAuthStateChange(async () => {
+      const {
+        data: { user },
+      } = await sb.auth.getUser();
+      setSessionUser(user ?? null);
+      setSessionResolved(true);
+    });
+    return () => subscription.unsubscribe();
+  }, [sb]);
 
   useEffect(() => {
     if (!loggedAck) return;
@@ -72,10 +116,6 @@ export default function QuickBpHomeButton({
   }
 
   function submit() {
-    if (!canSave) {
-      setFormError("Sign in to save this reading to your chart.");
-      return;
-    }
     setFormError(null);
     const s = Number.parseInt(sys.trim(), 10);
     const d = Number.parseInt(dia.trim(), 10);
@@ -103,6 +143,17 @@ export default function QuickBpHomeButton({
       heartRate = h;
     }
 
+    if (!saveEnabled) {
+      if (!supabaseConfigured) {
+        setFormError(
+          "Supabase is not configured. Add NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.",
+        );
+      } else {
+        setFormError("Sign in to save this reading to your chart.");
+      }
+      return;
+    }
+
     const id = crypto.randomUUID();
     const recordedAt = new Date().toISOString();
     const previous = qc.getQueryData<VitalRow[]>(qk.vitals) ?? [];
@@ -125,33 +176,33 @@ export default function QuickBpHomeButton({
 
     void (async () => {
       try {
-        const sb = getSupabaseBrowserClient();
-        if (!sb) {
+        const client = getSupabaseBrowserClient();
+        if (!client) {
           qc.setQueryData(qk.vitals, previous);
           setLoggedAck(false);
-          setSaveError(
-            toastMessageForPersistFailure("Supabase is not configured."),
-          );
+          setSaveError("Supabase is not configured.");
           return;
         }
 
-        const userId = await resolveSupabaseUserId(sb);
+        const {
+          data: { user },
+        } = await client.auth.getUser();
+        const userId = user?.id;
         if (!userId) {
           qc.setQueryData(qk.vitals, previous);
           setLoggedAck(false);
-          setSaveError(toastMessageForPersistFailure("not_signed_in"));
+          setSaveError(formatBpSaveFailure("not_signed_in"));
           return;
         }
-        const userIdStr = String(userId);
 
         const hrDb =
           heartRate != null && Number.isFinite(heartRate)
             ? Math.round(heartRate)
             : null;
 
-        const { error } = await sb.from("health_vitals").insert({
+        const { error } = await client.from("health_vitals").insert({
           id,
-          user_id: userIdStr,
+          user_id: userId,
           recorded_at: recordedAt,
           systolic: Math.round(s),
           diastolic: Math.round(d),
@@ -160,10 +211,10 @@ export default function QuickBpHomeButton({
         });
 
         if (error) {
-          console.error("SUPABASE_DIAGNOSTIC:", error);
+          console.warn("[QuickBP] health_vitals insert:", error.message);
           qc.setQueryData(qk.vitals, previous);
           setLoggedAck(false);
-          setSaveError(toastMessageForPersistFailure(error.message));
+          setSaveError(formatBpSaveFailure(error.message));
           return;
         }
 
@@ -171,16 +222,15 @@ export default function QuickBpHomeButton({
         try {
           onAfterSuccessfulSave?.();
         } catch (e) {
-          console.error("SUPABASE_DIAGNOSTIC:", e);
-          console.warn("[quick-bp] onAfterSuccessfulSave failed (non-fatal):", e);
+          console.warn("[QuickBP] onAfterSuccessfulSave failed (non-fatal):", e);
         }
         router.refresh();
       } catch (e) {
-        console.error("SUPABASE_DIAGNOSTIC:", e);
+        console.warn("[QuickBP] save:", e);
         qc.setQueryData(qk.vitals, previous);
         setLoggedAck(false);
         setSaveError(
-          toastMessageForPersistFailure(
+          formatBpSaveFailure(
             e instanceof Error ? e.message : "Save failed",
           ),
         );
@@ -218,11 +268,16 @@ export default function QuickBpHomeButton({
           </h2>
           <p className="mt-1 text-sm font-semibold text-slate-700">
             Systolic / diastolic (mmHg), posture (lying / sitting / standing),
-            optional pulse. Syncs to{" "}
-            <span className="font-bold text-slate-900">health_vitals</span> in
-            the background.
+            optional pulse. Saved directly to{" "}
+            <span className="font-bold text-slate-900">health_vitals</span>.
           </p>
-          {!canSave && (
+          {!supabaseConfigured && sessionResolved && (
+            <p className="mt-3 rounded-lg border-2 border-amber-700 bg-amber-50 px-3 py-2 text-sm font-bold text-amber-950">
+              Supabase env vars are missing — readings cannot be saved to the
+              cloud.
+            </p>
+          )}
+          {needsSignIn && (
             <p className="mt-3 rounded-lg border-2 border-amber-700 bg-amber-50 px-3 py-2 text-sm font-bold text-amber-950">
               Sign in with Supabase to save readings. You can still preview the
               form below.
@@ -318,7 +373,7 @@ export default function QuickBpHomeButton({
             <button
               type="button"
               onClick={submit}
-              disabled={!canSave}
+              disabled={!saveEnabled}
               className="min-h-[48px] flex-1 rounded-xl border-4 border-black bg-black px-4 text-base font-black text-white transition hover:bg-neutral-900 disabled:cursor-not-allowed disabled:bg-slate-600"
             >
               Save

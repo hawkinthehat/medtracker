@@ -389,7 +389,6 @@ export default function MinimalHomeDashboard({
           </p>
         </div>
         <QuickBpHomeButton
-          canSave={countersEnabled}
           onAfterSuccessfulSave={() => {
             try {
               void fetchTodaysLogs();

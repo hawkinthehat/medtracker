@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { safeInternalPath } from "@/lib/auth/safe-redirect";
 import {
   getSupabaseBrowserClient,
@@ -27,8 +27,14 @@ export default function AuthPageContent({
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [clientReady, setClientReady] = useState(false);
+
+  useEffect(() => {
+    setClientReady(true);
+  }, []);
 
   const supabaseConfigured = isSupabaseConfigured();
+  const showCloudSyncOff = clientReady && !supabaseConfigured;
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -91,7 +97,7 @@ export default function AuthPageContent({
         </p>
       </div>
 
-      {!supabaseConfigured && (
+      {showCloudSyncOff && (
         <>
           <div
             className="mb-8 rounded-2xl border-4 border-amber-600 bg-amber-50 px-4 py-4 text-left text-base font-semibold text-amber-950"
@@ -123,6 +129,14 @@ export default function AuthPageContent({
             <p>
               Key Present:{" "}
               {!!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ? "YES" : "NO"}
+            </p>
+            <p>
+              Layout mirror (server → window):{" "}
+              {typeof window !== "undefined" &&
+              window.__TIAKI_SUPABASE_PUBLIC__?.url &&
+              window.__TIAKI_SUPABASE_PUBLIC__?.anonKey
+                ? "YES"
+                : "NO"}
             </p>
           </div>
         </>
@@ -186,7 +200,7 @@ export default function AuthPageContent({
 
         <button
           type="submit"
-          disabled={loading || !supabaseConfigured}
+          disabled={loading || !clientReady || !supabaseConfigured}
           className="min-h-[60px] w-full rounded-2xl border-4 border-black bg-black py-4 text-xl font-black uppercase tracking-wide text-white shadow-md transition hover:bg-neutral-900 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {loading

@@ -2,44 +2,71 @@ import { createBrowserClient } from "@supabase/ssr";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 /**
- * Supabase browser client — **no `createClient` from `@supabase/supabase-js`** in this
- * repo: `@supabase/ssr` `createBrowserClient` is used with literal
- * `process.env.NEXT_PUBLIC_SUPABASE_URL` + `NEXT_PUBLIC_SUPABASE_ANON_KEY` only
- * (see {@link supabaseUrlFromEnv} / {@link supabaseAnonKeyFromEnv}). Server middleware
- * uses `createServerClient` with the same env pair via {@link getSupabasePublicConfig}.
+ * Supabase browser client — uses `@supabase/ssr` `createBrowserClient` with the
+ * **same** public credentials as `NEXT_PUBLIC_SUPABASE_URL` and
+ * `NEXT_PUBLIC_SUPABASE_ANON_KEY`:
+ *
+ * 1. Read from `process.env.NEXT_PUBLIC_*` (inlined at build time when set).
+ * 2. If either is empty in the client bundle, read `window.__TIAKI_SUPABASE_PUBLIC__`
+ *    set by the root layout from **server** `process.env` at request time (Vercel).
+ *
+ * No alternate env names, no hard-coded keys, no `createClient` from `@supabase/supabase-js`.
  */
 
 let browserClient: SupabaseClient | null = null;
 
+function readInjectedPublic(): { url: string; anonKey: string } | null {
+  if (typeof window === "undefined") return null;
+  const inj = window.__TIAKI_SUPABASE_PUBLIC__;
+  if (!inj) return null;
+  const url = typeof inj.url === "string" ? inj.url.trim() : "";
+  const anonKey = typeof inj.anonKey === "string" ? inj.anonKey.trim() : "";
+  if (url.length === 0 || anonKey.length === 0) return null;
+  return { url, anonKey };
+}
+
 /**
- * Read public Supabase URL — must use a literal `process.env.NEXT_PUBLIC_*` property
- * so Next.js inlines the value into the client bundle at build time.
+ * Must use literal `process.env.NEXT_PUBLIC_*` so Next can inline at build time.
+ * When empty there, the root layout mirrors the same vars into `window.__TIAKI_SUPABASE_PUBLIC__`.
  */
-function supabaseUrlFromEnv(): string {
+function supabaseUrlFromProcessEnv(): string {
   const raw = process.env.NEXT_PUBLIC_SUPABASE_URL;
   return typeof raw === "string" ? raw.trim() : "";
 }
 
-function supabaseAnonKeyFromEnv(): string {
+function supabaseAnonKeyFromProcessEnv(): string {
   const raw = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   return typeof raw === "string" ? raw.trim() : "";
 }
 
-/** Both vars set and non-empty after trim (not "missing during build" empty strings). */
+function supabaseUrlResolved(): string {
+  const fromEnv = supabaseUrlFromProcessEnv();
+  if (fromEnv.length > 0) return fromEnv;
+  return readInjectedPublic()?.url ?? "";
+}
+
+function supabaseAnonKeyResolved(): string {
+  const fromEnv = supabaseAnonKeyFromProcessEnv();
+  if (fromEnv.length > 0) return fromEnv;
+  return readInjectedPublic()?.anonKey ?? "";
+}
+
+/** True when URL and anon key are available (build-inlined and/or layout-injected). */
 export function isSupabaseConfigured(): boolean {
   return (
-    supabaseUrlFromEnv().length > 0 && supabaseAnonKeyFromEnv().length > 0
+    supabaseUrlResolved().length > 0 && supabaseAnonKeyResolved().length > 0
   );
 }
 
-/** Browser Supabase client — uses cookies so middleware + server stay in sync with auth. */
+/** Browser Supabase client — cookies stay aligned with middleware + server. */
 export function getSupabaseBrowserClient(): SupabaseClient | null {
   if (!isSupabaseConfigured()) return null;
 
-  const url = supabaseUrlFromEnv();
-  const key = supabaseAnonKeyFromEnv();
+  const url = supabaseUrlResolved();
+  const key = supabaseAnonKeyResolved();
 
   if (!browserClient) {
+    console.log("Check:", !!process.env.NEXT_PUBLIC_SUPABASE_URL);
     browserClient = createBrowserClient(url, key);
   }
   return browserClient;
