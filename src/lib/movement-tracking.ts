@@ -35,7 +35,7 @@ export function countDogWalksToday(
     if (!isSameLocalDay(e.recordedAt, day)) return false;
     const modern =
       e.entryType === ENTRY_TYPE_ACTIVITY &&
-      e.category === "movement" &&
+      (e.category === "movement" || e.category === "activity") &&
       e.label === DOG_WALK_DAILY_LOG_LABEL;
     const legacy =
       Boolean(e.notes?.includes(DOG_WALK_MARKER)) &&

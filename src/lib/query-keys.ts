@@ -9,6 +9,8 @@ export const qk = {
   /**
    * Prefix for today’s hydration + nutrition totals from `daily_logs` — each series uses
    * `.eq("entry_type", "water" | "caffeine" | "sodium" | "food")` so bars never mix.
+   * **Important:** this key starts with `"dailyLogs"`. Use `exact: true` when invalidating
+   * or cancelling only the list query `qk.dailyLogs`, or you will also hit these totals.
    */
   hydrationTotalsTodayRoot: ["dailyLogs", "hydrationTotalsToday"] as const,
   /** Server sum: sodium mg today (`daily_logs` where `entry_type` = sodium). */
@@ -54,3 +56,7 @@ export const qk = {
   clinicalMarkers: (dateKey: string) =>
     ["clinicalMarkers", dateKey] as const,
 };
+
+/** localStorage key for `PersistQueryClientProvider` — cleared on sign-out so a new session does not rehydrate another user’s cache. */
+export const REACT_QUERY_PERSIST_LOCAL_STORAGE_KEY =
+  "medtracker-rq-v1" as const;

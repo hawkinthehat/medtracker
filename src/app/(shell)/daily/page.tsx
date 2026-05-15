@@ -91,7 +91,8 @@ export default function DailySummaryPage() {
         row,
         ...prev,
       ]);
-      void qc.invalidateQueries({ queryKey: qk.dailyLogs });
+      void qc.invalidateQueries({ queryKey: qk.dailyLogs, exact: true });
+      void qc.invalidateQueries({ queryKey: qk.hydrationTotalsTodayRoot });
       setLabel("");
       setNotes("");
       setRecordedAtLocal(toDatetimeLocalInput(new Date()));

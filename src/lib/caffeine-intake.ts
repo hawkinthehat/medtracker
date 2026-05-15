@@ -18,12 +18,17 @@ export function caffeineMgFromEntry(e: DailyLogEntry): number {
     e.entryType === "caffeine" ||
     e.category === "caffeine";
   if (!isCaffeine) return 0;
+  const fromUnknown = (e as { value?: unknown }).value;
+  if (fromUnknown != null && String(fromUnknown).trim() !== "") {
+    const n = Number(fromUnknown);
+    if (Number.isFinite(n) && n > 0) return Number(Math.round(n));
+  }
   const mg = Number(e.valueMg);
   if (e.valueMg != null && Number.isFinite(mg) && mg > 0) {
     return Number(Math.round(mg));
   }
-  const n = Number.parseInt(String(e.notes ?? "").trim(), 10);
-  return Number.isFinite(n) && n > 0 ? Number(n) : 0;
+  const parsed = Number.parseInt(String(e.notes ?? "").trim(), 10);
+  return Number.isFinite(parsed) && parsed > 0 ? Number(parsed) : 0;
 }
 
 /** Total caffeine (mg) logged for the local calendar day. */
@@ -34,6 +39,15 @@ export function sumCaffeineMgToday(
   let mg = 0;
   for (const e of dailyLogs) {
     if (!isSameLocalCalendarDay(e.recordedAt, ref)) continue;
+    mg += Number(caffeineMgFromEntry(e));
+  }
+  return mg;
+}
+
+/** Total caffeine (mg) from an explicit list (no calendar filter). */
+export function sumCaffeineMgInEntries(entries: DailyLogEntry[]): number {
+  let mg = 0;
+  for (const e of entries) {
     mg += Number(caffeineMgFromEntry(e));
   }
   return mg;

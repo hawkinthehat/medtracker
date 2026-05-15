@@ -156,7 +156,8 @@ export default function MorningRoutine() {
     onSuccess: async () => {
       await qc.refetchQueries({ queryKey: qk.activityToday });
       void qc.invalidateQueries({ queryKey: qk.medicationLogs });
-      void qc.invalidateQueries({ queryKey: qk.dailyLogs });
+      void qc.invalidateQueries({ queryKey: qk.dailyLogs, exact: true });
+      void qc.invalidateQueries({ queryKey: qk.hydrationTotalsTodayRoot });
       router.refresh();
     },
     onError: (e: Error) => {
@@ -308,7 +309,8 @@ export default function MorningRoutine() {
       return true;
     },
     onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: qk.dailyLogs });
+      void qc.invalidateQueries({ queryKey: qk.dailyLogs, exact: true });
+      void qc.invalidateQueries({ queryKey: qk.hydrationTotalsTodayRoot });
       void qc.invalidateQueries({ queryKey: qk.vitals });
       router.refresh();
       setIsLoggedToday(true);

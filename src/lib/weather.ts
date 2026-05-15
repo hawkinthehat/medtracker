@@ -34,31 +34,56 @@ type OwmCurrentResponse = {
   };
 };
 
+function getBrowserOpenWeatherApiKey(): string | null {
+  const pub = process.env.NEXT_PUBLIC_OPENWEATHER_API_KEY?.trim();
+  if (pub) return pub;
+  /** Server-only fallback (e.g. `/api/*`); never exposed to the browser bundle when unset client-side. */
+  if (typeof window === "undefined") {
+    const server = process.env.OPENWEATHER_API_KEY?.trim();
+    return server && server.length > 0 ? server : null;
+  }
+  return null;
+}
+
+/**
+ * Current conditions at lat/lon. **Pressure + relative humidity** are required for
+ * dysautonomia / barometric correlation; temperature is optional (defaults to 0 if absent).
+ */
 export async function fetchOpenWeatherCurrent(
   lat: number,
   lon: number,
 ): Promise<{
   pressureHpa: number;
   tempC: number;
-  humidityPct: number | null;
+  humidityPct: number;
 } | null> {
-  const key = process.env.NEXT_PUBLIC_OPENWEATHER_API_KEY;
-  if (!key?.trim()) return null;
-  const url = `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&units=metric&appid=${encodeURIComponent(key)}`;
-  const res = await fetch(url);
-  if (!res.ok) return null;
-  const data = (await res.json()) as OwmCurrentResponse;
-  const main = data.main;
-  if (typeof main?.pressure !== "number" || typeof main?.temp !== "number") {
+  try {
+    const key = getBrowserOpenWeatherApiKey();
+    if (!key) return null;
+    const url = `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&units=metric&appid=${encodeURIComponent(key)}`;
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const data = (await res.json()) as OwmCurrentResponse;
+    const main = data.main;
+    if (
+      typeof main?.pressure !== "number" ||
+      typeof main?.humidity !== "number"
+    ) {
+      return null;
+    }
+    const tempC =
+      typeof main.temp === "number" && Number.isFinite(main.temp)
+        ? main.temp
+        : 0;
+    return {
+      pressureHpa: main.pressure,
+      tempC,
+      humidityPct: main.humidity,
+    };
+  } catch (e) {
+    console.warn("[weather] current conditions fetch failed:", e);
     return null;
   }
-  const humidityPct =
-    typeof main.humidity === "number" ? main.humidity : null;
-  return {
-    pressureHpa: main.pressure,
-    tempC: main.temp,
-    humidityPct,
-  };
 }
 
 /**
@@ -69,35 +94,45 @@ export async function fetchOpenWeatherCurrent(
 export async function fetchAndLogWeather(): Promise<WeatherSnapshot | null> {
   if (typeof window === "undefined") return null;
 
-  const coords = await fetchLatLon();
-  if (!coords) return null;
+  try {
+    const coords = await fetchLatLon();
+    if (!coords) return null;
 
-  const wx = await fetchOpenWeatherCurrent(coords.lat, coords.lon);
-  if (!wx) return null;
+    const wx = await fetchOpenWeatherCurrent(coords.lat, coords.lon);
+    if (!wx) return null;
 
-  const recordedAt = new Date().toISOString();
-  const snapshot: EnvironmentSnapshot = {
-    pressureHpa: wx.pressureHpa,
-    tempC: wx.tempC,
-    humidityPct: wx.humidityPct ?? undefined,
-    recordedAt,
-  };
-  setEnvironmentSnapshot(snapshot);
+    const recordedAt = new Date().toISOString();
+    const snapshot: EnvironmentSnapshot = {
+      pressureHpa: wx.pressureHpa,
+      tempC: wx.tempC,
+      humidityPct: wx.humidityPct,
+      recordedAt,
+    };
+    setEnvironmentSnapshot(snapshot);
 
-  const id = crypto.randomUUID();
-  const ok = await persistWeatherLogToSupabase({
-    id,
-    recordedAt,
-    pressureHpa: wx.pressureHpa,
-    tempC: wx.tempC,
-    humidityPct: wx.humidityPct,
-    userId: null,
-  });
-  if (!ok) {
+    const id = crypto.randomUUID();
+    try {
+      const ok = await persistWeatherLogToSupabase({
+        id,
+        recordedAt,
+        pressureHpa: wx.pressureHpa,
+        tempC: wx.tempC,
+        humidityPct: wx.humidityPct,
+        userId: null,
+      });
+      if (!ok) {
+        return snapshot;
+      }
+    } catch (persistErr) {
+      console.warn("[weather] weather_logs persist failed:", persistErr);
+      return snapshot;
+    }
+
     return snapshot;
+  } catch (e) {
+    console.warn("[weather] fetchAndLogWeather failed (non-fatal):", e);
+    return null;
   }
-
-  return snapshot;
 }
 
 /** Text appended to crisis / high-fog logs for specialist review (OH correlation). */
@@ -149,21 +184,25 @@ export function evaluatePressureDropFromForecast(
 }
 
 function getOpenWeatherApiKey(): string | null {
-  const key = process.env.NEXT_PUBLIC_OPENWEATHER_API_KEY;
-  return key?.trim() ? key.trim() : null;
+  return getBrowserOpenWeatherApiKey();
 }
 
 async function fetchOpenWeatherForecastList(
   lat: number,
   lon: number,
 ): Promise<OwmForecastListItem[] | null> {
-  const key = getOpenWeatherApiKey();
-  if (!key) return null;
-  const url = `https://api.openweathermap.org/data/2.5/forecast?lat=${lat}&lon=${lon}&units=metric&appid=${encodeURIComponent(key)}`;
-  const res = await fetch(url);
-  if (!res.ok) return null;
-  const data = (await res.json()) as OwmForecastResponse;
-  return Array.isArray(data.list) ? data.list : null;
+  try {
+    const key = getOpenWeatherApiKey();
+    if (!key) return null;
+    const url = `https://api.openweathermap.org/data/2.5/forecast?lat=${lat}&lon=${lon}&units=metric&appid=${encodeURIComponent(key)}`;
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const data = (await res.json()) as OwmForecastResponse;
+    return Array.isArray(data.list) ? data.list : null;
+  } catch (e) {
+    console.warn("[weather] forecast fetch failed:", e);
+    return null;
+  }
 }
 
 /** Browser geolocation — safe on client only. */
@@ -176,10 +215,15 @@ export function fetchBrowserLatLon(): Promise<{ lat: number; lon: number } | nul
  * Warns if pressure falls more than 8 hPa within the next 12 hours (Tiaki advisory).
  */
 export async function checkPressureDrop(): Promise<PressureDropCheckResult | null> {
-  if (typeof window === "undefined") return null;
-  const coords = await fetchLatLon();
-  if (!coords) return null;
-  return checkPressureDropForCoordinates(coords.lat, coords.lon);
+  try {
+    if (typeof window === "undefined") return null;
+    const coords = await fetchLatLon();
+    if (!coords) return null;
+    return await checkPressureDropForCoordinates(coords.lat, coords.lon);
+  } catch (e) {
+    console.warn("[weather] checkPressureDrop failed:", e);
+    return null;
+  }
 }
 
 /** Shared by `/api/weather-advisory` and push helpers — pass explicit coordinates. */
@@ -187,29 +231,34 @@ export async function checkPressureDropForCoordinates(
   lat: number,
   lon: number,
 ): Promise<PressureDropCheckResult | null> {
-  if (!getOpenWeatherApiKey()) return null;
+  try {
+    if (!getOpenWeatherApiKey()) return null;
 
-  const [current, forecastList] = await Promise.all([
-    fetchOpenWeatherCurrent(lat, lon),
-    fetchOpenWeatherForecastList(lat, lon),
-  ]);
+    const [current, forecastList] = await Promise.all([
+      fetchOpenWeatherCurrent(lat, lon),
+      fetchOpenWeatherForecastList(lat, lon),
+    ]);
 
-  if (!forecastList?.length) return null;
+    if (!forecastList?.length) return null;
 
-  const nowSec = Math.floor(Date.now() / 1000);
-  let baseline = current?.pressureHpa;
-  if (typeof baseline !== "number") {
-    const upcoming = forecastList.find((x) => x.dt >= nowSec);
-    const first = upcoming ?? forecastList[0];
-    const p = first?.main?.pressure;
-    baseline = typeof p === "number" ? p : undefined;
+    const nowSec = Math.floor(Date.now() / 1000);
+    let baseline = current?.pressureHpa;
+    if (typeof baseline !== "number") {
+      const upcoming = forecastList.find((x) => x.dt >= nowSec);
+      const first = upcoming ?? forecastList[0];
+      const p = first?.main?.pressure;
+      baseline = typeof p === "number" ? p : undefined;
+    }
+    if (typeof baseline !== "number") return null;
+
+    return evaluatePressureDropFromForecast(
+      baseline,
+      forecastList,
+      nowSec,
+      ADVISORY_WINDOW_HOURS,
+    );
+  } catch (e) {
+    console.warn("[weather] pressure advisory check failed:", e);
+    return null;
   }
-  if (typeof baseline !== "number") return null;
-
-  return evaluatePressureDropFromForecast(
-    baseline,
-    forecastList,
-    nowSec,
-    ADVISORY_WINDOW_HOURS,
-  );
 }

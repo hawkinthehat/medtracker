@@ -3,7 +3,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
-import { qk } from "@/lib/query-keys";
+import { qk, REACT_QUERY_PERSIST_LOCAL_STORAGE_KEY } from "@/lib/query-keys";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser-client";
 
 /**
@@ -21,7 +21,21 @@ export default function SupabaseAuthListener() {
     const {
       data: { subscription },
     } = sb.auth.onAuthStateChange((event) => {
-      void qc.invalidateQueries({ queryKey: qk.dailyLogs });
+      if (event === "SIGNED_OUT") {
+        try {
+          qc.clear();
+        } catch (e) {
+          console.warn("[auth] query cache clear after sign-out:", e);
+        }
+        try {
+          window.localStorage.removeItem(REACT_QUERY_PERSIST_LOCAL_STORAGE_KEY);
+        } catch {
+          /* private mode / blocked storage */
+        }
+      }
+
+      void qc.invalidateQueries({ queryKey: qk.dailyLogs, exact: true });
+      void qc.invalidateQueries({ queryKey: qk.hydrationTotalsTodayRoot });
 
       const refreshShell =
         event === "SIGNED_IN" ||

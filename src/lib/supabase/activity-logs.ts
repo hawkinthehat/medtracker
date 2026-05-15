@@ -2,8 +2,14 @@ import { getSupabaseBrowserClient } from "@/lib/supabase/browser-client";
 import {
   logDataNotSavedNoUser,
   resolveSupabaseUserId,
+  withTimeoutMs,
 } from "@/lib/supabase/auth-save-guard";
 import { localCalendarDayRecordedAtBounds } from "@/lib/hydration-summary";
+import { fetchTodayDailyLogsForCurrentUser } from "@/lib/supabase/daily-logs";
+import {
+  calendarDayLocal,
+  countDogWalksToday,
+} from "@/lib/movement-tracking";
 
 /** Cached shape for `qk.activityToday` — matches {@link fetchTodayActivityCountsForCurrentUser}. */
 export type ActivityTodayCounts = {
@@ -76,6 +82,18 @@ export async function fetchTodayActivityCountsForCurrentUser(): Promise<Activity
     }
   }
 
+  try {
+    const todayDaily = await fetchTodayDailyLogsForCurrentUser();
+    if (todayDaily.hasSession && todayDaily.entries.length > 0) {
+      dogWalks += countDogWalksToday(
+        todayDaily.entries,
+        calendarDayLocal(),
+      );
+    }
+  } catch (e) {
+    console.warn("[activity_logs] merge dog walks from daily_logs:", e);
+  }
+
   return {
     dogWalks,
     ptSessions,
@@ -104,26 +122,63 @@ export async function insertActivityLogRow(input: {
   const sb = getSupabaseBrowserClient();
   if (!sb) return { ok: false, error: "no_client" };
 
-  const {
-    data: { user },
-  } = await sb.auth.getUser();
-  if (!user?.id) {
-    logDataNotSavedNoUser();
-    return { ok: false, error: "not_signed_in" };
+  function isJwtLikeInsertFailure(err: {
+    message: string;
+    code?: string;
+  }): boolean {
+    const m = `${err.message} ${err.code ?? ""}`.toLowerCase();
+    return (
+      m.includes("jwt") ||
+      m.includes("expired") ||
+      m.includes("401") ||
+      m.includes("pgrst301")
+    );
   }
-  const uid = user.id;
 
-  const recorded_at = new Date().toISOString();
-  const { error } = await sb.from("activity_logs").insert({
-    activity_type: input.activity_type,
-    notes: input.notes ?? null,
-    recorded_at,
-    user_id: uid,
-  });
+  try {
+    const uid = await withTimeoutMs(resolveSupabaseUserId(sb), 12_000);
+    if (!uid) {
+      logDataNotSavedNoUser();
+      return { ok: false, error: "not_signed_in" };
+    }
 
-  if (error) {
-    console.warn("[activity_logs] insert failed:", error.message);
-    return { ok: false, error: error.message };
+    const recorded_at = new Date().toISOString();
+    const payload = {
+      activity_type: input.activity_type,
+      notes: input.notes ?? null,
+      recorded_at,
+      user_id: uid,
+    };
+
+    const runInsert = async () => {
+      const { error } = await sb.from("activity_logs").insert(payload);
+      return { error };
+    };
+
+    let insertRes = await withTimeoutMs(
+      runInsert(),
+      22_000,
+      "Activity save timed out — check your connection.",
+    );
+    if (insertRes.error && isJwtLikeInsertFailure(insertRes.error)) {
+      await sb.auth.refreshSession();
+      insertRes = await withTimeoutMs(
+        runInsert(),
+        22_000,
+        "Activity save timed out — check your connection.",
+      );
+    }
+
+    const error = insertRes.error;
+
+    if (error) {
+      console.warn("[activity_logs] insert failed:", error.message);
+      return { ok: false, error: error.message };
+    }
+    return { ok: true };
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    console.warn("[activity_logs] insert:", message);
+    return { ok: false, error: message };
   }
-  return { ok: true };
 }

@@ -10,8 +10,10 @@ import type { DailyLogEntry } from "@/lib/types";
 import {
   insertActivityLogRow,
   fetchTodayDogWalkCountForCurrentUser,
+  fetchTodayActivityCountsForCurrentUser,
   type ActivityTodayCounts,
 } from "@/lib/supabase/activity-logs";
+import type { DailyLogsFullCycleHydrationTotals } from "@/lib/supabase/daily-logs";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser-client";
 import { toastMessageForPersistFailure } from "@/lib/supabase/auth-save-guard";
 import { dailyLogsQueryFn } from "@/lib/daily-logs-query-fn";
@@ -31,10 +33,21 @@ import {
   calendarDayLocal,
   countDogWalksToday,
   DOG_WALK_DAILY_LOG_LABEL,
+  DOG_WALK_MARKER,
   getMorningHeartRateBpmToday,
   ptMarker,
   type PtSlot,
 } from "@/lib/movement-tracking";
+import {
+  queuePersistDailyLogSilentRetries,
+  writePlannerDailyBackupFromLogs,
+  readPlannerDailyBackup,
+} from "@/lib/planner-daily-backup";
+import { writeHydrationDayBackup } from "@/lib/hydration-local-backup";
+import {
+  sumThermotabsSodiumMgTodayFromDailyLogs,
+  sumWaterOzToday,
+} from "@/lib/hydration-summary";
 import { FeatureHelpTrigger } from "@/components/FeatureHelpModal";
 const PT_SLOTS: { slot: PtSlot; label: string }[] = [
   { slot: "morning", label: "Morning PT" },
@@ -69,7 +82,20 @@ function savePtLatched(day: string, state: Record<PtSlot, boolean>) {
   }
 }
 
-export default function MovementTracker() {
+type MovementTrackerProps = {
+  /**
+   * Same contract as {@link HydrationTracker} — after a dog walk saved to
+   * `daily_logs`, re-pull today’s sums and defer `daily_logs` list refetch so
+   * counts match the water tracker path.
+   */
+  onFullCycleSync?: () => Promise<
+    DailyLogsFullCycleHydrationTotals | null | void
+  >;
+};
+
+export default function MovementTracker({
+  onFullCycleSync,
+}: MovementTrackerProps) {
   const router = useRouter();
   const qc = useQueryClient();
   const today = calendarDayLocal();
@@ -168,15 +194,36 @@ export default function MovementTracker() {
     refetchOnWindowFocus: true,
   });
 
+  const { data: activityToday } = useQuery({
+    queryKey: qk.activityToday,
+    queryFn: fetchTodayActivityCountsForCurrentUser,
+    enabled: Boolean(
+      supabaseConfigured && sessionResolved && sessionUser,
+    ),
+    staleTime: 15_000,
+    gcTime: 1000 * 60 * 60 * 24,
+    refetchOnWindowFocus: true,
+  });
+
   const walksToday = useMemo(() => {
-    if (!supabaseConfigured || !sessionUser) return walksFromCache;
-    if (typeof serverDogWalkCount !== "number") return walksFromCache;
-    return serverDogWalkCount;
+    const fromBackup =
+      readPlannerDailyBackup(sessionUser?.id, today)?.dogWalks ?? 0;
+    if (!supabaseConfigured || !sessionUser) {
+      return Math.max(walksFromCache, fromBackup);
+    }
+    const fromActivity = activityToday?.dogWalks ?? 0;
+    const base =
+      typeof serverDogWalkCount !== "number"
+        ? Math.max(walksFromCache, fromActivity)
+        : Math.max(serverDogWalkCount, fromActivity, walksFromCache);
+    return Math.max(base, fromBackup);
   }, [
     supabaseConfigured,
     sessionUser,
     walksFromCache,
     serverDogWalkCount,
+    activityToday?.dogWalks,
+    today,
   ]);
 
   const morningHr = useMemo(
@@ -196,7 +243,15 @@ export default function MovementTracker() {
     [],
   );
 
-  const [pendingWalk, setPendingWalk] = useState(false);
+  function scheduleMovementFullCycleAfterWrite() {
+    if (!onFullCycleSync) return;
+    globalThis.setTimeout(() => {
+      void onFullCycleSync().catch((e) =>
+        console.warn("[movement] full-cycle sync after dog walk:", e),
+      );
+    }, 520);
+  }
+
   const [pendingPtSlot, setPendingPtSlot] = useState<PtSlot | null>(null);
 
   async function handleDogWalk(skipNudge = false) {
@@ -219,74 +274,63 @@ export default function MovementTracker() {
 
     setShowHrNudge(false);
 
-    setPendingWalk(true);
-    const walkCountKey = supabaseConfigured
-      ? ([...qk.dailyLogDogWalkCountToday, sessionUser?.id ?? "none"] as const)
-      : null;
-    let prevActivitySnapshot: ActivityTodayCounts | undefined;
-    let prevWalkCountSnapshot: number | undefined;
-
-    try {
-      if (!supabaseConfigured) {
-        const row: DailyLogEntry = {
-          id: crypto.randomUUID(),
-          recordedAt: new Date().toISOString(),
-          category: "movement",
-          label: DOG_WALK_DAILY_LOG_LABEL,
-          entryType: ENTRY_TYPE_ACTIVITY,
-        };
-        qc.setQueryData<DailyLogEntry[]>(qk.dailyLogs, (prev = []) => [
-          row,
-          ...prev,
-        ]);
-        router.refresh();
-        return;
-      }
-
-      prevActivitySnapshot = qc.getQueryData<ActivityTodayCounts>(
-        qk.activityToday,
+    if (!supabaseConfigured) {
+      const row: DailyLogEntry = {
+        id: crypto.randomUUID(),
+        recordedAt: new Date().toISOString(),
+        category: "activity",
+        label: DOG_WALK_DAILY_LOG_LABEL,
+        notes: DOG_WALK_MARKER,
+        entryType: ENTRY_TYPE_ACTIVITY,
+      };
+      qc.setQueryData<DailyLogEntry[]>(qk.dailyLogs, (prev = []) => [
+        row,
+        ...prev,
+      ]);
+      writePlannerDailyBackupFromLogs(
+        sessionUser?.id,
+        today,
+        qc.getQueryData<DailyLogEntry[]>(qk.dailyLogs) ?? [],
       );
-      if (walkCountKey) {
-        prevWalkCountSnapshot = qc.getQueryData<number>(walkCountKey);
-      }
-
-      qc.setQueryData<ActivityTodayCounts>(qk.activityToday, (old) => ({
-        dogWalks: (old?.dogWalks ?? 0) + 1,
-        ptSessions: old?.ptSessions ?? 0,
-        morningMeds: old?.morningMeds ?? 0,
-        morningMedsLastRecordedAt: old?.morningMedsLastRecordedAt ?? null,
-        hasSession: old?.hasSession ?? true,
-      }));
-      if (walkCountKey) {
-        qc.setQueryData<number>(walkCountKey, (c) => (c ?? 0) + 1);
-      }
-
-      const act = await insertActivityLogRow({
-        activity_type: "dog_walk",
-        notes: getWalkNotesDefault().trim() || DEFAULT_WALK_NOTES,
-      });
-      if (!act.ok) {
-        throw new Error(act.error ?? "Could not save activity log.");
-      }
-    } catch (e) {
-      if (supabaseConfigured && walkCountKey) {
-        if (prevActivitySnapshot !== undefined) {
-          qc.setQueryData(qk.activityToday, prevActivitySnapshot);
-        } else {
-          void qc.removeQueries({ queryKey: qk.activityToday });
-        }
-        if (prevWalkCountSnapshot !== undefined) {
-          qc.setQueryData(walkCountKey, prevWalkCountSnapshot);
-        } else {
-          void qc.removeQueries({ queryKey: walkCountKey });
-        }
-      }
-      const msg = e instanceof Error ? e.message : "Save failed";
-      setMovementToast(toastMessageForPersistFailure(msg));
-      console.error("[handleDogWalk] Failed to save activity_logs:", e);
-    } finally {
-      setPendingWalk(false);
+      router.refresh();
+      return;
     }
+
+    const notesBody = getWalkNotesDefault().trim() || DEFAULT_WALK_NOTES;
+    const row: DailyLogEntry = {
+      id: crypto.randomUUID(),
+      recordedAt: new Date().toISOString(),
+      category: "activity",
+      label: DOG_WALK_DAILY_LOG_LABEL,
+      notes: `${DOG_WALK_MARKER}\n${notesBody}`,
+      entryType: ENTRY_TYPE_ACTIVITY,
+      userId: sessionUser?.id,
+    };
+
+    void qc.cancelQueries({ queryKey: qk.hydrationTotalsTodayRoot });
+    void qc.cancelQueries({ queryKey: qk.dailyLogs, exact: true });
+    const previousDailyLogs =
+      qc.getQueryData<DailyLogEntry[]>(qk.dailyLogs) ?? [];
+    const logsAfter: DailyLogEntry[] = [row, ...previousDailyLogs];
+    qc.setQueryData<DailyLogEntry[]>(qk.dailyLogs, logsAfter);
+    writeHydrationDayBackup(sessionUser?.id, {
+      waterOzFromDailyLogs: sumWaterOzToday(logsAfter),
+      sodiumMgFromDailyLogs:
+        sumThermotabsSodiumMgTodayFromDailyLogs(logsAfter),
+    });
+    writePlannerDailyBackupFromLogs(sessionUser?.id, today, logsAfter);
+
+    queuePersistDailyLogSilentRetries(row, qc, () => {
+      writePlannerDailyBackupFromLogs(
+        sessionUser?.id,
+        today,
+        qc.getQueryData<DailyLogEntry[]>(qk.dailyLogs) ?? [],
+      );
+      scheduleMovementFullCycleAfterWrite();
+      queueMicrotask(() => {
+        router.refresh();
+      });
+    });
   }
 
   async function handlePt(slot: PtSlot, humanLabel: string) {
@@ -341,6 +385,9 @@ export default function MovementTracker() {
       if (!act.ok) {
         throw new Error(act.error ?? "Could not save activity log.");
       }
+      globalThis.setTimeout(() => {
+        void qc.invalidateQueries({ queryKey: qk.activityToday });
+      }, 800);
     } catch (e) {
       if (supabaseConfigured && bumpedActivityTodayCache) {
         if (prevActivityForPt !== undefined) {
@@ -365,7 +412,7 @@ export default function MovementTracker() {
     setSettingsOpen(false);
   }
 
-  const movementBusy = pendingWalk || pendingPtSlot !== null;
+  const movementBusy = pendingPtSlot !== null;
 
   return (
     <section
@@ -447,23 +494,10 @@ export default function MovementTracker() {
         onClick={() => void handleDogWalk()}
         className="mt-5 flex min-h-[80px] w-full items-center justify-center gap-4 rounded-2xl border-4 border-black bg-white px-5 py-6 text-2xl font-black leading-snug text-slate-900 shadow-sm transition hover:bg-slate-50 disabled:opacity-50"
       >
-        {pendingWalk ? (
-          <>
-            <Loader2
-              className="h-12 w-12 shrink-0 animate-spin text-sky-700"
-              strokeWidth={2.5}
-              aria-hidden
-            />
-            <span className="text-center leading-tight">Logging…</span>
-          </>
-        ) : (
-          <>
-            <Dog className="h-12 w-12 shrink-0 text-slate-900" strokeWidth={2.5} aria-hidden />
-            <span className="text-center leading-tight">
-              {walkButtonDisplay}
-            </span>
-          </>
-        )}
+        <Dog className="h-12 w-12 shrink-0 text-slate-900" strokeWidth={2.5} aria-hidden />
+        <span className="text-center leading-tight">
+          {walkButtonDisplay}
+        </span>
       </button>
       </div>
 

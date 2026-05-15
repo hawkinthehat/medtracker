@@ -170,7 +170,7 @@ export default function SymptomCanvas({ side, className }: SymptomCanvasProps) {
           throw new Error(result.error ?? "Could not save. Check Supabase setup.");
       }
       qc.setQueryData<DailyLogEntry[]>(qk.dailyLogs, (prev = []) => [row, ...prev]);
-      void qc.invalidateQueries({ queryKey: qk.dailyLogs });
+      void qc.invalidateQueries({ queryKey: qk.dailyLogs, exact: true });
     },
     [qc, supabaseConfigured],
   );

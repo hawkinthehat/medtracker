@@ -94,6 +94,50 @@ export function sumWaterOzToday(
   return oz;
 }
 
+/**
+ * Like {@link sumWaterOzToday} but without a calendar filter — caller scopes rows
+ * (e.g. `daily_logs` where `created_at` falls on the local day).
+ */
+export function sumWaterOzInEntries(entries: DailyLogEntry[]): number {
+  let oz = 0;
+  for (const e of entries) {
+    if (
+      e.entryType === ENTRY_TYPE_CAFFEINE ||
+      e.entryType === "caffeine" ||
+      e.category === "caffeine"
+    ) {
+      continue;
+    }
+
+    if (e.entryType === ENTRY_TYPE_WATER || e.entryType === "water") {
+      if (e.label === LEGACY_GLASS_LABEL) {
+        oz += 8;
+        continue;
+      }
+      const valueOzNum = Number(e.valueOz);
+      const fromVal = Number.isFinite(valueOzNum) && valueOzNum > 0
+        ? Math.round(valueOzNum)
+        : Number.parseInt(String(e.notes ?? "").trim(), 10);
+      if (Number.isFinite(fromVal) && fromVal > 0) oz += Number(fromVal);
+      continue;
+    }
+
+    if (e.category !== "hydration") continue;
+    if (e.label !== WATER_OZ_LABEL && e.label !== LEGACY_GLASS_LABEL)
+      continue;
+    if (e.label === LEGACY_GLASS_LABEL) {
+      oz += 8;
+      continue;
+    }
+    const valueOzNum = Number(e.valueOz);
+    const fromVal = Number.isFinite(valueOzNum) && valueOzNum > 0
+      ? Math.round(valueOzNum)
+      : Number.parseInt(String(e.notes ?? "").trim(), 10);
+    if (Number.isFinite(fromVal) && fromVal > 0) oz += Number(fromVal);
+  }
+  return oz;
+}
+
 /** Sum estimated kcal from smart nutrition logs (`entry_type` = food) for the local calendar day. */
 export function sumFoodKcalToday(
   dailyLogs: DailyLogEntry[],
@@ -102,6 +146,19 @@ export function sumFoodKcalToday(
   let kcal = 0;
   for (const e of dailyLogs) {
     if (!isSameLocalCalendarDay(e.recordedAt, ref)) continue;
+    const typedFood =
+      e.entryType === ENTRY_TYPE_FOOD || e.entryType === "food";
+    if (!typedFood) continue;
+    const v = Number(e.valueKcal);
+    if (Number.isFinite(v) && v > 0) kcal += Math.round(v);
+  }
+  return kcal;
+}
+
+/** Like {@link sumFoodKcalToday} without a calendar filter (caller scopes rows). */
+export function sumFoodKcalInEntries(entries: DailyLogEntry[]): number {
+  let kcal = 0;
+  for (const e of entries) {
     const typedFood =
       e.entryType === ENTRY_TYPE_FOOD || e.entryType === "food";
     if (!typedFood) continue;
@@ -170,6 +227,23 @@ export function sumThermotabsSodiumMgFromDailyLogsLastDays(
   return mg;
 }
 
+/** Like {@link sumThermotabsSodiumMgTodayFromDailyLogs} without a calendar filter. */
+export function sumSodiumMgDailyLogEntriesInList(entries: DailyLogEntry[]): number {
+  let mg = 0;
+  for (const e of entries) {
+    if (e.entryType !== ENTRY_TYPE_SODIUM && e.entryType !== "sodium") {
+      continue;
+    }
+    const mgRaw = Number(e.valueMg);
+    const v = Number.isFinite(mgRaw) && mgRaw > 0
+      ? Math.round(mgRaw)
+      : Number.parseInt(String(e.notes ?? "").trim(), 10);
+    const addend = Number(v);
+    if (Number.isFinite(addend) && addend > 0) mg += addend;
+  }
+  return mg;
+}
+
 /** Sodium from Thermotabs PRN logs in the rolling `days` window (mg). */
 export function sumThermotabsSodiumMgLastDays(
   logs: MedicationLogRow[],
@@ -184,23 +258,35 @@ export function sumThermotabsSodiumMgLastDays(
   return tablets * THERMOTABS_SODIUM_MG;
 }
 
-/** Sodium from Thermotabs `daily_logs` today (mg). */
+/** Mg for a `daily_logs` sodium row — prefers `value` (PostgREST) then `valueMg` / `notes`. */
+function sodiumMgNumericFromDailyLog(e: DailyLogEntry): number {
+  const fromUnknown = (e as { value?: unknown }).value;
+  if (fromUnknown != null && String(fromUnknown).trim() !== "") {
+    const n = Number(fromUnknown);
+    if (Number.isFinite(n) && n > 0) return Math.round(n);
+  }
+  const mgRaw = Number(e.valueMg);
+  if (Number.isFinite(mgRaw) && mgRaw > 0) return Math.round(mgRaw);
+  const parsed = Number.parseInt(String(e.notes ?? "").trim(), 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+}
+
+/** Sodium mg today from `daily_logs` rows with `entry_type` = `sodium` (Salt Tracker taps + legacy). */
 export function sumThermotabsSodiumMgTodayFromDailyLogs(
   dailyLogs: DailyLogEntry[],
   ref = new Date(),
 ): number {
   let mg = 0;
   for (const e of dailyLogs) {
-    if (!isSameLocalCalendarDay(e.recordedAt, ref)) continue;
-    if (e.entryType !== ENTRY_TYPE_SODIUM && e.entryType !== "sodium") {
-      continue;
-    }
-    const mgRaw = Number(e.valueMg);
-    const v = Number.isFinite(mgRaw) && mgRaw > 0
-      ? Math.round(mgRaw)
-      : Number.parseInt(String(e.notes ?? "").trim(), 10);
-    const addend = Number(v);
-    if (Number.isFinite(addend) && addend > 0) mg += addend;
+    const ra = e.recordedAt?.trim();
+    if (ra && !isSameLocalCalendarDay(ra, ref)) continue;
+    const isSodium =
+      e.entryType === ENTRY_TYPE_SODIUM ||
+      e.entryType === "sodium" ||
+      e.category === "sodium";
+    if (!isSodium) continue;
+    const addend = sodiumMgNumericFromDailyLog(e);
+    if (addend > 0) mg += addend;
   }
   return mg;
 }

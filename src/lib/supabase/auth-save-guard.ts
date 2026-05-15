@@ -37,19 +37,20 @@ export function toastMessageForPersistFailure(errorMessage: string): string {
 export async function requireAuthUserForSave(
   sb: SupabaseClient,
 ): Promise<{ id: string } | null> {
-  const {
-    data: { user },
-  } = await sb.auth.getUser();
-  if (!user?.id) {
+  const id = await resolveSupabaseUserId(sb);
+  if (!id) {
     logDataNotSavedNoUser();
     return null;
   }
-  return { id: user.id };
+  return { id };
 }
 
 /**
- * Resolves the signed-in user id using {@link SupabaseClient.auth.getUser} only
- * (no `getSession` fallback) so reads match valid JWTs and FK-safe writes.
+ * Resolves the signed-in user id for browser reads/writes. If the first
+ * {@link SupabaseClient.auth.getUser} call yields no user (expired access token,
+ * tab restored after sleep, or split cookie state), runs one
+ * {@link SupabaseClient.auth.refreshSession} and retries so PostgREST inserts
+ * still send a valid JWT.
  */
 export async function resolveSupabaseUserId(
   sb: SupabaseClient,
@@ -57,5 +58,34 @@ export async function resolveSupabaseUserId(
   const {
     data: { user },
   } = await sb.auth.getUser();
-  return user?.id ?? null;
+  if (user?.id) return user.id;
+
+  const { error: refreshError } = await sb.auth.refreshSession();
+  if (refreshError) return null;
+
+  const {
+    data: { user: userAfter },
+  } = await sb.auth.getUser();
+  return userAfter?.id ?? null;
+}
+
+const g = globalThis;
+
+/** Rejects if `promise` does not settle within `ms` (clears the timer on success/failure). */
+export async function withTimeoutMs<T>(
+  promise: Promise<T>,
+  ms: number,
+  timeoutMessage = `Timed out after ${ms}ms`,
+): Promise<T> {
+  let timeoutId: ReturnType<typeof g.setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<never>((_, reject) => {
+        timeoutId = g.setTimeout(() => reject(new Error(timeoutMessage)), ms);
+      }),
+    ]);
+  } finally {
+    if (timeoutId !== undefined) g.clearTimeout(timeoutId);
+  }
 }

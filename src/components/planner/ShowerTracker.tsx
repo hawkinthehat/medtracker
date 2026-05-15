@@ -45,7 +45,7 @@ export default function ShowerTracker() {
         row,
         ...prev,
       ]);
-      void qc.invalidateQueries({ queryKey: qk.dailyLogs });
+      void qc.invalidateQueries({ queryKey: qk.dailyLogs, exact: true });
       setOpen(false);
       setAfterToast(toastShowerCheck(feeling));
       window.setTimeout(() => setAfterToast(null), 4500);

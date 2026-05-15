@@ -28,13 +28,16 @@ export default function WeatherHourlyLogger() {
         /* ignore */
       }
 
-      const snap = await fetchAndLogWeather();
-      if (!snap || cancelled) return;
-
       try {
-        sessionStorage.setItem(`medtracker-weather-hour-${bucket}`, "1");
-      } catch {
-        /* ignore */
+        const snap = await fetchAndLogWeather();
+        if (!snap || cancelled) return;
+        try {
+          sessionStorage.setItem(`medtracker-weather-hour-${bucket}`, "1");
+        } catch {
+          /* ignore */
+        }
+      } catch (e) {
+        console.warn("[weather] hourly logger tick failed (non-fatal):", e);
       }
     }
 

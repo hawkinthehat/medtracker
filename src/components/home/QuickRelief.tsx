@@ -287,7 +287,7 @@ export default function QuickRelief() {
 
       if (def.displayName === "Thermotabs") {
         await qc.cancelQueries({ queryKey: qk.hydrationTotalsTodayRoot });
-        await qc.cancelQueries({ queryKey: qk.dailyLogs });
+        await qc.cancelQueries({ queryKey: qk.dailyLogs, exact: true });
         const previousTotals = snapshotTotalsCaches();
         const previousDailyLogs =
           qc.getQueryData<DailyLogEntry[]>(qk.dailyLogs) ?? [];
@@ -382,7 +382,7 @@ export default function QuickRelief() {
     },
     // Background reconciliation — fire-and-forget, never awaited.
     onSettled: (_data, _err, def) => {
-      void qc.invalidateQueries({ queryKey: qk.dailyLogs });
+      void qc.invalidateQueries({ queryKey: qk.dailyLogs, exact: true });
       void qc.invalidateQueries({ queryKey: qk.medicationLogs });
       if (def?.displayName === "Thermotabs") {
         void qc.invalidateQueries({ queryKey: qk.hydrationTotalsTodayRoot });

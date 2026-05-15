@@ -37,7 +37,7 @@ export function useDashboardSession() {
       setSessionResolved(true);
       if (event === "SIGNED_IN") {
         router.refresh();
-        void qc.invalidateQueries({ queryKey: qk.dailyLogs });
+        void qc.invalidateQueries({ queryKey: qk.dailyLogs, exact: true });
         void qc.invalidateQueries({ queryKey: qk.hydrationTotalsTodayRoot });
         void qc.invalidateQueries({ queryKey: qk.dailyLogDogWalkCountToday });
         void qc.invalidateQueries({ queryKey: qk.medicationLogs });

@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { ChevronDown, ClipboardList } from "lucide-react";
 import PulseStrip from "@/components/planner/PulseStrip";
 import MorningRoutine from "@/components/planner/MorningRoutine";
 import HydrationTracker from "@/components/planner/HydrationTracker";
+import SaltTracker from "@/components/planner/SaltTracker";
 import LogEpisodeFab from "@/components/planner/LogEpisodeFab";
 import ShowerTracker from "@/components/planner/ShowerTracker";
 import MovementTracker from "@/components/planner/MovementTracker";
@@ -37,8 +38,10 @@ import type { DailyLogEntry, EpisodeEntry } from "@/lib/types";
 import {
   fetchTodayHydrationTotalsFromDailyLogs,
   persistDailyLogToSupabase,
+  applyTodaysDailyLogsFullCycleToQueryClient,
 } from "@/lib/supabase/daily-logs";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser-client";
+import { resolveSupabaseUserId } from "@/lib/supabase/auth-save-guard";
 import {
   atmosphericPressureFooter,
   fetchAndLogWeather,
@@ -89,6 +92,30 @@ export default function MinimalHomeDashboard({
   const [doseModalTab, setDoseModalTab] = useState<DoseModalTab>("adjust");
   const [baselines, setBaselines] = useState<BaselinesProfile>(loadBaselines);
   const [welcomeOpen, setWelcomeOpen] = useState<boolean | null>(null);
+  const [todaysLogsSyncing, setTodaysLogsSyncing] = useState(false);
+
+  /**
+   * Full-cycle sync: re-read today’s hydration sums from Supabase (same `recorded_at`
+   * window as inserts), push them into React Query, and invalidate `daily_logs` so
+   * lists stay aligned.
+   */
+  const fetchTodaysLogs = useCallback(async () => {
+    const sb = getSupabaseBrowserClient();
+    if (!sb) return null;
+    setTodaysLogsSyncing(true);
+    try {
+      const uid = await resolveSupabaseUserId(sb);
+      if (!uid) return null;
+      try {
+        return await applyTodaysDailyLogsFullCycleToQueryClient(qc);
+      } catch (e) {
+        console.error("[home] fetchTodaysLogs (water/salt sync only):", e);
+        return null;
+      }
+    } finally {
+      setTodaysLogsSyncing(false);
+    }
+  }, [qc]);
 
   useEffect(() => {
     try {
@@ -116,7 +143,7 @@ export default function MinimalHomeDashboard({
 
   useEffect(() => {
     if (!countersEnabled) return;
-    void qc.invalidateQueries({ queryKey: qk.dailyLogs });
+    void qc.invalidateQueries({ queryKey: qk.dailyLogs, exact: true });
     void qc.invalidateQueries({ queryKey: qk.hydrationTotalsTodayRoot });
     void qc.invalidateQueries({ queryKey: qk.dailyLogDogWalkCountToday });
     void qc.invalidateQueries({ queryKey: qk.activityToday });
@@ -136,9 +163,11 @@ export default function MinimalHomeDashboard({
     refetchOnWindowFocus: true,
   });
 
-  // Today's totals are summed from `daily_logs.value`, grouped by `entry_type`
-  // (`water`, `caffeine`, `sodium`, `food`). The `unit` column is intentionally ignored
-  // for the math — it's only the visible suffix on the label ("oz" / "mg").
+  // Today's totals are summed from `daily_logs.value`, grouped by the `entry_type`
+  // column (`water`, `caffeine`, `sodium`, `food`) — not `log_entry_type`. Inserts
+  // (episode marker + anything from HydrationTracker) go through
+  // `persistDailyLogToSupabase`, which writes `entry_type` only. The `unit` column is
+  // intentionally ignored for the math — it's only the visible suffix ("oz" / "mg").
   // Source of truth: `fetchTodayHydrationTotalsFromDailyLogs` in `lib/supabase/daily-logs`.
   const todayWaterOz = hydrationTotalsQuery.data?.oz ?? 0;
   const todayCaffeineMg = hydrationTotalsQuery.data?.caffeineMg ?? 0;
@@ -157,7 +186,7 @@ export default function MinimalHomeDashboard({
       setTotalsLoadTimedOut(false);
       return;
     }
-    const t = window.setTimeout(() => setTotalsLoadTimedOut(true), 2000);
+    const t = window.setTimeout(() => setTotalsLoadTimedOut(true), 400);
     return () => window.clearTimeout(t);
   }, [isAwaitingFirstTotals]);
   const todayTotalsLoading = isAwaitingFirstTotals && !totalsLoadTimedOut;
@@ -175,7 +204,14 @@ export default function MinimalHomeDashboard({
 
   const logEpisodeAndOpenSketch = useMutation({
     mutationFn: async (payload: Omit<EpisodeEntry, "id" | "recordedAt">) => {
-      const snap = await fetchAndLogWeather().catch(() => null);
+      let snap: Awaited<ReturnType<typeof fetchAndLogWeather>> = null;
+      try {
+        snap = await fetchAndLogWeather();
+      } catch (e) {
+        console.warn("[home] episode: weather fetch skipped (isolated):", e);
+        snap = null;
+      }
+
       const recordedAt = new Date().toISOString();
       let notes = `Episode log (${recordedAt}).\n${payload.description}`;
       notes += `\nCompression garment: ${payload.compressionGarment ? "yes" : "no"}`;
@@ -201,6 +237,7 @@ export default function MinimalHomeDashboard({
       };
       const sb = getSupabaseBrowserClient();
       if (sb) {
+        // `persistDailyLogToSupabase` → `daily_logs.entry_type` only (never `log_entry_type`).
         const result = await persistDailyLogToSupabase(marker);
         if (!result.ok)
           throw new Error(result.error ?? "Could not save episode.");
@@ -216,7 +253,7 @@ export default function MinimalHomeDashboard({
         episode,
         ...prev,
       ]);
-      void qc.invalidateQueries({ queryKey: qk.dailyLogs });
+      void qc.invalidateQueries({ queryKey: qk.dailyLogs, exact: true });
       setEpisodeSketchOpen(true);
     },
     onError: (e) => {
@@ -278,7 +315,16 @@ export default function MinimalHomeDashboard({
             {formatLongDate()}
           </p>
         </div>
-        <QuickBpHomeButton canSave={countersEnabled} />
+        <QuickBpHomeButton
+          canSave={countersEnabled}
+          onAfterSuccessfulSave={() => {
+            try {
+              void fetchTodaysLogs();
+            } catch (e) {
+              console.warn("[home] post-BP hydration refresh failed:", e);
+            }
+          }}
+        />
       </header>
 
       <HomeDashboardTopZone bypassBarometerAdvisory={bypassBarometerAdvisory} />
@@ -318,6 +364,7 @@ export default function MinimalHomeDashboard({
           <dl
             aria-label="Today's logged totals"
             aria-live="polite"
+            aria-busy={todayTotalsLoading}
             className="grid grid-cols-2 gap-2 rounded-2xl border-2 border-slate-300 bg-white px-3 py-3 text-center shadow-sm sm:grid-cols-4"
           >
             <div>
@@ -325,16 +372,12 @@ export default function MinimalHomeDashboard({
                 Water
               </dt>
               <dd className="mt-1 font-mono text-lg font-black tabular-nums text-sky-900">
-                {todayTotalsLoading ? (
-                  <span className="text-slate-400">…</span>
-                ) : (
-                  <>
-                    {todayWaterOz}
-                    <span className="ml-1 text-xs font-bold text-sky-800/80">
-                      oz
-                    </span>
-                  </>
-                )}
+                <>
+                  {todayWaterOz}
+                  <span className="ml-1 text-xs font-bold text-sky-800/80">
+                    oz
+                  </span>
+                </>
               </dd>
             </div>
             <div>
@@ -342,16 +385,12 @@ export default function MinimalHomeDashboard({
                 Caffeine
               </dt>
               <dd className="mt-1 font-mono text-lg font-black tabular-nums text-amber-950">
-                {todayTotalsLoading ? (
-                  <span className="text-slate-400">…</span>
-                ) : (
-                  <>
-                    {todayCaffeineMg}
-                    <span className="ml-1 text-xs font-bold text-amber-900/80">
-                      mg
-                    </span>
-                  </>
-                )}
+                <>
+                  {todayCaffeineMg}
+                  <span className="ml-1 text-xs font-bold text-amber-900/80">
+                    mg
+                  </span>
+                </>
               </dd>
             </div>
             <div>
@@ -359,16 +398,12 @@ export default function MinimalHomeDashboard({
                 Sodium
               </dt>
               <dd className="mt-1 font-mono text-lg font-black tabular-nums text-amber-950">
-                {todayTotalsLoading ? (
-                  <span className="text-slate-400">…</span>
-                ) : (
-                  <>
-                    {todaySodiumMg}
-                    <span className="ml-1 text-xs font-bold text-amber-900/80">
-                      mg
-                    </span>
-                  </>
-                )}
+                <>
+                  {todaySodiumMg}
+                  <span className="ml-1 text-xs font-bold text-amber-900/80">
+                    mg
+                  </span>
+                </>
               </dd>
             </div>
             <div>
@@ -376,27 +411,25 @@ export default function MinimalHomeDashboard({
                 Calories
               </dt>
               <dd className="mt-1 font-mono text-lg font-black tabular-nums text-emerald-950">
-                {todayTotalsLoading ? (
-                  <span className="text-slate-400">…</span>
-                ) : (
-                  <>
-                    {todayCaloriesKcal}
-                    <span className="ml-1 text-xs font-bold text-emerald-900/80">
-                      kcal
-                    </span>
-                  </>
-                )}
+                <>
+                  {todayCaloriesKcal}
+                  <span className="ml-1 text-xs font-bold text-emerald-900/80">
+                    kcal
+                  </span>
+                </>
               </dd>
             </div>
           </dl>
         )}
-        <div id="home-hydration" className="scroll-mt-28">
+        <div id="home-hydration" className="scroll-mt-28 space-y-4">
           <HydrationTracker
             compact
             waterGoalOz={baselines.targetWaterOz}
-            sodiumGoalMg={baselines.targetSodiumMg}
             homeTotalsRefreshKey={homeTotalsRefreshKey}
+            onFullCycleSync={fetchTodaysLogs}
+            fullCycleSyncing={todaysLogsSyncing}
           />
+          <SaltTracker compact />
         </div>
         <Link
           href="/vault#side-effect-tracker"
@@ -408,7 +441,7 @@ export default function MinimalHomeDashboard({
 
       <ShowerTracker />
 
-      <MovementTracker />
+          <MovementTracker onFullCycleSync={fetchTodaysLogs} />
 
       <section aria-labelledby="quick-actions-heading" className="space-y-4">
         <h2

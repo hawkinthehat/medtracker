@@ -16,6 +16,8 @@ import { toastMessageForPersistFailure } from "@/lib/supabase/auth-save-guard";
 type QuickBpHomeButtonProps = {
   /** True when Supabase is configured and the user is signed in (enables Save to `health_vitals`). */
   canSave: boolean;
+  /** Runs after a successful BP save — e.g. refresh `daily_logs` hydration totals (never awaits weather). */
+  onAfterSuccessfulSave?: () => void;
 };
 
 const POSITIONS: {
@@ -28,7 +30,10 @@ const POSITIONS: {
   { value: "standing", label: "Standing", emoji: "🧍" },
 ];
 
-export default function QuickBpHomeButton({ canSave }: QuickBpHomeButtonProps) {
+export default function QuickBpHomeButton({
+  canSave,
+  onAfterSuccessfulSave,
+}: QuickBpHomeButtonProps) {
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [sys, setSys] = useState("");
@@ -82,6 +87,11 @@ export default function QuickBpHomeButton({ canSave }: QuickBpHomeButtonProps) {
     },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: qk.vitals });
+      try {
+        onAfterSuccessfulSave?.();
+      } catch (e) {
+        console.warn("[quick-bp] onAfterSuccessfulSave failed (non-fatal):", e);
+      }
     },
   });
 
