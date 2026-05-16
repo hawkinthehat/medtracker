@@ -16,7 +16,6 @@ type QuickBpHomeButtonProps = {
   onAfterSuccessfulSave?: () => void;
 };
 
-/** Same user-facing mapping as other save surfaces; kept local so this component does not depend on auth-save helpers. */
 function formatBpSaveFailure(errorMessage: string): string {
   const m = errorMessage.toLowerCase();
   if (
@@ -62,37 +61,10 @@ export default function QuickBpHomeButton({
   const [position, setPosition] = useState<HealthVitalPosition>("sitting");
   const [formError, setFormError] = useState<string | null>(null);
   const [loggedAck, setLoggedAck] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
 
   const needsSignIn =
     supabaseConfigured && sessionResolved && !sessionUser;
-  const saveEnabled = Boolean(sb && sessionUser?.id);
-
-  /** Same pattern as `SaltTracker.insertSaltRow`: direct `sb.from(…).insert` with `sessionUser.id`. */
-  async function insertQuickBpRow(payload: {
-    id: string;
-    recordedAt: string;
-    systolic: number;
-    diastolic: number;
-    position: HealthVitalPosition;
-    heartRate: number | null;
-  }): Promise<string | null> {
-    if (!sb || !sessionUser?.id) return "not_signed_in";
-    const { error } = await sb.from("health_vitals").insert({
-      id: payload.id,
-      user_id: sessionUser.id,
-      recorded_at: payload.recordedAt,
-      systolic: payload.systolic,
-      diastolic: payload.diastolic,
-      position: payload.position,
-      heart_rate: payload.heartRate,
-    });
-    if (error) {
-      console.warn("[QuickBP] health_vitals insert:", error.message);
-      return error.message;
-    }
-    return null;
-  }
 
   useEffect(() => {
     if (!sb) {
@@ -122,12 +94,6 @@ export default function QuickBpHomeButton({
     return () => window.clearTimeout(t);
   }, [loggedAck]);
 
-  useEffect(() => {
-    if (!saveError) return;
-    const t = window.setTimeout(() => setSaveError(null), 5000);
-    return () => window.clearTimeout(t);
-  }, [saveError]);
-
   function resetForm() {
     setSys("");
     setDia("");
@@ -142,6 +108,7 @@ export default function QuickBpHomeButton({
   }
 
   function submit() {
+    console.log("[QuickBP] submit() fired");
     setFormError(null);
     const s = Number.parseInt(sys.trim(), 10);
     const d = Number.parseInt(dia.trim(), 10);
@@ -169,14 +136,10 @@ export default function QuickBpHomeButton({
       heartRate = h;
     }
 
-    if (!saveEnabled) {
-      if (!supabaseConfigured) {
-        setFormError(
-          "Supabase is not configured. Add NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.",
-        );
-      } else {
-        setFormError("Sign in to save this reading to your chart.");
-      }
+    if (!sb) {
+      setFormError(
+        "Supabase is not configured. Add NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.",
+      );
       return;
     }
 
@@ -197,39 +160,59 @@ export default function QuickBpHomeButton({
     void qc.cancelQueries({ queryKey: qk.vitals });
     qc.setQueryData<VitalRow[]>(qk.vitals, [optimistic, ...previous]);
 
-    closeModal();
-    setLoggedAck(true);
+    setSaving(true);
 
     void (async () => {
       try {
-        if (!sb) {
+        const client = getSupabaseBrowserClient();
+        if (!client) {
           qc.setQueryData(qk.vitals, previous);
-          setLoggedAck(false);
-          setSaveError("Supabase is not configured.");
+          setFormError("Supabase is not configured.");
           return;
         }
 
-        const hrDb =
+        const {
+          data: { user },
+        } = await client.auth.getUser();
+        if (!user?.id) {
+          qc.setQueryData(qk.vitals, previous);
+          setFormError(formatBpSaveFailure("not_signed_in"));
+          return;
+        }
+
+        const pulse =
           heartRate != null && Number.isFinite(heartRate)
             ? Math.round(heartRate)
             : null;
 
-        const insertError = await insertQuickBpRow({
+        const payload = {
           id,
-          recordedAt,
+          user_id: user.id,
+          recorded_at: recordedAt,
           systolic: Math.round(s),
           diastolic: Math.round(d),
+          pulse,
           position,
-          heartRate: hrDb,
-        });
+        };
+        console.log("BP Payload:", payload);
 
-        if (insertError !== null) {
+        const { error } = await client.from("health_vitals").insert(payload);
+
+        if (error) {
+          console.warn("[QuickBP] health_vitals insert:", error.message);
           qc.setQueryData(qk.vitals, previous);
-          setLoggedAck(false);
-          setSaveError(formatBpSaveFailure(insertError));
+          setFormError(formatBpSaveFailure(error.message));
           return;
         }
 
+        try {
+          window.alert("BP Logged!");
+        } catch {
+          /* blocked by browser / in-app webview */
+        }
+
+        closeModal();
+        setLoggedAck(true);
         void qc.invalidateQueries({ queryKey: qk.vitals });
         try {
           onAfterSuccessfulSave?.();
@@ -240,12 +223,13 @@ export default function QuickBpHomeButton({
       } catch (e) {
         console.warn("[QuickBP] save:", e);
         qc.setQueryData(qk.vitals, previous);
-        setLoggedAck(false);
-        setSaveError(
+        setFormError(
           formatBpSaveFailure(
             e instanceof Error ? e.message : "Save failed",
           ),
         );
+      } finally {
+        setSaving(false);
       }
     })();
   }
@@ -279,9 +263,11 @@ export default function QuickBpHomeButton({
             Quick BP
           </h2>
           <p className="mt-1 text-sm font-semibold text-slate-700">
-            Systolic / diastolic (mmHg), posture (lying / sitting / standing),
-            optional pulse. Saved directly to{" "}
-            <span className="font-bold text-slate-900">health_vitals</span>.
+            Systolic / diastolic (mmHg), posture, optional pulse. Inserts use{" "}
+            <span className="font-bold text-slate-900">
+              recorded_at, systolic, diastolic, pulse
+            </span>{" "}
+            on <span className="font-bold text-slate-900">health_vitals</span>.
           </p>
           {!supabaseConfigured && sessionResolved && (
             <p className="mt-3 rounded-lg border-2 border-amber-700 bg-amber-50 px-3 py-2 text-sm font-bold text-amber-950">
@@ -340,7 +326,7 @@ export default function QuickBpHomeButton({
                 key={p.value}
                 type="button"
                 onClick={() => setPosition(p.value)}
-                className={`flex min-h-[4.5rem] flex-col items-center justify-center gap-0.5 rounded-xl border-4 px-1 py-2 text-center font-black transition ${
+                className={`flex min-h-[4.5rem] flex-col items-center justify-center gap-0.5 rounded-xl border-4 px-1 py-2 text-center font-black transition touch-manipulation ${
                   position === p.value
                     ? "border-black bg-black text-white"
                     : "border-black bg-white text-black hover:bg-slate-100"
@@ -374,21 +360,27 @@ export default function QuickBpHomeButton({
             <p className="mt-3 text-sm font-bold text-red-800">{formError}</p>
           )}
 
+          {/*
+            DEBUG handshake: no native <form> submit, no input `required` (mobile
+            browsers can block taps with no visible reason). Save stays enabled so
+            submit() always runs and console shows validation / payload / Supabase.
+          */}
           <div className="mt-5 flex flex-wrap gap-2">
             <button
               type="button"
               onClick={closeModal}
-              className="min-h-[48px] flex-1 rounded-xl border-4 border-black bg-white px-4 text-base font-black text-black transition hover:bg-slate-100"
+              className="min-h-[52px] flex-1 touch-manipulation rounded-xl border-4 border-black bg-white px-4 text-base font-black text-black transition hover:bg-slate-100"
             >
               Cancel
             </button>
             <button
               type="button"
-              onClick={submit}
-              disabled={!saveEnabled}
-              className="min-h-[48px] flex-1 rounded-xl border-4 border-black bg-black px-4 text-base font-black text-white transition hover:bg-neutral-900 disabled:cursor-not-allowed disabled:bg-slate-600"
+              onClick={() => {
+                submit();
+              }}
+              className="min-h-[52px] flex-1 touch-manipulation rounded-xl border-4 border-black bg-black px-4 text-base font-black text-white transition hover:bg-neutral-900"
             >
-              Save
+              {saving ? "Saving…" : "Save"}
             </button>
           </div>
         </div>
@@ -402,7 +394,7 @@ export default function QuickBpHomeButton({
         type="button"
         onClick={() => setOpen(true)}
         title="Log a quick blood pressure reading"
-        className="inline-flex min-h-[48px] min-w-[5.5rem] items-center justify-center rounded-xl border-4 border-black bg-white px-3 text-base font-black tracking-tight text-black shadow-sm transition hover:bg-slate-50 active:scale-[0.98]"
+        className="inline-flex min-h-[48px] min-w-[5.5rem] touch-manipulation items-center justify-center rounded-xl border-4 border-black bg-white px-3 text-base font-black tracking-tight text-black shadow-sm transition hover:bg-slate-50 active:scale-[0.98]"
       >
         ➕ BP
       </button>
@@ -414,11 +406,6 @@ export default function QuickBpHomeButton({
           <Check className="h-3.5 w-3.5" strokeWidth={3} aria-hidden />
           Saved
         </span>
-      )}
-      {saveError && (
-        <p className="max-w-[12rem] text-right text-xs font-bold text-red-800">
-          {saveError}
-        </p>
       )}
 
       {modal}

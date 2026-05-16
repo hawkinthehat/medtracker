@@ -39,7 +39,7 @@ export async function insertHealthVital(
     systolic: Math.round(Number(input.systolic)),
     diastolic: Math.round(Number(input.diastolic)),
     position: input.position,
-    heart_rate: hr,
+    pulse: hr,
   });
 
   if (error) {
